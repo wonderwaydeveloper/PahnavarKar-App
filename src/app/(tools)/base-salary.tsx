@@ -6,6 +6,7 @@ import { Card, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { CalculationDescriptionBox } from '@/components/calculation-card-sections';
@@ -17,6 +18,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import {
     calculateSalaryFromPeriodData,
     parseDateInput,
@@ -26,7 +28,7 @@ import {
 
 export default function BaseSalaryScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -40,6 +42,7 @@ export default function BaseSalaryScreen() {
     const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
     const [pickerVisible, setPickerVisible] = useState(false);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [periodBuckets, setPeriodBuckets] = useState<SalaryPeriodBucket[]>([]);
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
@@ -214,11 +217,25 @@ export default function BaseSalaryScreen() {
         return toPersianDigits(formatCurrency(result.totalAmount));
     }, [formatCurrency, result]);
     const roundedBaseSalaryAmount = Math.round(result?.totalAmount ?? 0);
+    const normalizedAmountPaid = amountPaidToWorker.replace(/[۰-۹]/g, (digit) =>
+        String(persianDigits.indexOf(digit)),
+    );
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial);
+    const remainingClaimAmount = isPaidAmountValid
+        ? Math.max(0, roundedBaseSalaryAmount - amountPaidInRial)
+        : null;
     const workerInsuranceAmount = isWorkerInsuranceExempt
         ? 0
         : Math.round(roundedBaseSalaryAmount * 0.07);
     const employerInsuranceAmount = Math.round(roundedBaseSalaryAmount * 0.23);
     const finalClaimAmount = roundedBaseSalaryAmount - workerInsuranceAmount;
+    const finalRemainingClaimAmount = remainingClaimAmount === null
+        ? null
+        : Math.max(0, finalClaimAmount - amountPaidInRial);
 
     return (
         <ThemedView style={styles.container}>
@@ -268,6 +285,26 @@ export default function BaseSalaryScreen() {
                             </View>
 
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
+                                    این مبلغ از حقوق پایهٔ محاسبه‌شده کسر می‌شود؛ سپس سهم بیمهٔ کارگر از مانده محاسبه خواهد شد.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
 
                             <Pressable
                                 accessibilityRole="checkbox"
@@ -356,7 +393,7 @@ export default function BaseSalaryScreen() {
                                                 </View>
                                                 <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                     <ThemedText type="small" style={[styles.insuranceSummaryLabel, { color: theme.textSecondary }]}>
-                                                        سهم بیمه ی کارگر از حقوق پایه (۷٪{isWorkerInsuranceExempt ? '، معاف' : ''})
+                                                        سهم بیمهٔ کارگر از حقوق پایه (۷٪{isWorkerInsuranceExempt ? '، معاف' : ''})
                                                     </ThemedText>
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, { color: theme.text }]}>
                                                         {toPersianDigits(formatCurrency(workerInsuranceAmount))}
@@ -364,7 +401,7 @@ export default function BaseSalaryScreen() {
                                                 </View>
                                                 <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                     <ThemedText type="small" style={[styles.insuranceSummaryLabel, { color: theme.textSecondary }]}>
-                                                        سهم بیمه ی کارفرما از حقوق پایه (۲۳٪)
+                                                        سهم بیمهٔ کارفرما از حقوق پایه (۲۳٪)
                                                     </ThemedText>
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, { color: theme.text }]}>
                                                         {toPersianDigits(formatCurrency(employerInsuranceAmount))}
@@ -372,10 +409,30 @@ export default function BaseSalaryScreen() {
                                                 </View>
                                                 <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
-                                                        حقوق پایه پس از کسر سهم بیمه ی کارگر
+                                                        حقوق پایه پس از کسر سهم بیمهٔ کارگر
                                                     </ThemedText>
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
+                                                    </ThemedText>
+                                                </View>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                        حقوق پایه پس از کسر مبلغ پرداخت‌شده به کارگر
+                                                    </ThemedText>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                        {remainingClaimAmount === null
+                                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                            : toPersianDigits(formatCurrency(remainingClaimAmount))}
+                                                    </ThemedText>
+                                                </View>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                        حقوق پایه پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده به کارگر
+                                                    </ThemedText>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                        {finalRemainingClaimAmount === null
+                                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                            : toPersianDigits(formatCurrency(finalRemainingClaimAmount))}
                                                     </ThemedText>
                                                 </View>
                                             </View>
@@ -554,13 +611,23 @@ const styles = StyleSheet.create({
     },
     insuranceSummaryValue: {
         textAlign: 'center',
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     insuranceSummaryEmphasisLabel: {
         fontSize: 13,
     },
     insuranceSummaryEmphasisValue: {
-        fontSize: 14,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
+    },
+    paidAmountSection: {
+        gap: Spacing.one,
+        padding: Spacing.two,
+        borderRadius: 12,
+        borderWidth: StyleSheet.hairlineWidth,
     },
     insuranceExemptionOption: {
         flexDirection: 'row',
@@ -741,6 +808,8 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     detailValue: {
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
 });

@@ -12,6 +12,7 @@ import { NativeFileStorageUnavailableError } from 'pahnavar-file-storage';
 
 import { FontAwareButton as Button, FontAwareMenuItem, FontAwarePaperTextInput as TextInput } from '@/components/font-aware-paper';
 import type { CurrencyPreference, FontPreference } from '@/context/app.context';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { PdfHtmlPreview } from '@/components/pdf-html-preview';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
@@ -39,7 +40,7 @@ import {
     type GroupCalculationPdfSection,
     type GroupCalculationPdfWageTotal,
 } from '@/utils/group-calculation-pdf';
-import { formatCurrencyAmount } from '@/utils/currency';
+import { displayCurrencyToRial, formatCurrencyAmount, getCurrencyLabel } from '@/utils/currency';
 import {
     calculateGroupItems,
     GROUP_CALCULATION_KEYS,
@@ -209,6 +210,31 @@ function calculateContractorMonthlyTotals(
     };
 }
 
+function calculateWorkerClaimsAfterPayments(
+    wageTotalAmount: number,
+    amountPaid: number,
+    wageTotalError?: string,
+) {
+    const error = wageTotalError
+        ?? (!Number.isSafeInteger(amountPaid) || amountPaid < 0
+            ? 'مبلغ پرداخت‌شده باید عدد صحیح و نامنفی باشد.'
+            : !Number.isFinite(wageTotalAmount)
+                ? 'جمع حقوق و مزایا قابل محاسبه نیست.'
+                : undefined);
+
+    if (error) {
+        return { error, remainingClaim: 0, finalClaim: 0 };
+    }
+
+    const remainingClaim = Math.max(0, Math.round(wageTotalAmount - amountPaid));
+    const workerInsurance = Math.round(remainingClaim * 0.07);
+
+    return {
+        remainingClaim,
+        finalClaim: remainingClaim - workerInsurance,
+    };
+}
+
 function getResultTitle(
     result: GroupCalculationResult,
     workshopType: 'classified' | 'unclassified',
@@ -321,7 +347,7 @@ const PAYROLL_DAILY_WORK_KEYS: GroupCalculationKey[] = [
 ];
 
 const RESULT_SUMMARY_LABELS: Record<GroupCalculationKey, string> = {
-    'base-salary': 'مبلغ کل حقوق پایه',
+    'base-salary': 'حقوق پایهٔ محاسبه‌شده در بازه',
     'family-allowance': 'مبلغ کل حق عائله‌مندی',
     'housing-allowance': 'مبلغ کل حق مسکن ماهیانه',
     'monthly-allowance': 'مبلغ کل بن ماهیانه',
@@ -904,6 +930,7 @@ export default function GroupCalculationScreen() {
     const [pickerTarget, setPickerTarget] = useState<DatePickerTarget | null>(null);
     const [selectedKeys, setSelectedKeys] = useState<GroupCalculationKey[]>([]);
     const [contractorWorkerCount, setContractorWorkerCount] = useState('۱');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [maritalStatus, setMaritalStatus] = useState<'single' | 'married'>('single');
     const [childrenCount, setChildrenCount] = useState(0);
     const [childrenMenuVisible, setChildrenMenuVisible] = useState(false);
@@ -1382,6 +1409,15 @@ export default function GroupCalculationScreen() {
             calculatedPeriodDayCount,
             contractorWorkerCountValue,
         );
+        const amountPaidValue = displayCurrencyToRial(
+            Number(normalizeDigits(amountPaidToWorker)),
+            currencyPreference,
+        );
+        const workerClaims = calculateWorkerClaimsAfterPayments(
+            wageTotalAmount,
+            amountPaidValue,
+            contractorTotals.wageTotalError,
+        );
         const contractorWorkerCountLabel = contractorWorkerCount.trim().length > 0
             ? contractorWorkerCount
             : 'وارد نشده';
@@ -1394,6 +1430,12 @@ export default function GroupCalculationScreen() {
                     contractorTotalError: contractorTotals.contractorTotalError,
                     contractorWorkerCount: contractorWorkerCountLabel,
                     excludedBonusItems,
+                    amountPaid: Number.isSafeInteger(amountPaidValue) && amountPaidValue >= 0
+                        ? formatCurrency(amountPaidValue)
+                        : 'مبلغ نامعتبر',
+                    remainingClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.remainingClaim),
+                    finalClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.finalClaim),
+                    claimError: workerClaims.error,
                 }
                 : {
                     amount: formatCurrency(wageTotalAmount),
@@ -1409,6 +1451,12 @@ export default function GroupCalculationScreen() {
                     employerInsurance31: formatCurrency(contractorTotals.employerInsurance31),
                     contractorTotalError: contractorTotals.contractorTotalError,
                     excludedBonusItems,
+                    amountPaid: Number.isSafeInteger(amountPaidValue) && amountPaidValue >= 0
+                        ? formatCurrency(amountPaidValue)
+                        : 'مبلغ نامعتبر',
+                    remainingClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.remainingClaim),
+                    finalClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.finalClaim),
+                    claimError: workerClaims.error,
                 }
             : undefined;
 
@@ -1991,6 +2039,11 @@ export default function GroupCalculationScreen() {
                             <View style={[styles.inputSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.borderStrong }]}>
                                 <View style={styles.inputSectionHeader}>
                                     <ThemedText type="smallBold" style={{ color: theme.text }}>بازهٔ مشترک محاسبات</ThemedText>
+                                    {selectedKeys.includes('entitled-seniority') ? (
+                                        <ThemedText type="small" style={[styles.fieldHint, { color: theme.textSecondary }]}>
+                                            تاریخ استخدام سابقه و سالگرد پایه سنوات را تعیین می‌کند؛ مبلغ فقط برای بازهٔ «از تاریخ» تا «تا تاریخ» محاسبه می‌شود.
+                                        </ThemedText>
+                                    ) : null}
                                     {hasMissionAllowance ? (
                                         <ThemedText type="small" style={[styles.fieldHint, { color: theme.textSecondary }]}>
                                             این بازه برای محاسبات دیگر است؛ مأموریت بازهٔ جداگانه دارد.
@@ -2451,6 +2504,36 @@ export default function GroupCalculationScreen() {
                             </View>
                         ) : null}
 
+                        <View style={[styles.specificCalculationSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.borderStrong }]}>
+                            <View style={styles.inputSectionHeader}>
+                                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                    کسر مبالغ دریافتی کارگر
+                                </ThemedText>
+                            </View>
+                            <ThemedText type="small" style={[styles.fieldGroupLabel, { color: theme.textSecondary }]}>
+                                مبلغ پرداخت‌شده به کارگر در بازهٔ زمانی انتخابی ({getCurrencyLabel(currencyPreference)})
+                            </ThemedText>
+                            <CurrencyAmountInput
+                                value={amountPaidToWorker}
+                                onChangeText={setAmountPaidToWorker}
+                                currencyPreference={currencyPreference}
+                                accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ زمانی انتخابی"
+                            />
+                            {!Number.isFinite(Number(normalizeDigits(amountPaidToWorker)))
+                                || Number(normalizeDigits(amountPaidToWorker)) < 0
+                                || !Number.isSafeInteger(displayCurrencyToRial(
+                                    Number(normalizeDigits(amountPaidToWorker)),
+                                    currencyPreference,
+                                )) ? (
+                                <ThemedText type="small" style={[styles.fieldHint, { color: theme.error }]}>
+                                    مبلغ باید عدد صحیح و نامنفی باشد.
+                                </ThemedText>
+                            ) : null}
+                            <ThemedText type="small" style={[styles.fieldHint, { color: theme.textSecondary }]}>
+                                این مبلغ از جمع حقوق و مزایای محاسبه‌شده کسر می‌شود و از مانده، ۷٪ سهم بیمهٔ کارگر کسر خواهد شد.
+                            </ThemedText>
+                        </View>
+
                         <View style={[styles.contractorAnalysisSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.borderStrong }]}>
                             <View style={styles.inputSectionHeader}>
                                 <ThemedText type="smallBold" style={{ color: theme.text }}>
@@ -2593,18 +2676,42 @@ export default function GroupCalculationScreen() {
                                     calculatedPeriodDayCount,
                                     workerCount,
                                 );
+                                const workerClaims = calculateWorkerClaimsAfterPayments(
+                                    wageTotalAmount,
+                                    displayCurrencyToRial(
+                                        Number(normalizeDigits(amountPaidToWorker)),
+                                        currencyPreference,
+                                    ),
+                                    contractorTotals.wageTotalError,
+                                );
                                 const excludedBonusItems = getExcludedBonusItemTitles(results);
                                 return (
                                     <View style={styles.summaryBoxHeader}>
                                         <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                             <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                 <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-                                                    جمع حقوق و مزایای یک کارگر در بازهٔ انتخابی
+                                                    جمع حقوق و مزایای محاسبه‌شده در بازه
                                                 </ThemedText>
                                                 <ThemedText type="smallBold" style={[styles.amountValue, { color: contractorTotals.wageTotalError ? theme.error : theme.primary }]}>
                                                     {contractorTotals.wageTotalError
                                                         ? contractorTotals.wageTotalError
                                                         : formatCurrency(wageTotalAmount)}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    ماندهٔ حقوق و مزایا پس از کسر مبلغ پرداخت‌شده
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: workerClaims.error ? theme.error : theme.primary }]}>
+                                                    {workerClaims.error ?? formatCurrency(workerClaims.remainingClaim)}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    خالص ماندهٔ حقوق و مزایا پس از کسر ۷٪ سهم بیمهٔ کارگر
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: workerClaims.error ? theme.error : theme.primary }]}>
+                                                    {workerClaims.error ?? formatCurrency(workerClaims.finalClaim)}
                                                 </ThemedText>
                                             </View>
                                             <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -2903,26 +3010,20 @@ export default function GroupCalculationScreen() {
                                                                     </ThemedText>
                                                                 </View>
                                                                 <View style={styles.breakdownDetailGrid}>
-                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surface, borderColor: theme.borderStrong }]}>
-                                                                        <View style={[styles.detailLabelBand, { backgroundColor: theme.surfaceVariant }]}>
-                                                                            <ThemedText type="smallBold" style={[styles.detailLabel, { color: theme.text }]}>کل استحقاق</ThemedText>
-                                                                        </View>
+                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>کل استحقاق</ThemedText>
                                                                         <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>
                                                                             {formatBreakdownNumber(result.breakdown.reduce<number>((total, item) => total + (isRecord(item) && typeof item.entitlementDays === 'number' ? item.entitlementDays : 0), 0))} روز
                                                                         </ThemedText>
                                                                     </View>
-                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surface, borderColor: theme.borderStrong }]}>
-                                                                        <View style={[styles.detailLabelBand, { backgroundColor: theme.surfaceVariant }]}>
-                                                                            <ThemedText type="smallBold" style={[styles.detailLabel, { color: theme.text }]}>کل مرخصی استفاده‌شده</ThemedText>
-                                                                        </View>
+                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>کل مرخصی استفاده‌شده</ThemedText>
                                                                         <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>
                                                                             {formatBreakdownNumber(result.breakdown.reduce<number>((total, item) => total + (isRecord(item) && typeof item.usedLeaveDays === 'number' ? item.usedLeaveDays : 0), 0))} روز
                                                                         </ThemedText>
                                                                     </View>
-                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary, borderWidth: 1.5 }]}>
-                                                                        <View style={[styles.detailLabelBand, { backgroundColor: theme.primaryContainer }]}>
-                                                                            <ThemedText type="smallBold" style={[styles.detailLabel, { color: theme.primary }]}>ذخیره نهایی</ThemedText>
-                                                                        </View>
+                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره نهایی</ThemedText>
                                                                         <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
                                                                             {formatBreakdownNumber(result.value)} روز
                                                                         </ThemedText>
@@ -2961,12 +3062,10 @@ export default function GroupCalculationScreen() {
                                                                                 || ['amount', 'dailyWage', 'entitlement', 'entitlementAmount', 'daysCalculated', 'savedLeaveDays', 'carryAfter', 'requiredHours', 'workingDays', 'unusedLeaveDays', 'finalDailyWage', 'fridayWorkRate'].includes(field.key);
                                                                             const isWarning = field.key === 'excessUsedDays';
                                                                             return (
-                                                                                <View key={`${result.key}-${field.key}-${field.format}-${index}`} style={[styles.breakdownDetailBox, { backgroundColor: isEmphasized ? theme.primaryContainer : theme.surface, borderColor: isEmphasized ? theme.primary : theme.borderStrong, borderWidth: isEmphasized ? 1.5 : 1 }]}>
-                                                                                    <View style={[styles.detailLabelBand, { backgroundColor: isEmphasized ? theme.primaryContainer : theme.surfaceVariant }]}>
-                                                                                        <ThemedText type="smallBold" style={[styles.detailLabel, { color: isEmphasized ? theme.primary : theme.text }]}>
-                                                                                            {field.label}
-                                                                                        </ThemedText>
-                                                                                    </View>
+                                                                                <View key={`${result.key}-${field.key}-${field.format}-${index}`} style={[styles.breakdownDetailBox, { backgroundColor: isEmphasized ? theme.primaryContainer : theme.surfaceVariant, borderColor: isEmphasized ? theme.primary : theme.border }]}>
+                                                                                    <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                                                                                        {field.label}
+                                                                                    </ThemedText>
                                                                                     <ThemedText type="smallBold" style={[styles.detailValue, { color: isWarning ? theme.error : isEmphasized ? theme.primary : theme.text }]}>
                                                                                         {detailRecord ? formatBreakdownDetail(field, detailRecord, result.key, currencyPreference) : '-'}
                                                                                     </ThemedText>
@@ -3151,15 +3250,15 @@ const styles = StyleSheet.create({
     resultToggleLabel: { fontSize: 12 },
     summaryBoxHeader: { alignItems: 'center', marginBottom: Spacing.one },
     summaryBoxContent: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
-    contractorTotalBox: { width: '100%', borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
+    contractorTotalBox: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
     contractorInsuranceNote: { fontSize: 10, textAlign: 'center' },
-    summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 18 },
+    summaryLabel: { fontSize: 12, lineHeight: 18 },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     insuranceSummary: { width: '100%', overflow: 'hidden', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     insuranceSummaryRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
     insuranceSummaryFinalRow: { borderTopWidth: StyleSheet.hairlineWidth },
-    insuranceSummaryLabel: { flex: 1, fontSize: 11 },
-    insuranceSummaryValue: { fontSize: 12, textAlign: 'left' },
+    insuranceSummaryLabel: { flex: 1, fontSize: 12, lineHeight: 18 },
+    insuranceSummaryValue: { maxWidth: '55%', flexShrink: 1, fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold', textAlign: 'left' },
     breakdownSection: { gap: Spacing.two },
     breakdownSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one },
     breakdownSectionTitle: { fontSize: 13, fontFamily: 'AppFont-Bold' },
@@ -3168,11 +3267,10 @@ const styles = StyleSheet.create({
     breakdownGrid: { gap: Spacing.two },
     breakdownItemCard: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.two, gap: Spacing.one },
     breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0, 0, 0, 0.12)' },
-    breakdownItemTitle: { fontSize: 12, textAlign: 'center' },
+    breakdownItemTitle: { fontSize: 13, lineHeight: 19, fontFamily: 'AppFont-Bold', textAlign: 'center' },
     breakdownDetailGrid: { gap: Spacing.one },
-    breakdownDetailBox: { overflow: 'hidden', borderRadius: 8, borderWidth: 1, padding: 0, gap: Spacing.two, alignItems: 'stretch' },
-    detailLabelBand: { minHeight: 30, justifyContent: 'center', paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
-    detailLabel: { fontSize: 12, lineHeight: 16, textAlign: 'center' },
-    detailValue: { paddingHorizontal: Spacing.two, paddingBottom: Spacing.two, fontSize: 12, lineHeight: 19, textAlign: 'center' },
+    breakdownDetailBox: { borderRadius: 8, borderWidth: 1, padding: Spacing.one, gap: Spacing.one, alignItems: 'center' },
+    detailLabel: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
+    detailValue: { paddingHorizontal: Spacing.two, paddingBottom: Spacing.two, fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold', textAlign: 'center' },
     detailContext: { textAlign: 'center' },
 });

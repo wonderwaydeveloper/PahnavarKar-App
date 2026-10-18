@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
@@ -18,6 +19,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateOfficialHolidayWorkFromPeriodData,
@@ -31,7 +33,7 @@ type PickerTarget = 'start' | 'end';
 
 export default function OfficialHolidayWorkScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -59,6 +61,7 @@ export default function OfficialHolidayWorkScreen() {
     const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
     const [isLegalBasisVisible, setIsLegalBasisVisible] = useState(false);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetails, setShowDetails] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -256,6 +259,22 @@ export default function OfficialHolidayWorkScreen() {
         : Math.round(roundedHolidayWorkAmount * 0.07);
     const employerInsuranceAmount = Math.round(roundedHolidayWorkAmount * 0.23);
     const finalClaimAmount = roundedHolidayWorkAmount - workerInsuranceAmount;
+    const normalizedAmountPaid = amountPaidToWorker
+        .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial)
+        && (currencyPreference !== 'toman'
+            || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+    const remainingHolidayWorkAmount = isPaidAmountValid
+        ? Math.max(0, roundedHolidayWorkAmount - amountPaidInRial)
+        : null;
+    const finalRemainingHolidayWorkAmount = remainingHolidayWorkAmount === null
+        ? null
+        : Math.max(0, finalClaimAmount - amountPaidInRial);
 
     return (
         <ThemedView style={styles.container}>
@@ -342,6 +361,26 @@ export default function OfficialHolidayWorkScreen() {
                             <SettlementThrough1391Field checked={settledThrough1391} enabled={canUseSettlementPath} onChange={setSettledThrough1391} />
 
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
+                                    این مبلغ از تعطیل‌کاری رسمی استحقاقی محاسبه‌شده کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
 
                             <Pressable
                                 accessibilityRole="checkbox"
@@ -440,10 +479,30 @@ export default function OfficialHolidayWorkScreen() {
                                             </View>
                                             <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                                 <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
-                                                    تعطیل کاری پس از کسر سهم بیمه ی کارگر
+                                                    مبلغ تعطیل‌کاری پس از کسر سهم بیمهٔ کارگر
                                                 </ThemedText>
                                                 <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
                                                     {toPersianDigits(formatCurrency(finalClaimAmount))}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                    مبلغ تعطیل‌کاری رسمی پس از کسر مبلغ پرداخت‌شده به کارگر
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    {remainingHolidayWorkAmount === null
+                                                        ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                        : formatCurrency(remainingHolidayWorkAmount)}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                    مبلغ تعطیل‌کاری رسمی پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    {finalRemainingHolidayWorkAmount === null
+                                                        ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                        : formatCurrency(finalRemainingHolidayWorkAmount)}
                                                 </ThemedText>
                                             </View>
                                         </View>
@@ -616,13 +675,19 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     insuranceSummaryLabel: { textAlign: 'center', fontSize: 12 },
-    insuranceSummaryValue: { textAlign: 'center', fontSize: 12 },
+    insuranceSummaryValue: { textAlign: 'center', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     insuranceSummaryEmphasisLabel: { fontSize: 13 },
-    insuranceSummaryEmphasisValue: { fontSize: 14 },
+    insuranceSummaryEmphasisValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     insuranceExemptionOption: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.two,
+        padding: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+    },
+    paidAmountSection: {
+        gap: Spacing.one,
         padding: Spacing.two,
         borderWidth: StyleSheet.hairlineWidth,
         borderRadius: 12,
@@ -684,5 +749,5 @@ const styles = StyleSheet.create({
     detailGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 },
     detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 12 },
+    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });

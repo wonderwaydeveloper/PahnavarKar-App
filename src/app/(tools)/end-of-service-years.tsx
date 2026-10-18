@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
@@ -18,6 +19,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateEndOfServiceYearsFromPeriodData,
@@ -30,7 +32,7 @@ import {
 
 export default function EndOfServiceYearsScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -56,6 +58,7 @@ export default function EndOfServiceYearsScreen() {
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [result, setResult] = useState<EndOfServiceYearsCalculationResult | null>(null);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
 
@@ -265,6 +268,19 @@ export default function EndOfServiceYearsScreen() {
 
         return toPersianDigits(formatCurrency(result.totalAmount));
     }, [formatCurrency, result]);
+    const normalizedAmountPaid = amountPaidToWorker
+        .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial)
+        && (currencyPreference !== 'toman'
+            || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+    const remainingEndOfServiceAmount = result && isPaidAmountValid
+        ? Math.max(0, Math.round(result.totalAmount) - amountPaidInRial)
+        : null;
 
     return (
         <ThemedView style={styles.container}>
@@ -347,6 +363,25 @@ export default function EndOfServiceYearsScreen() {
 
                             <SettlementThrough1391Field checked={settledThrough1391} enabled={canUseSettlementPath} onChange={setSettledThrough1391} />
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    این مبلغ از سنوات پایان کار محاسبه‌شده کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
 
                             <View style={styles.actionsGroup}>
                                 <Button
@@ -369,33 +404,41 @@ export default function EndOfServiceYearsScreen() {
                                 <Card style={[styles.breakdownCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                     <Card.Content style={styles.breakdownContent}>
                                         <CalculationResultHeading />
-                                        <View style={styles.summaryBoxHeader}>
+                                        <View style={styles.summaryDetails}>
                                             <View style={[styles.summaryBoxContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                 <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                                     مبلغ کل سنوات پایان کار
                                                 </ThemedText>
-                                                <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.primary }]}>
                                                     {formattedResult}
                                                 </ThemedText>
                                             </View>
-                                        </View>
 
-                                        <View style={styles.summaryDetails}>
-                                            <View style={[styles.summaryDetailBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>تعداد ماه‌های کارکرد</ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatNumber(result.totalMonthEquivalent)} ماه</ThemedText>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>تعداد ماه‌های کارکرد</ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.primary }]}>{formatNumber(result.totalMonthEquivalent)} ماه</ThemedText>
                                             </View>
-                                            <View style={[styles.summaryDetailBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>حداقل مزد روز آخر</ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(result.finalDailyMinimumWage))}</ThemedText>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>حداقل مزد روز آخر</ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(result.finalDailyMinimumWage))}</ThemedText>
                                             </View>
-                                            <View style={[styles.summaryDetailBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{workshopType === 'classified' ? 'پایه سنوات استحقاقی روزانه گروه شغلی' : 'پایه سنوات استحقاقی روزانه'}</ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(result.finalDailySeniority))}</ThemedText>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>{workshopType === 'classified' ? 'پایه سنوات استحقاقی روزانه گروه شغلی' : 'پایه سنوات استحقاقی روزانه'}</ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(result.finalDailySeniority))}</ThemedText>
                                             </View>
-                                            <View style={[styles.summaryDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{workshopType === 'classified' ? 'مزد مبنا روزانه' : 'مزد ثابت روزانه'}</ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{toPersianDigits(formatCurrency(result.finalDailyWage))}</ThemedText>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>{workshopType === 'classified' ? 'مزد مبنا روزانه' : 'مزد ثابت روزانه'}</ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.primary }]}>{toPersianDigits(formatCurrency(result.finalDailyWage))}</ThemedText>
+                                            </View>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    مبلغ سنوات پایان کار پس از کسر مبلغ پرداخت‌شده به کارگر
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.primary }]}>
+                                                    {remainingEndOfServiceAmount === null
+                                                        ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                        : toPersianDigits(formatCurrency(remainingEndOfServiceAmount))}
+                                                </ThemedText>
                                             </View>
                                         </View>
 
@@ -462,6 +505,7 @@ const styles = StyleSheet.create({
     },
     headerText: {
         flex: 1,
+        alignSelf: 'stretch',
         gap: Spacing.one,
     },
     formulaBox: {
@@ -539,6 +583,12 @@ const styles = StyleSheet.create({
         fontFamily: 'AppFont-Bold',
         fontSize: 12,
     },
+    paidAmountSection: {
+        gap: Spacing.one,
+        padding: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+    },
     breakdownCard: {
         borderRadius: Radius.md,
         borderWidth: 1,
@@ -550,10 +600,6 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.three,
         paddingHorizontal: Spacing.two,
     },
-    summaryBoxHeader: {
-        alignItems: 'center',
-        marginBottom: Spacing.one,
-    },
     summaryBoxContent: {
         width: '100%',
         borderRadius: 12,
@@ -563,21 +609,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     summaryDetails: {
-        gap: Spacing.one,
-    },
-    summaryDetailBox: {
-        borderRadius: 10,
-        borderWidth: StyleSheet.hairlineWidth,
-        paddingHorizontal: Spacing.two,
-        paddingVertical: Spacing.one,
-        alignItems: 'center',
-        gap: Spacing.half,
+        gap: Spacing.two,
     },
     summaryLabel: {
-        fontSize: 11,
+        fontSize: 12,
+        lineHeight: 18,
     },
     amountValue: {
-        fontSize: 18,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     breakdownSectionHeader: {
         flexDirection: 'row',
@@ -630,13 +671,6 @@ const styles = StyleSheet.create({
         padding: Spacing.one,
         gap: Spacing.one,
         alignItems: 'center',
-    },
-    detailLabel: {
-        fontSize: 12,
-        fontFamily: 'AppFont-Regular',
-    },
-    detailValue: {
-        fontSize: 12,
     },
     pageTitle: {
         display: 'none',

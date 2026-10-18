@@ -343,6 +343,56 @@ export function calculateEntitledSeniorityFromPeriodData(
     };
 }
 
+export function calculateEntitledSeniorityForDateRangeFromPeriodData(
+    employmentStartDate: ParsedDateInput,
+    startDate: ParsedDateInput,
+    endDate: ParsedDateInput,
+    periodBuckets: SalaryPeriodBucket[],
+    workshopType: EntitledSeniorityWorkshopType,
+    jobGroupNumber?: number,
+    settledThrough1391 = false,
+): EntitledSeniorityCalculationResult {
+    if (compareParsedDates(startDate, endDate) > 0) {
+        return { totalAmount: 0, finalEntitlement: 0, breakdown: [] };
+    }
+
+    const seniority = calculateEntitledSeniorityFromPeriodData(
+        employmentStartDate,
+        endDate,
+        periodBuckets,
+        workshopType,
+        jobGroupNumber,
+        settledThrough1391,
+    );
+    const breakdown: EntitledSeniorityCalculationBreakdownItem[] = [];
+    let totalAmount = 0;
+
+    for (const item of seniority.breakdown) {
+        const overlapStart = getLaterDate(item.startDate, startDate);
+        const overlapEnd = getEarlierDate(item.endDate, endDate);
+        if (compareParsedDates(overlapStart, overlapEnd) > 0) continue;
+
+        const daysCovered = Math.round(toDayNumber(overlapEnd) - toDayNumber(overlapStart) + 1);
+        if (daysCovered <= 0) continue;
+
+        const entitlement = Math.round(item.entitlement);
+        totalAmount += daysCovered * entitlement;
+        breakdown.push({
+            ...item,
+            startDate: overlapStart,
+            endDate: overlapEnd,
+            daysCovered,
+            entitlement,
+        });
+    }
+
+    return {
+        totalAmount,
+        finalEntitlement: breakdown.at(-1)?.entitlement ?? 0,
+        breakdown,
+    };
+}
+
 export interface MissionAllowanceCalculationBreakdownItem {
     year: number;
     periodIndex: number;

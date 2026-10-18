@@ -6,6 +6,7 @@ import { Card, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
@@ -16,6 +17,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateSpousalAllowanceFromPeriodData,
@@ -26,7 +28,7 @@ import {
 
 export default function SpousalAllowanceScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -48,6 +50,7 @@ export default function SpousalAllowanceScreen() {
     const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
     const [isLegalBasisVisible, setIsLegalBasisVisible] = useState(false);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -242,6 +245,20 @@ export default function SpousalAllowanceScreen() {
         : Math.round(roundedSpousalAllowanceAmount * 0.07);
     const employerInsuranceAmount = Math.round(roundedSpousalAllowanceAmount * 0.23);
     const finalClaimAmount = roundedSpousalAllowanceAmount - workerInsuranceAmount;
+    const normalizedAmountPaid = amountPaidToWorker.replace(/[۰-۹]/g, (digit) =>
+        String(persianDigits.indexOf(digit)),
+    );
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial);
+    const remainingClaimAmount = isPaidAmountValid
+        ? Math.max(0, roundedSpousalAllowanceAmount - amountPaidInRial)
+        : null;
+    const finalRemainingClaimAmount = remainingClaimAmount === null
+        ? null
+        : Math.max(0, finalClaimAmount - amountPaidInRial);
 
     return (
         <ThemedView style={styles.container}>
@@ -304,6 +321,26 @@ export default function SpousalAllowanceScreen() {
                             </View>
 
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
+                                    این مبلغ از حق تأهل استحقاقی کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
 
                             <Pressable
                                 accessibilityRole="checkbox"
@@ -408,6 +445,26 @@ export default function SpousalAllowanceScreen() {
                                                     </ThemedText>
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
+                                                    </ThemedText>
+                                                </View>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                        حق تأهل پس از کسر مبلغ پرداخت‌شده به کارگر
+                                                    </ThemedText>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                        {remainingClaimAmount === null
+                                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                            : formatCurrency(remainingClaimAmount)}
+                                                    </ThemedText>
+                                                </View>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                        حق تأهل پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
+                                                    </ThemedText>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                        {finalRemainingClaimAmount === null
+                                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                            : formatCurrency(finalRemainingClaimAmount)}
                                                     </ThemedText>
                                                 </View>
                                             </View>
@@ -673,18 +730,28 @@ const styles = StyleSheet.create({
     },
     insuranceSummaryValue: {
         textAlign: 'center',
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     insuranceSummaryEmphasisLabel: {
         fontSize: 13,
     },
     insuranceSummaryEmphasisValue: {
-        fontSize: 14,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     insuranceExemptionOption: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.two,
+        padding: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+    },
+    paidAmountSection: {
+        gap: Spacing.one,
         padding: Spacing.two,
         borderWidth: StyleSheet.hairlineWidth,
         borderRadius: 12,
@@ -774,7 +841,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     detailValue: {
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     pageTitle: {
         display: 'none',

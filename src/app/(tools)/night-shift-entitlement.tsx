@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
@@ -19,6 +20,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateNightShiftEntitlementFromPeriodData,
@@ -30,7 +32,7 @@ import {
 
 export default function NightShiftEntitlementScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -50,6 +52,7 @@ export default function NightShiftEntitlementScreen() {
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [result, setResult] = useState<NightShiftEntitlementCalculationResult | null>(null);
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
     const [isLegalBasisVisible, setIsLegalBasisVisible] = useState(false);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
@@ -262,6 +265,22 @@ export default function NightShiftEntitlementScreen() {
         : Math.round(roundedNightShiftAmount * 0.07);
     const employerInsuranceAmount = Math.round(roundedNightShiftAmount * 0.23);
     const finalClaimAmount = roundedNightShiftAmount - workerInsuranceAmount;
+    const normalizedAmountPaid = amountPaidToWorker
+        .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial)
+        && (currencyPreference !== 'toman'
+            || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+    const remainingNightShiftAmount = isPaidAmountValid
+        ? Math.max(0, roundedNightShiftAmount - amountPaidInRial)
+        : null;
+    const finalRemainingNightShiftAmount = remainingNightShiftAmount === null
+        ? null
+        : Math.max(0, finalClaimAmount - amountPaidInRial);
 
     return (
         <ThemedView style={styles.container}>
@@ -324,6 +343,26 @@ export default function NightShiftEntitlementScreen() {
                             {workshopType === 'classified' ? <View style={[styles.metricBox, { backgroundColor: theme.surfaceVariant }]}><ThemedText type="small" style={[styles.sectionLabel, { color: theme.textSecondary }]}>گروه شغلی</ThemedText><Menu visible={groupMenuVisible} onDismiss={() => setGroupMenuVisible(false)} anchor={<Pressable onPress={() => setGroupMenuVisible(true)} style={[styles.dateInput, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={{ color: theme.text }}>{selectedGroup == null ? 'انتخاب گروه' : `گروه ${toPersianDigits(selectedGroup)}`}</ThemedText><MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primary} /></Pressable>}>{jobGroups.map((group) => <FontAwareMenuItem key={group.id} title={`گروه ${toPersianDigits(group.group_number)}`} onPress={() => { setSelectedGroup(group.group_number); setGroupMenuVisible(false); }} />)}</Menu></View> : null}
                             <SettlementThrough1391Field checked={settledThrough1391} enabled={canUseSettlementPath} onChange={setSettledThrough1391} />
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
+                                    این مبلغ از شب‌کاری استحقاقی محاسبه‌شده کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
 
                             <Pressable
                                 accessibilityRole="checkbox"
@@ -428,6 +467,26 @@ export default function NightShiftEntitlementScreen() {
                                                     </ThemedText>
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
+                                                    </ThemedText>
+                                                </View>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                        شب‌کاری پس از کسر مبلغ پرداخت‌شده به کارگر
+                                                    </ThemedText>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                        {remainingNightShiftAmount === null
+                                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                            : formatCurrency(remainingNightShiftAmount)}
+                                                    </ThemedText>
+                                                </View>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                        شب‌کاری پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
+                                                    </ThemedText>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                        {finalRemainingNightShiftAmount === null
+                                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                            : formatCurrency(finalRemainingNightShiftAmount)}
                                                     </ThemedText>
                                                 </View>
                                             </View>
@@ -693,18 +752,28 @@ const styles = StyleSheet.create({
     },
     insuranceSummaryValue: {
         textAlign: 'center',
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     insuranceSummaryEmphasisLabel: {
         fontSize: 13,
     },
     insuranceSummaryEmphasisValue: {
-        fontSize: 14,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     insuranceExemptionOption: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: Spacing.two,
+        padding: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+    },
+    paidAmountSection: {
+        gap: Spacing.one,
         padding: Spacing.two,
         borderWidth: StyleSheet.hairlineWidth,
         borderRadius: 12,
@@ -796,6 +865,8 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     detailValue: {
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
 });

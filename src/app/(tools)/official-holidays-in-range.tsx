@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     detailGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 },
     detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 12 },
+    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 22 },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });

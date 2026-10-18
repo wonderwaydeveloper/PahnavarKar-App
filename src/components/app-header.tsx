@@ -1,8 +1,8 @@
 import { useAppContext } from '@/hooks/use-app-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
-import { type ReactNode } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useWindowDimensions, View, type TextStyle } from 'react-native';
 import { Appbar } from 'react-native-paper';
 
 import { ThemedText } from '@/components/themed-text';
@@ -13,6 +13,61 @@ interface AppHeaderProps {
   formatYear?: (value: number | string | null | undefined) => string;
   selectedYear?: { year: number | string } | null;
   centerContent?: ReactNode;
+}
+
+const HOME_HEADER_TITLES = ['پهناور کار', 'در خدمت جامعه ی کار'];
+
+function TypewriterTitle({ titles, style }: { titles: string[]; style: TextStyle }) {
+  const [typedTitle, setTypedTitle] = useState('');
+
+  useEffect(() => {
+    let titleIndex = 0;
+    let characters = Array.from(titles[titleIndex] ?? '');
+    let characterIndex = 0;
+    let isDeleting = false;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    const animateTitle = () => {
+      if (isDeleting) {
+        characterIndex -= 1;
+        setTypedTitle(characters.slice(0, characterIndex).join(''));
+
+        if (characterIndex === 0) {
+          isDeleting = false;
+          titleIndex = (titleIndex + 1) % titles.length;
+          characters = Array.from(titles[titleIndex] ?? '');
+          timeout = setTimeout(animateTitle, 400);
+          return;
+        }
+      } else {
+        characterIndex += 1;
+        setTypedTitle(characters.slice(0, characterIndex).join(''));
+
+        if (characterIndex === characters.length) {
+          isDeleting = true;
+          timeout = setTimeout(animateTitle, 1400);
+          return;
+        }
+      }
+
+      timeout = setTimeout(animateTitle, isDeleting ? 100 : 150);
+    };
+
+    timeout = setTimeout(animateTitle, 150);
+
+    return () => clearTimeout(timeout);
+  }, [titles]);
+
+  return (
+    <ThemedText
+      accessibilityLabel={titles.join('، ')}
+      numberOfLines={1}
+      ellipsizeMode="tail"
+      style={style}
+    >
+      {typedTitle}
+    </ThemedText>
+  );
 }
 
 export function AppHeader({ route, formatYear, selectedYear, centerContent }: AppHeaderProps) {
@@ -136,6 +191,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
   const title = hasLegalRouteTitle && typeof rawHeaderTitle === 'string' && rawHeaderTitle.trim()
     ? rawHeaderTitle
     : routeTitle;
+  const isHomeRoute = actualRouteName === 'home' || actualRouteName === 'index';
   const activeTool = TOOL_DEFINITIONS.find((tool) => tool.key === actualRouteName);
   const showBackButton = ['edit-profile', 'settings', 'support', 'about-us', 'app-info', 'yearly-info', 'group-calculation', 'base-salary', 'family-allowance', 'housing-allowance', 'monthly-allowance', 'minimum-bonus', 'maximum-bonus', 'bonus-entitlement', 'spousal-allowance', 'monthly-shift-work', 'overtime-entitlement', 'night-shift-entitlement', 'insurance-days-entitlement', 'unemployment-insurance-entitlement', 'unemployment-insurance-allowance', 'unused-leave-entitlement', 'unused-leave-wage', 'suspension-wage', 'end-of-service-years', 'entitled-seniority', 'mission-allowance', 'friday-work', 'official-holiday-work', 'official-holidays-in-range', 'illegal-foreign-worker-penalty', 'article-87', 'social-security-premium-ceiling', 'ordinary-work-hours', 'hazardous-work-hours', 'young-worker-work-hours', 'category', 'title', 'chapter', 'topic', 'article'].includes(actualRouteName);
   const shouldAlignSecondaryHeaderStart = showBackButton && !centerContent;
@@ -212,10 +268,25 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                 <MaterialCommunityIcons name={activeTool.icon} size={18} color="#FFFFFF" />
               </View>
             ) : null}
-            <ThemedText
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              style={{
+            {isHomeRoute ? (
+              <TypewriterTitle
+                titles={HOME_HEADER_TITLES}
+                style={{
+                  flexShrink: 1,
+                  minWidth: 0,
+                  maxWidth: '100%',
+                  fontSize: titleFontSize,
+                  lineHeight: titleFontSize + 8,
+                  fontFamily: 'AppFont-Bold',
+                  color: titleColor,
+                  textAlign: shouldAlignSecondaryHeaderStart ? 'right' : 'center',
+                }}
+              />
+            ) : (
+              <ThemedText
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={{
                 flexShrink: 1,
                 minWidth: 0,
                 maxWidth: '100%',
@@ -225,9 +296,10 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                 color: titleColor,
                 textAlign: shouldAlignSecondaryHeaderStart ? 'right' : 'center',
               }}
-            >
-              {title}
-            </ThemedText>
+              >
+                {title}
+              </ThemedText>
+            )}
           </View>
         )}
       </View>

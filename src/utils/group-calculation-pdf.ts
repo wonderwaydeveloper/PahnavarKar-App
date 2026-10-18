@@ -36,6 +36,10 @@ export interface GroupCalculationPdfAssets {
 export interface GroupCalculationPdfWageTotal {
     amount: string;
     error?: string;
+    amountPaid?: string;
+    remainingClaim?: string;
+    finalClaim?: string;
+    claimError?: string;
     contractorTotal30?: string;
     employerInsurance30?: string;
     contractorTotal30Error?: string;
@@ -92,9 +96,23 @@ export function buildGroupCalculationPdfHtml(
     `).join('');
     const wageTotalRow = wageTotal ? `
         <tr class="wage-total-row">
-            <th>جمع حقوق و مزایای یک کارگر در بازهٔ انتخابی</th>
+            <th>جمع حقوق و مزایای محاسبه‌شده در بازه</th>
             <td class="${wageTotal.error ? 'error-text' : 'amount'}">${escapeHtml(wageTotal.error ?? wageTotal.amount)}</td>
         </tr>
+        ${wageTotal.amountPaid !== undefined ? `
+            <tr class="wage-total-row">
+                <th>مبلغ پرداخت‌شده به کارگر در بازهٔ زمانی انتخابی</th>
+                <td class="amount">${escapeHtml(wageTotal.amountPaid)}</td>
+            </tr>
+            <tr class="wage-total-row">
+                <th>ماندهٔ حقوق و مزایا پس از کسر مبلغ پرداخت‌شده</th>
+                <td class="${wageTotal.claimError ? 'error-text' : 'amount'}">${escapeHtml(wageTotal.claimError ?? wageTotal.remainingClaim ?? 'محاسبه نشده')}</td>
+            </tr>
+            <tr class="wage-total-row">
+                <th>خالص ماندهٔ حقوق و مزایا پس از کسر ۷٪ سهم بیمهٔ کارگر</th>
+                <td class="${wageTotal.claimError ? 'error-text' : 'amount'}">${escapeHtml(wageTotal.claimError ?? wageTotal.finalClaim ?? 'محاسبه نشده')}</td>
+            </tr>
+        ` : ''}
         <tr class="wage-total-row contractor-total-row">
             <th>هزینهٔ ماهانهٔ ۳۰ روز برای ${escapeHtml(wageTotal.contractorWorkerCount)} کارگر، با سهم بیمهٔ کارفرما</th>
             <td class="${wageTotal.contractorTotal30Error ? 'error-text' : 'amount'}">${escapeHtml(wageTotal.contractorTotal30Error ?? wageTotal.contractorTotal30 ?? 'محاسبه نشده')}</td>

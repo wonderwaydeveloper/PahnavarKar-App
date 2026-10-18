@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { DateInputField } from '@/components/date-input-field';
 import { NumericInputField } from '@/components/numeric-input-field';
@@ -19,6 +20,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import {
     calculateMissionAllowanceFromPeriodData,
     getMissionAllowancePeriodRanges,
@@ -65,7 +67,7 @@ function formatParsedDate(value: { year: number; month: number; day: number }) {
 
 export default function MissionAllowanceScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -87,6 +89,7 @@ export default function MissionAllowanceScreen() {
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [result, setResult] = useState<MissionAllowanceCalculationResult | null>(null);
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -147,6 +150,19 @@ export default function MissionAllowanceScreen() {
     }, []);
 
     const canUseSettlementPath = (parseDateInput(employmentDate)?.year ?? 0) <= 1391;
+    const normalizedAmountPaid = amountPaidToWorker
+        .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial)
+        && (currencyPreference !== 'toman'
+            || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+    const remainingMissionAllowance = result && isPaidAmountValid
+        ? Math.max(0, Math.round(result.totalAmount) - amountPaidInRial)
+        : null;
     const parsedMissionStart = parseDateInput(missionStartDate);
     const parsedMissionEnd = parseDateInput(missionEndDate);
     const availableMissionPeriods = useMemo(() => (
@@ -468,6 +484,26 @@ export default function MissionAllowanceScreen() {
                                 </ThemedText>
                             </View>
 
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    این مبلغ از فوق‌العادهٔ مأموریت محاسبه‌شده کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
+
                             <View style={styles.actionsGroup}>
                                 <Button
                                     mode="contained"
@@ -497,6 +533,16 @@ export default function MissionAllowanceScreen() {
                                         <View style={[styles.totalMissionDaysBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>تعداد روزهای مأموریت در بازهٔ انتخاب‌شده</ThemedText>
                                             <ThemedText type="bodyBold" style={[styles.totalMissionDaysValue, { color: theme.text }]}>{toPersianDigits(result.totalMissionDays)} روز</ThemedText>
+                                        </View>
+                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                            <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                مبلغ فوق‌العادهٔ مأموریت پس از کسر مبلغ پرداخت‌شده به کارگر
+                                            </ThemedText>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                                {remainingMissionAllowance === null
+                                                    ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                    : formatCurrency(remainingMissionAllowance)}
+                                            </ThemedText>
                                         </View>
                                         <View style={styles.breakdownSectionHeader}>
                                             <ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات دوره‌ها</ThemedText>
@@ -621,14 +667,15 @@ const styles = StyleSheet.create({
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
     actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     breakdownCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     breakdownContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBoxContent: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
     summaryLabel: { fontSize: 12, lineHeight: 18, fontFamily: 'AppFont-Medium' },
-    amountValue: { fontSize: 23 },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     detailsGrid: { gap: Spacing.two },
     totalMissionDaysBox: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
-    totalMissionDaysValue: { fontSize: 16 },
+    totalMissionDaysValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     breakdownSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one },
     breakdownSectionTitle: { fontSize: 13 },
     toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
@@ -640,5 +687,5 @@ const styles = StyleSheet.create({
     breakdownDetailGrid: { gap: Spacing.one },
     breakdownDetailBox: { borderRadius: 8, borderWidth: 1, padding: Spacing.one, gap: Spacing.one, alignItems: 'center' },
     detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 12 },
+    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });

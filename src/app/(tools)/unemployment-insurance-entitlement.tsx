@@ -314,6 +314,6 @@ const styles = StyleSheet.create({
     resultGrid: { flexDirection: 'row', gap: Spacing.two },
     resultBox: { flex: 1, alignItems: 'center', gap: Spacing.one, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two },
     resultLabel: { fontSize: 10, lineHeight: 16, fontFamily: 'AppFont-Medium' },
-    resultValue: { fontSize: 22, lineHeight: 30, fontFamily: 'AppFont-Bold' },
+    resultValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     calculationText: { textAlign: 'center', lineHeight: 22 },
 });

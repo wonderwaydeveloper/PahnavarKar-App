@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { CalculationDescriptionBox, CalculationResultHeading } from '@/components/calculation-card-sections';
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
@@ -18,6 +19,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
   calculateSuspensionWageFromPeriodData,
@@ -32,7 +34,7 @@ type PickerTarget = 'start' | 'end' | 'employment';
 
 export default function SuspensionWageScreen() {
   const theme = useTheme();
-  const { formatCurrency } = useCurrencyFormatter();
+  const { currencyPreference, formatCurrency } = useCurrencyFormatter();
   const insets = useSafeAreaInsets();
   const currentJalaliDate = useMemo(() => {
     const today = new Date();
@@ -72,6 +74,7 @@ export default function SuspensionWageScreen() {
   const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
   const [isLegalBasisVisible, setIsLegalBasisVisible] = useState(false);
   const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+  const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
   const [showDetails, setShowDetails] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
@@ -273,6 +276,22 @@ export default function SuspensionWageScreen() {
     : Math.round(insuranceBaseAmount * 0.07);
   const employerInsuranceAmount = Math.round(insuranceBaseAmount * 0.23);
   const finalClaimAmount = (result?.totalAmount ?? 0) - workerInsuranceAmount;
+  const normalizedAmountPaid = amountPaidToWorker
+    .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+  const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+  const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+  const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+    && amountPaidInSelectedCurrency >= 0
+    && Number.isSafeInteger(amountPaidInRial)
+    && (currencyPreference !== 'toman'
+      || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+  const remainingSuspensionAmount = result && isPaidAmountValid
+    ? Math.max(0, Math.round(result.totalAmount) - amountPaidInRial)
+    : null;
+  const finalRemainingSuspensionAmount = remainingSuspensionAmount === null
+    ? null
+    : Math.max(0, Math.round(finalClaimAmount) - amountPaidInRial);
 
   return (
     <ThemedView style={styles.container}>
@@ -599,6 +618,25 @@ export default function SuspensionWageScreen() {
               />
 
               <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+              <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                </ThemedText>
+                <CurrencyAmountInput
+                  value={amountPaidToWorker}
+                  onChangeText={setAmountPaidToWorker}
+                  currencyPreference={currencyPreference}
+                  accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                />
+                <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
+                  این مبلغ از حق‌السعی ایام تعلیق محاسبه‌شده کسر می‌شود.
+                </ThemedText>
+                {!isPaidAmountValid ? (
+                  <ThemedText type="small" style={{ color: theme.error }}>
+                    مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                  </ThemedText>
+                ) : null}
+              </View>
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: isWorkerInsuranceExempt }}
@@ -763,10 +801,30 @@ export default function SuspensionWageScreen() {
                       </View>
                       <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                         <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
-                          حق‌السعی ایام تعلیق پس از کسر سهم بیمه ی کارگر
+                          مبلغ حق‌السعی ایام تعلیق پس از کسر سهم بیمهٔ کارگر
                         </ThemedText>
                         <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
                           {toPersianDigits(formatCurrency(finalClaimAmount))}
+                        </ThemedText>
+                      </View>
+                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                          مبلغ حق‌السعی ایام تعلیق پس از کسر مبلغ پرداخت‌شده به کارگر
+                        </ThemedText>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                          {remainingSuspensionAmount === null
+                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                            : formatCurrency(remainingSuspensionAmount)}
+                        </ThemedText>
+                      </View>
+                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                          مبلغ حق‌السعی ایام تعلیق پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
+                        </ThemedText>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                          {finalRemainingSuspensionAmount === null
+                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                            : formatCurrency(finalRemainingSuspensionAmount)}
                         </ThemedText>
                       </View>
                     </View>
@@ -1308,13 +1366,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   insuranceSummaryLabel: { textAlign: "center", fontSize: 12 },
-  insuranceSummaryValue: { textAlign: "center", fontSize: 12 },
+  insuranceSummaryValue: { textAlign: "center", fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
   insuranceSummaryEmphasisLabel: { fontSize: 13 },
-  insuranceSummaryEmphasisValue: { fontSize: 14 },
+  insuranceSummaryEmphasisValue: { fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
   insuranceExemptionOption: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.two,
+    padding: Spacing.two,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+  },
+  paidAmountSection: {
+    gap: Spacing.one,
     padding: Spacing.two,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
@@ -1379,5 +1443,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
-  detailValue: { fontSize: 12 },
+  detailValue: { fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
 });

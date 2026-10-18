@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
 import { CalculationDescriptionBox, CalculationResultHeading } from '@/components/calculation-card-sections';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
@@ -18,6 +19,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateEntitledSeniorityFromPeriodData,
@@ -29,7 +31,7 @@ import {
 
 export default function EntitledSeniorityScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentDate = useMemo(() => {
         const today = new Date();
@@ -53,6 +55,7 @@ export default function EntitledSeniorityScreen() {
     const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
     const [isLegalBasisVisible, setIsLegalBasisVisible] = useState(false);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetails, setShowDetails] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -194,6 +197,20 @@ export default function EntitledSeniorityScreen() {
         : Math.round(roundedTotalPeriodEntitlement * 0.07);
     const employerInsuranceAmount = Math.round(roundedTotalPeriodEntitlement * 0.23);
     const finalClaimAmount = roundedTotalPeriodEntitlement - workerInsuranceAmount;
+    const normalizedAmountPaid = amountPaidToWorker.replace(/[۰-۹]/g, (digit) =>
+        String(persianDigits.indexOf(digit)),
+    );
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial);
+    const remainingClaimAmount = isPaidAmountValid
+        ? Math.max(0, roundedTotalPeriodEntitlement - amountPaidInRial)
+        : null;
+    const finalRemainingClaimAmount = remainingClaimAmount === null
+        ? null
+        : Math.max(0, finalClaimAmount - amountPaidInRial);
 
     return (
         <ThemedView style={styles.container}>
@@ -231,6 +248,26 @@ export default function EntitledSeniorityScreen() {
 
                             <SettlementThrough1391Field checked={settledThrough1391} enabled={canUseSettlementPath} onChange={setSettledThrough1391} />
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
+                                    این مبلغ از پایه سنوات استحقاقی کل دوره کسر می‌شود؛ سپس سهم بیمهٔ کارگر از مانده محاسبه خواهد شد.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
 
                             <Pressable
                                 accessibilityRole="checkbox"
@@ -344,6 +381,26 @@ export default function EntitledSeniorityScreen() {
                                             {formatCurrency(finalClaimAmount)}
                                         </ThemedText>
                                     </View>
+                                    <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            پایه سنوات استحقاقی پس از کسر مبلغ پرداخت‌شده به کارگر
+                                        </ThemedText>
+                                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                            {remainingClaimAmount === null
+                                                ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                : formatCurrency(remainingClaimAmount)}
+                                        </ThemedText>
+                                    </View>
+                                    <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            پایه سنوات استحقاقی پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده به کارگر
+                                        </ThemedText>
+                                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                            {finalRemainingClaimAmount === null
+                                                ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                : formatCurrency(finalRemainingClaimAmount)}
+                                        </ThemedText>
+                                    </View>
                                 </View>
                                 <View style={styles.breakdownHeader}>
                                     <ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات بازه‌های محاسبه</ThemedText>
@@ -447,6 +504,7 @@ const styles = StyleSheet.create({
     insuranceExemptionOption: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     insuranceExemptionText: { flex: 1, gap: Spacing.half },
     insuranceExemptionDescription: { fontSize: 12 },
+    paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     insuranceLegalBasis: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     insuranceLegalSummary: { fontSize: 12, lineHeight: 18 },
     insuranceLegalToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one, paddingVertical: Spacing.half },
@@ -461,7 +519,7 @@ const styles = StyleSheet.create({
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBox: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     summaryLabel: { fontSize: 11, lineHeight: 16, fontFamily: 'AppFont-Medium', textAlign: 'center' },
-    amountValue: { fontSize: 18, lineHeight: 26, fontFamily: 'AppFont-Bold' },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     insuranceSummary: { width: '100%', gap: Spacing.one },
     insuranceSummaryRow: {
         minHeight: 52,
@@ -474,9 +532,9 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     insuranceSummaryLabel: { textAlign: 'center', fontSize: 12 },
-    insuranceSummaryValue: { textAlign: 'center', fontSize: 12 },
+    insuranceSummaryValue: { textAlign: 'center', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     insuranceSummaryEmphasisLabel: { fontSize: 13 },
-    insuranceSummaryEmphasisValue: { fontSize: 14 },
+    insuranceSummaryEmphasisValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     finalYearAmounts: { width: '100%', gap: Spacing.one },
     finalYearAmount: { width: '100%', alignItems: 'center', gap: Spacing.half, padding: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     finalYearDateLabel: { fontSize: 10, lineHeight: 16, fontFamily: 'AppFont-Medium' },
@@ -485,7 +543,7 @@ const styles = StyleSheet.create({
     finalYearValueBlock: { width: '100%', alignItems: 'center', gap: Spacing.half, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     finalYearMonthlyBlock: {},
     finalYearValueLabel: { fontSize: 10, lineHeight: 16, fontFamily: 'AppFont-Medium' },
-    finalYearAmountValue: { fontSize: 18, lineHeight: 26, fontFamily: 'AppFont-Bold' },
+    finalYearAmountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.two },
     breakdownSectionTitle: { fontSize: 13, lineHeight: 19, fontFamily: 'AppFont-Bold' },
     toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
@@ -497,6 +555,6 @@ const styles = StyleSheet.create({
     detailGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     detailLabel: { fontSize: 12, lineHeight: 16, fontFamily: 'AppFont-Regular' },
-    detailValue: { fontSize: 12, lineHeight: 18, fontFamily: 'AppFont-Bold' },
+    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     dateValue: { textAlign: 'center' },
 });

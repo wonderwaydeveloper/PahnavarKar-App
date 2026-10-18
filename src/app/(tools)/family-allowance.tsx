@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
@@ -17,6 +18,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateFamilyAllowanceFromPeriodData,
@@ -29,7 +31,7 @@ const CHILDREN_OPTIONS = Array.from({ length: 12 }, (_, index) => index + 1);
 
 export default function FamilyAllowanceScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -52,6 +54,7 @@ export default function FamilyAllowanceScreen() {
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
     const [result, setResult] = useState<FamilyAllowanceCalculationResult | null>(null);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
 
@@ -223,6 +226,17 @@ export default function FamilyAllowanceScreen() {
 
         return toPersianDigits(formatCurrency(result.totalAmount));
     }, [formatCurrency, result]);
+    const normalizedAmountPaid = amountPaidToWorker.replace(/[۰-۹]/g, (digit) =>
+        String(persianDigits.indexOf(digit)),
+    );
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial);
+    const remainingAllowance = result && isPaidAmountValid
+        ? Math.max(0, Math.round(result.totalAmount) - amountPaidInRial)
+        : null;
 
     return (
         <ThemedView style={styles.container}>
@@ -306,7 +320,25 @@ export default function FamilyAllowanceScreen() {
                             </View>
 
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
-
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={[styles.paidAmountHint, { color: theme.textSecondary }]}>
+                                    این مبلغ از حق عائله‌مندی محاسبه‌شده کسر می‌شود؛ این مزیت مشمول کسر بیمه نیست.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
                             <View style={styles.actionsGroup}>
                                 <Button
                                     mode="contained"
@@ -338,6 +370,26 @@ export default function FamilyAllowanceScreen() {
                                                 </ThemedText>
                                                 <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
                                                     {formattedResult}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    مبلغ پرداخت‌شده به کارگر
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.text }]}>
+                                                    {isPaidAmountValid
+                                                        ? formatCurrency(amountPaidInRial)
+                                                        : 'مبلغ پرداخت‌شده نامعتبر است'}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    حق عائله‌مندی پس از کسر مبلغ پرداخت‌شده
+                                                </ThemedText>
+                                                <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                                    {remainingAllowance === null
+                                                        ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                        : formatCurrency(remainingAllowance)}
                                                 </ThemedText>
                                             </View>
                                         </View>
@@ -493,6 +545,16 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
         alignItems: 'center',
     },
+    paidAmountSection: {
+        gap: Spacing.one,
+        padding: Spacing.two,
+        borderRadius: 12,
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    paidAmountHint: {
+        fontSize: 12,
+        lineHeight: 18,
+    },
     metricsRow: {
         flexDirection: 'row',
         alignItems: 'stretch',
@@ -646,12 +708,16 @@ const styles = StyleSheet.create({
         fontSize: 11,
     },
     amountValue: {
-        fontSize: 18,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     detailLabel: {
         fontSize: 12,
     },
     detailValue: {
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
 });

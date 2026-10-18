@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 18 },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     breakdownHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -489,5 +489,5 @@ const styles = StyleSheet.create({
     detailGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 },
     detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 12 },
+    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });

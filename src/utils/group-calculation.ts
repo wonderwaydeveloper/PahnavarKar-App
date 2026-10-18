@@ -4,6 +4,7 @@ import {
     calculateBonusEntitlementFromPeriodData,
     calculateEndOfServiceYearsFromPeriodData,
     calculateEntitledSeniorityFromPeriodData,
+    calculateEntitledSeniorityForDateRangeFromPeriodData,
     calculateFamilyAllowanceFromPeriodData,
     calculateFridayWorkFromPeriodData,
     calculateHousingAllowanceFromPeriodData,
@@ -229,15 +230,16 @@ function calculateOne(key: GroupCalculationKey, input: GroupCalculationInput): P
             return { value: result.totalDays, unit: 'روز', breakdown: result.breakdown };
         }
         case 'entitled-seniority': {
-            const result = calculateEntitledSeniorityFromPeriodData(
+            const result = calculateEntitledSeniorityForDateRangeFromPeriodData(
                 input.employmentStartDate,
+                input.startDate,
                 input.endDate,
                 input.periodBuckets,
                 input.workshopType,
                 input.jobGroupNumber,
                 input.settledThrough1391,
             );
-            return { value: result.finalEntitlement, unit: 'ریال', breakdown: result.breakdown };
+            return { value: result.totalAmount, unit: 'ریال', breakdown: result.breakdown };
         }
         case 'overtime-entitlement': {
             const result = calculateOvertimeEntitlementFromPeriodData(

@@ -551,8 +551,8 @@ const styles = StyleSheet.create({
         fontFamily: 'AppFont-Medium',
     },
     amountValue: {
-        fontSize: 22,
-        lineHeight: 30,
+        fontSize: 16,
+        lineHeight: 22,
         fontFamily: 'AppFont-Bold',
     },
     breakdownSectionHeader: {
@@ -612,8 +612,8 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     detailValue: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: 16,
+        lineHeight: 22,
         fontFamily: 'AppFont-Bold',
         textAlign: 'center',
     },

@@ -203,5 +203,5 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 18 },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });

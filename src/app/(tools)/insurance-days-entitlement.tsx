@@ -579,7 +579,9 @@ const styles = StyleSheet.create({
         fontSize: 11,
     },
     amountValue: {
-        fontSize: 18,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
     breakdownSectionHeader: {
         flexDirection: 'row',
@@ -640,6 +642,8 @@ const styles = StyleSheet.create({
         fontSize: 12,
     },
     detailValue: {
-        fontSize: 12,
+        fontSize: 16,
+        lineHeight: 22,
+        fontFamily: 'AppFont-Bold',
     },
 });

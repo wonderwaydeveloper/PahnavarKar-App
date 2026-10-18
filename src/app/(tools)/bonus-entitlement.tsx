@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
@@ -19,6 +20,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateBonusEntitlementFromPeriodData,
@@ -32,7 +34,7 @@ type PickerTarget = 'start' | 'end' | 'employment';
 
 export default function BonusEntitlementScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentDate = useMemo(() => {
         const today = new Date();
@@ -56,6 +58,7 @@ export default function BonusEntitlementScreen() {
     const [isLoading, setIsLoading] = useState(true);
     const [result, setResult] = useState<BonusEntitlementCalculationResult | null>(null);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetails, setShowDetails] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -120,6 +123,19 @@ export default function BonusEntitlementScreen() {
         return a.year * 10000 + a.month * 100 + a.day - (b.year * 10000 + b.month * 100 + b.day);
     };
     const canUseSettlementPath = (parseDateInput(employmentDate)?.year ?? 0) <= 1391;
+    const normalizedAmountPaid = amountPaidToWorker
+        .replace(/[۰-۹]/g, (digit) => String(digits.indexOf(digit)))
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial)
+        && (currencyPreference !== 'toman'
+            || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+    const remainingBonusAmount = result && isPaidAmountValid
+        ? Math.max(0, Math.round(result.totalEntitlementAmount) - amountPaidInRial)
+        : null;
 
     const handleDateSelect = (value: string) => {
         if (pickerTarget === 'employment') {
@@ -210,6 +226,25 @@ export default function BonusEntitlementScreen() {
                             ) : null}
                             <SettlementThrough1391Field checked={settledThrough1391} enabled={canUseSettlementPath} onChange={setSettledThrough1391} />
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    این مبلغ از عیدی و پاداش استحقاقی محاسبه‌شده کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
                             <View style={styles.actionsGroup}>
                                 <Button mode="contained" onPress={handleCalculate} icon="gift-outline" buttonColor={theme.primary} textColor={theme.surface} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoading} disabled={isLoading}>محاسبه</Button>
                             </View>
@@ -230,6 +265,16 @@ export default function BonusEntitlementScreen() {
                                                 <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>حداکثر عیدی و پاداش در بازهٔ زمانی انتخابی</ThemedText>
                                                 <ThemedText type="smallBold" style={{ color: theme.text }}>{toPersianDigits(formatCurrency(result.totalMaximumAmount))}</ThemedText>
                                             </View>
+                                        </View>
+                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                            <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                عیدی و پاداش استحقاقی پس از کسر مبلغ پرداخت‌شده به کارگر
+                                            </ThemedText>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                                {remainingBonusAmount === null
+                                                    ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                                    : toPersianDigits(formatCurrency(remainingBonusAmount))}
+                                            </ThemedText>
                                         </View>
                                         <View style={styles.breakdownHeader}>
                                             <ThemedText type="smallBold" style={{ color: theme.text }}>جزئیات دوره‌ها</ThemedText>
@@ -300,7 +345,8 @@ const styles = StyleSheet.create({
     metricsRow: { flexDirection: 'row', gap: Spacing.two }, metricBox: { flex: 1, borderRadius: 14, padding: Spacing.two, gap: Spacing.one }, sectionLabel: { fontSize: 11 },
     dateInput: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     optionSection: { gap: Spacing.two }, optionsRow: { flexDirection: 'row', gap: Spacing.two }, optionButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
+    paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, checkText: { flex: 1, gap: Spacing.one }, optionTitle: { fontSize: 13, lineHeight: 19, fontFamily: 'AppFont-Bold' }, optionDescription: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' }, actionsGroup: { flexDirection: 'row', gap: Spacing.two }, actionButton: { flex: 1, borderRadius: 12 }, actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
-    resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' }, resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two }, summaryBoxContent: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryDetailsGrid: { gap: Spacing.one }, summaryDetailBox: { width: '100%', alignItems: 'center', gap: Spacing.half, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryLabel: { fontSize: 11 }, amountValue: { fontSize: 18 },
-    breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one }, breakdownSectionTitle: { fontSize: 13 }, toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, toggleButtonLabel: { fontSize: 11, lineHeight: 17, fontFamily: 'AppFont-Bold' }, breakdownGrid: { gap: Spacing.two }, breakdownItemCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1 }, breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth }, breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' }, breakdownDetailGrid: { gap: Spacing.one }, breakdownDetailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 }, detailLabel: { fontSize: 12 }, detailValue: { fontSize: 12 },
+    resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' }, resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two }, summaryBoxContent: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryDetailsGrid: { gap: Spacing.one }, summaryDetailBox: { width: '100%', alignItems: 'center', gap: Spacing.half, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryLabel: { fontSize: 11 }, amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one }, breakdownSectionTitle: { fontSize: 13 }, toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, toggleButtonLabel: { fontSize: 11, lineHeight: 17, fontFamily: 'AppFont-Bold' }, breakdownGrid: { gap: Spacing.two }, breakdownItemCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1 }, breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },     breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' }, breakdownDetailGrid: { gap: Spacing.one }, breakdownDetailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 }, detailLabel: { fontSize: 12 }, detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });

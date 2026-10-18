@@ -6,6 +6,7 @@ import { Card, Menu, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
+import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { NumericInputField } from '@/components/numeric-input-field';
@@ -19,6 +20,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
+import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import {
     calculateEntitledSeniorityFromPeriodData,
@@ -37,7 +39,7 @@ const CHILDREN_OPTIONS = Array.from({ length: 13 }, (_, index) => index);
 
 export default function UnusedLeaveWageScreen() {
     const theme = useTheme();
-    const { formatCurrency } = useCurrencyFormatter();
+    const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -66,6 +68,7 @@ export default function UnusedLeaveWageScreen() {
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [result, setResult] = useState<UnusedLeaveWageCalculationResult | null>(null);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetails, setShowDetails] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -139,6 +142,22 @@ export default function UnusedLeaveWageScreen() {
         return parsedLeft.year * 10000 + parsedLeft.month * 100 + parsedLeft.day - (parsedRight.year * 10000 + parsedRight.month * 100 + parsedRight.day);
     };
     const canUseSettlementPath = (parseDateInput(employmentDate)?.year ?? 0) <= 1391;
+    const normalizedAmountPaid = amountPaidToWorker
+        .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
+        .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
+    const amountPaidInSelectedCurrency = Number(normalizedAmountPaid);
+    const amountPaidInRial = displayCurrencyToRial(amountPaidInSelectedCurrency, currencyPreference);
+    const isPaidAmountValid = Number.isSafeInteger(amountPaidInSelectedCurrency)
+        && amountPaidInSelectedCurrency >= 0
+        && Number.isSafeInteger(amountPaidInRial)
+        && (currencyPreference !== 'toman'
+            || amountPaidInSelectedCurrency <= Math.floor(Number.MAX_SAFE_INTEGER / 10));
+    const unusedLeaveWageAmount = result
+        ? Math.round(result.unusedLeaveDays * result.dailyWage)
+        : 0;
+    const remainingUnusedLeaveWage = result && isPaidAmountValid
+        ? Math.max(0, unusedLeaveWageAmount - amountPaidInRial)
+        : null;
     const totalMonthsWorked = (() => {
         const parsedStart = parseDateInput(startDate);
         const parsedEnd = parseDateInput(endDate);
@@ -478,12 +497,41 @@ export default function UnusedLeaveWageScreen() {
                                 </Menu>
                             </View>
                             <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+                            <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
+                                </ThemedText>
+                                <CurrencyAmountInput
+                                    value={amountPaidToWorker}
+                                    onChangeText={setAmountPaidToWorker}
+                                    currencyPreference={currencyPreference}
+                                    accessibilityLabel="مبلغ پرداخت‌شده به کارگر در بازهٔ انتخابی"
+                                />
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    این مبلغ از مزد مرخصی ذخیره‌شده کسر می‌شود.
+                                </ThemedText>
+                                {!isPaidAmountValid ? (
+                                    <ThemedText type="small" style={{ color: theme.error }}>
+                                        مبلغ باید عدد صحیح و نامنفیِ قابل محاسبه باشد.
+                                    </ThemedText>
+                                ) : null}
+                            </View>
                             <View style={styles.actionsGroup}>
                                 <Button mode="contained" onPress={handleCalculate} icon="cash-clock" buttonColor={theme.primary} textColor={theme.surface} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoadingData} disabled={isLoadingData}>محاسبه</Button>
                             </View>
                             {result ? <Card style={[styles.resultCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><Card.Content style={styles.resultContent}>
                                 <CalculationResultHeading />
-                                <View style={[styles.summaryBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مبلغ مزد مرخصی ذخیره شده کارگر</ThemedText><ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>{toPersianDigits(formatCurrency(result.unusedLeaveDays * result.dailyWage))}</ThemedText></View>
+                                <View style={[styles.summaryBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مبلغ مزد مرخصی ذخیره شده کارگر</ThemedText><ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>{toPersianDigits(formatCurrency(unusedLeaveWageAmount))}</ThemedText></View>
+                                <View style={[styles.summaryBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                    <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                        مبلغ مزد مرخصی ذخیره‌شده پس از کسر مبلغ پرداخت‌شده به کارگر
+                                    </ThemedText>
+                                    <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                        {remainingUnusedLeaveWage === null
+                                            ? 'مبلغ پرداخت‌شده نامعتبر است'
+                                            : formatCurrency(remainingUnusedLeaveWage)}
+                                    </ThemedText>
+                                </View>
                                 <View style={styles.breakdownHeader}><ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات محاسبه</ThemedText><Pressable onPress={() => setShowDetails((value) => !value)} style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>{showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}</ThemedText><MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primary} /></Pressable></View>
                                 {showDetails ? <View style={styles.breakdownGrid}><View style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}><View style={styles.breakdownItemHeaderRow}><ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>جزئیات مزد روزانه</ThemedText></View><View style={styles.breakdownDetailGrid}><View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>روزهای مرخصی ذخیره شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatNumber(result.unusedLeaveDays)} روز</ThemedText></View><View style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>روزهای تقویمی ماه آخر کارکرد</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(result.calendarDaysInLastMonth)} روز</ThemedText></View><ThemedText type="small" style={[styles.detailDescription, { color: theme.textSecondary }]}>آخرین ماه کارکرد: سال {toPersianDigits(result.year)}، دوره {toPersianDigits(result.periodIndex)}</ThemedText>{components.map(([label, value]) => <View key={label} style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{label}</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatCurrency(value)}</ThemedText></View>)}<View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مزد روزانه مشمول مرخصی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatCurrency(result.dailyWage)}</ThemedText></View></View></View></View> : null}
                             </Card.Content></Card> : null}
@@ -539,11 +587,12 @@ const styles = StyleSheet.create({
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 12 },
     actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBox: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 },
     summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 18 },
+    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one },
     breakdownSectionTitle: { fontSize: 13, fontFamily: 'AppFont-Bold' },
     toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
@@ -556,5 +605,5 @@ const styles = StyleSheet.create({
     detailDescription: { fontSize: 12, lineHeight: 18 },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 },
     detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 12 },
+    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
 });
