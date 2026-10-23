@@ -77,8 +77,6 @@ export function AppProvider({ children }: AppProviderProps) {
     const [calculationSound, setCalculationSoundState] = useState<CalculationSound>('message');
     const [calculationSoundError, setCalculationSoundError] = useState<string | null>(null);
     const [calculationFeedbackSequence, setCalculationFeedbackSequence] = useState(0);
-    const [calculationSoundPreviewSequence, setCalculationSoundPreviewSequence] = useState(0);
-    const [calculationSoundPreview, setCalculationSoundPreview] = useState<Exclude<CalculationSound, 'off'> | null>(null);
     const [themeReady, setThemeReady] = useState(false);
     const [isRTL] = useState(() => I18nManager.isRTL);
 
@@ -211,10 +209,6 @@ export function AppProvider({ children }: AppProviderProps) {
     const notifyCalculationCompleted = useCallback(() => {
         setCalculationFeedbackSequence((sequence) => sequence + 1);
     }, []);
-    const previewCalculationSound = useCallback((previewSound: Exclude<CalculationSound, 'off'>) => {
-        setCalculationSoundPreview(previewSound);
-        setCalculationSoundPreviewSequence((sequence) => sequence + 1);
-    }, []);
 
     const value: AppContextType = {
         theme: resolvedTheme,
@@ -227,8 +221,6 @@ export function AppProvider({ children }: AppProviderProps) {
         calculationSound,
         calculationSoundError,
         calculationFeedbackSequence,
-        calculationSoundPreviewSequence,
-        calculationSoundPreview,
         themeReady,
         colors,
         isRTL,
@@ -238,7 +230,6 @@ export function AppProvider({ children }: AppProviderProps) {
         setCurrencyPreference: handleSetCurrencyPreference,
         setCalculationSound: handleSetCalculationSound,
         notifyCalculationCompleted,
-        previewCalculationSound,
         clearFontError,
         clearCurrencyError,
         clearCalculationSoundError,
@@ -251,8 +242,6 @@ export function AppProvider({ children }: AppProviderProps) {
                 <CalculationFeedbackHost
                     sound={calculationSound}
                     sequence={calculationFeedbackSequence}
-                    previewSound={calculationSoundPreview}
-                    previewSequence={calculationSoundPreviewSequence}
                 />
             </PaperProvider>
         </AppContext.Provider>

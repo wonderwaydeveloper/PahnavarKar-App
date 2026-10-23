@@ -1,18 +1,21 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import appConfig from '@/../app.json';
 
+import { ConfirmationModal } from '@/components/confirmation-modal';
+import { ProfilePhotoPreview } from '@/components/profile-photo-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
-import type { AuthDevice } from '@/services/auth-api';
+import { getProfilePhotoUrl } from '@/services/auth-api';
 
 type ProfileAction = {
     key: string;
@@ -21,12 +24,24 @@ type ProfileAction = {
     icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 };
 
-const profileActions = [
-    { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'تغییر اطلاعات شخصی و حساب شما', icon: 'account-edit' },
-    { key: 'settings', label: 'تنظیمات', subtitle: 'ظاهر برنامه، فونت برنامه', icon: 'cog-outline' },
-    { key: 'support', label: 'پشتیبانی', subtitle: 'ارتباط سریع با تیم پشتیبانی', icon: 'lifebuoy' },
-    { key: 'about-us', label: 'درباره ما', subtitle: 'معرفی پروژه و اهداف ما', icon: 'information-outline' },
-] satisfies ProfileAction[];
+const profileGroups = [
+    {
+        title: 'حساب',
+        actions: [
+            { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'نام، ایمیل و تصویر پروفایل', icon: 'account-edit' },
+            { key: 'privacy-security', label: 'حریم خصوصی و امنیت', subtitle: 'نشست‌ها، دستگاه‌ها و امنیت حساب', icon: 'shield-lock-outline' },
+        ],
+    },
+    {
+        title: 'برنامه',
+        actions: [
+            { key: 'settings', label: 'تنظیمات', subtitle: 'ظاهر برنامه و فونت', icon: 'cog-outline' },
+            { key: 'support', label: 'پشتیبانی', subtitle: 'راهنما و ارتباط با ما', icon: 'lifebuoy' },
+            { key: 'about-us', label: 'درباره ما', subtitle: 'معرفی پهناور کار', icon: 'information-outline' },
+            { key: 'app-info', label: 'اطلاعات برنامه', subtitle: 'نسخه و وضعیت برنامه', icon: 'cellphone-information' },
+        ],
+    },
+] satisfies { title: string; actions: ProfileAction[] }[];
 
 function runDebouncedAction(lastPressRef: { current: number }, callback: () => void) {
     const now = Date.now();
@@ -45,67 +60,23 @@ export default function ProfileScreen() {
     const lastPressRef = useRef(0);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('به زودی فعال می‌شود');
-    const [devices, setDevices] = useState<AuthDevice[]>([]);
-    const [authBusy, setAuthBusy] = useState(false);
-    const { user, isLoading: authLoading, sessionError, refreshUser, getDevices, signOut, signOutAll, revokeUserDevice } = useAuth();
+    const [signOutBusy, setSignOutBusy] = useState(false);
+    const [signOutConfirmationVisible, setSignOutConfirmationVisible] = useState(false);
+    const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
+    const { user, isLoading: authLoading, sessionError, refreshUser, signOut } = useAuth();
     const appVersion = appConfig.expo?.version ?? '1.0.0';
-    const visibleDevices = user ? devices : [];
+    const profilePhotoUrl = getProfilePhotoUrl(user?.profile_photo_path ?? null);
 
-    useEffect(() => {
-        let isMounted = true;
-        if (!user) {
+    const handleUnavailableAction = (key: string) => {
+        if (key === 'edit-profile' || key === 'privacy-security') {
+            if (!user) {
+                runDebouncedAction(lastPressRef, () => router.push('/auth'));
+                return;
+            }
+            runDebouncedAction(lastPressRef, () => router.push(`/(tabs)/account/${key}` as any));
             return;
         }
 
-        void getDevices()
-            .then((activeDevices) => {
-                if (isMounted) {
-                    setDevices(activeDevices);
-                }
-            })
-            .catch((error: unknown) => {
-                if (isMounted) {
-                    setSnackbarMessage(error instanceof Error ? error.message : 'دریافت فهرست دستگاه‌ها ناموفق بود.');
-                    setSnackbarVisible(true);
-                }
-            });
-
-        return () => {
-            isMounted = false;
-        };
-    }, [getDevices, user]);
-
-    const handleSignOut = async (allDevices: boolean) => {
-        setAuthBusy(true);
-        try {
-            if (allDevices) {
-                await signOutAll();
-            } else {
-                await signOut();
-            }
-            setDevices([]);
-        } catch (error) {
-            setSnackbarMessage(error instanceof Error ? error.message : 'خروج از حساب ناموفق بود.');
-            setSnackbarVisible(true);
-        } finally {
-            setAuthBusy(false);
-        }
-    };
-
-    const handleRevokeDevice = async (device: AuthDevice) => {
-        setAuthBusy(true);
-        try {
-            await revokeUserDevice(device.id);
-            setDevices((current) => current.filter(({ id }) => id !== device.id));
-        } catch (error) {
-            setSnackbarMessage(error instanceof Error ? error.message : 'غیرفعال‌کردن دستگاه ناموفق بود.');
-            setSnackbarVisible(true);
-        } finally {
-            setAuthBusy(false);
-        }
-    };
-
-    const handleUnavailableAction = (key: string) => {
         if (key === 'settings' || key === 'about-us' || key === 'app-info') {
             runDebouncedAction(lastPressRef, () => router.push(`/(tabs)/account/${key}` as any));
             return;
@@ -115,6 +86,22 @@ export default function ProfileScreen() {
             setSnackbarMessage('به زودی فعال می‌شود');
             setSnackbarVisible(true);
         });
+    };
+
+    const handleSignOut = async () => {
+        if (signOutBusy) return;
+
+        setSignOutBusy(true);
+        try {
+            await signOut();
+            setSignOutConfirmationVisible(false);
+        } catch (error) {
+            setSignOutConfirmationVisible(false);
+            setSnackbarMessage(error instanceof Error ? error.message : 'خروج از حساب ناموفق بود.');
+            setSnackbarVisible(true);
+        } finally {
+            setSignOutBusy(false);
+        }
     };
 
     return (
@@ -128,226 +115,187 @@ export default function ProfileScreen() {
                 ]}
                 showsVerticalScrollIndicator={false}
             >
-                <View style={styles.sectionWrap}>
-                    <ThemedText type="smallBold" style={[styles.sectionTitle, { color: theme.text }]}>حساب کاربری</ThemedText>
-                    <View style={[styles.profileCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        <View style={styles.guestCard}>
-                            <View style={[styles.guestIcon, { backgroundColor: theme.primaryContainer }]}>
-                                <MaterialCommunityIcons
-                                    name={user ? 'account-check-outline' : 'account-outline'}
-                                    size={30}
-                                    color={theme.primaryText}
-                                />
+                {authLoading ? (
+                    <View style={[styles.profileHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <ThemedText type="body" style={{ color: theme.textSecondary }}>
+                            در حال بررسی وضعیت حساب...
+                        </ThemedText>
+                    </View>
+                ) : user ? (
+                    <View style={[styles.profileHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        {profilePhotoUrl ? (
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="پیش‌نمایش تصویر پروفایل"
+                                onPress={() => setPhotoPreviewVisible(true)}
+                                style={styles.heroAvatarButton}
+                            >
+                                <Image source={{ uri: profilePhotoUrl }} contentFit="cover" style={styles.heroAvatar} />
+                            </Pressable>
+                        ) : (
+                            <View style={[styles.heroAvatar, { backgroundColor: theme.primaryContainer }]}>
+                                <MaterialCommunityIcons name="account-outline" size={42} color={theme.primaryText} />
                             </View>
-                            {authLoading ? (
-                                <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
-                                    در حال بررسی وضعیت حساب...
+                        )}
+                        <ThemedText type="largeTitle" style={styles.heroName}>{user.name}</ThemedText>
+                        <View style={styles.heroContact}>
+                            <MaterialCommunityIcons
+                                accessibilityLabel="شمارهٔ تلفن"
+                                name="cellphone"
+                                size={18}
+                                color={theme.textSecondary}
+                            />
+                            <ThemedText type="body" style={[styles.heroPhone, { color: theme.textSecondary }]}>
+                                {user.phone}
+                            </ThemedText>
+                        </View>
+                        {user.email ? (
+                            <View style={styles.heroContact}>
+                                <MaterialCommunityIcons
+                                    accessibilityLabel={user.email_verified_at ? 'ایمیل تأییدشده' : 'ایمیل تأییدنشده'}
+                                    name={user.email_verified_at ? 'check-decagram' : 'email-alert-outline'}
+                                    size={16}
+                                    color={user.email_verified_at ? theme.success : theme.warning}
+                                />
+                                <ThemedText type="small" style={[styles.heroEmail, { color: theme.textSecondary }]}>
+                                    {user.email}
                                 </ThemedText>
-                            ) : user ? (
-                                <>
-                                    <ThemedText type="largeTitle" style={styles.guestTitle}>{user.name}</ThemedText>
-                                    <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
-                                        {user.phone}
-                                    </ThemedText>
-                                    <ThemedText type="small" style={[styles.guestDescription, { color: theme.textSecondary }]}>
-                                        {user.email}
-                                    </ThemedText>
-                                    {sessionError ? (
-                                        <>
-                                            <ThemedText type="small" style={{ color: theme.error }}>
-                                                همگام‌سازی حساب ناموفق بود: {sessionError}
-                                            </ThemedText>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                onPress={() => void refreshUser().catch((error: unknown) => {
-                                                    setSnackbarMessage(error instanceof Error ? error.message : 'همگام‌سازی حساب ناموفق بود.');
-                                                    setSnackbarVisible(true);
-                                                })}
-                                            >
-                                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
-                                                    تلاش دوباره
-                                                </ThemedText>
-                                            </Pressable>
-                                        </>
-                                    ) : null}
-                                    <View style={styles.deviceList}>
-                                        <ThemedText type="smallBold" style={{ color: theme.text }}>
-                                            دستگاه‌های فعال
-                                        </ThemedText>
-                                        {visibleDevices.map((device) => (
-                                            <View
-                                                key={device.id}
-                                                style={[styles.deviceItem, { borderTopColor: theme.border }]}
-                                            >
-                                                <View style={styles.actionTextWrap}>
-                                                    <ThemedText type="smallBold" style={{ color: theme.text }}>
-                                                        {device.device_name || 'دستگاه موبایل'}
-                                                    </ThemedText>
-                                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                        آخرین فعالیت:{' '}
-                                                        {device.last_activity
-                                                            ? new Date(device.last_activity).toLocaleString('fa-IR')
-                                                            : 'نامشخص'}
-                                                    </ThemedText>
-                                                </View>
-                                                <Pressable
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={`غیرفعال‌کردن ${device.device_name || 'دستگاه'}`}
-                                                    disabled={authBusy}
-                                                    onPress={() => void handleRevokeDevice(device)}
-                                                >
-                                                    <MaterialCommunityIcons name="logout" size={20} color={theme.error} />
-                                                </Pressable>
-                                            </View>
-                                        ))}
-                                        {visibleDevices.length === 0 ? (
-                                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                دستگاه فعالی پیدا نشد.
-                                            </ThemedText>
-                                        ) : null}
+                            </View>
+                        ) : null}
+                        {sessionError ? (
+                            <View style={styles.syncError}>
+                                <ThemedText type="small" style={{ color: theme.error }}>
+                                    همگام‌سازی حساب ناموفق بود: {sessionError}
+                                </ThemedText>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    onPress={() => void refreshUser().catch((error: unknown) => {
+                                        setSnackbarMessage(error instanceof Error ? error.message : 'همگام‌سازی حساب ناموفق بود.');
+                                        setSnackbarVisible(true);
+                                    })}
+                                >
+                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>تلاش دوباره</ThemedText>
+                                </Pressable>
+                            </View>
+                        ) : null}
+                    </View>
+                ) : (
+                    <View style={[styles.profileHero, styles.guestHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <View style={[styles.heroAvatar, { backgroundColor: theme.primaryContainer }]}>
+                            <MaterialCommunityIcons name="account-outline" size={42} color={theme.primaryText} />
+                        </View>
+                        <ThemedText type="largeTitle" style={styles.heroName}>پروفایل مهمان</ThemedText>
+                        <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
+                            برای ورود یا ساخت حساب، شمارهٔ موبایل خود را تأیید کنید.
+                        </ThemedText>
+                        {sessionError ? (
+                            <View style={styles.syncError}>
+                                <ThemedText type="small" style={{ color: theme.error }}>
+                                    بازیابی نشست ناموفق بود: {sessionError}
+                                </ThemedText>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    onPress={() => void refreshUser().catch((error: unknown) => {
+                                        setSnackbarMessage(error instanceof Error ? error.message : 'بازیابی نشست ناموفق بود.');
+                                        setSnackbarVisible(true);
+                                    })}
+                                >
+                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>تلاش دوباره</ThemedText>
+                                </Pressable>
+                            </View>
+                        ) : null}
+                        <Pressable
+                            accessibilityRole="button"
+                            onPress={() => runDebouncedAction(lastPressRef, () => router.push('/auth'))}
+                            style={({ pressed }) => [
+                                styles.signInButton,
+                                { backgroundColor: theme.primary, opacity: pressed ? 0.86 : 1 },
+                            ]}
+                        >
+                            <ThemedText type="smallBold" style={[styles.signInButtonText, { color: theme.onPrimary }]}>
+                                ورود یا ثبت‌نام
+                            </ThemedText>
+                            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.onPrimary} />
+                        </Pressable>
+                    </View>
+                )}
+
+                {profileGroups.map((group) => (
+                    <View key={group.title} style={styles.sectionWrap}>
+                        <ThemedText type="smallBold" style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+                            {group.title}
+                        </ThemedText>
+                        <View style={[styles.actionsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                            {group.actions.map((action, index) => (
+                                <Pressable
+                                    key={action.key}
+                                    accessibilityRole="button"
+                                    onPress={() => handleUnavailableAction(action.key)}
+                                    style={({ pressed }) => [
+                                        styles.actionItem,
+                                        index === 0 && styles.firstActionItem,
+                                        {
+                                            opacity: pressed ? 0.88 : 1,
+                                            borderTopColor: theme.border,
+                                        },
+                                    ]}
+                                >
+                                    <View style={[styles.actionIcon, { backgroundColor: theme.primaryContainer }]}>
+                                        <MaterialCommunityIcons name={action.icon} size={20} color={theme.primaryText} />
                                     </View>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        disabled={authBusy}
-                                        onPress={() => void handleSignOut(false)}
-                                        style={({ pressed }) => [
-                                            styles.signInButton,
-                                            { backgroundColor: theme.primary, opacity: pressed || authBusy ? 0.72 : 1 },
-                                        ]}
-                                    >
-                                        <ThemedText type="smallBold" style={[styles.signInButtonText, { color: theme.onPrimary }]}>
-                                            خروج از این دستگاه
+                                    <View style={styles.actionTextWrap}>
+                                        <ThemedText type="smallBold" style={[styles.actionLabel, { color: theme.text }]}>
+                                            {action.label}
                                         </ThemedText>
-                                        <MaterialCommunityIcons name="logout" size={20} color={theme.onPrimary} />
-                                    </Pressable>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        disabled={authBusy}
-                                        onPress={() => void handleSignOut(true)}
-                                        style={styles.secondaryAction}
-                                    >
-                                        <ThemedText type="smallBold" style={{ color: theme.error }}>
-                                            خروج از همهٔ دستگاه‌ها
+                                        <ThemedText type="small" style={[styles.actionSubtitle, { color: theme.textSecondary }]}>
+                                            {action.subtitle}
                                         </ThemedText>
-                                    </Pressable>
-                                </>
-                            ) : (
-                                <>
-                                    <ThemedText type="largeTitle" style={styles.guestTitle}>پروفایل مهمان</ThemedText>
-                                    <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
-                                        برای ورود یا ساخت حساب، شمارهٔ موبایل خود را تأیید کنید.
-                                    </ThemedText>
-                                    {sessionError ? (
-                                        <>
-                                            <ThemedText type="small" style={{ color: theme.error }}>
-                                                بازیابی نشست ناموفق بود: {sessionError}
+                                    </View>
+                                    {action.key === 'app-info' ? (
+                                        <View style={[styles.valuePill, { backgroundColor: theme.primaryContainer }]}>
+                                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.primaryText }]}>
+                                                {appVersion}
                                             </ThemedText>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                onPress={() => void refreshUser().catch((error: unknown) => {
-                                                    setSnackbarMessage(error instanceof Error ? error.message : 'بازیابی نشست ناموفق بود.');
-                                                    setSnackbarVisible(true);
-                                                })}
-                                            >
-                                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
-                                                    تلاش دوباره
-                                                </ThemedText>
-                                            </Pressable>
-                                        </>
+                                        </View>
                                     ) : null}
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        onPress={() => runDebouncedAction(lastPressRef, () => router.push('/auth'))}
-                                        style={({ pressed }) => [
-                                            styles.signInButton,
-                                            { backgroundColor: theme.primary, opacity: pressed ? 0.86 : 1 },
-                                        ]}
-                                    >
-                                        <ThemedText type="smallBold" style={[styles.signInButtonText, { color: theme.onPrimary }]}>
-                                            ورود یا ثبت‌نام
-                                        </ThemedText>
-                                        <MaterialCommunityIcons name="chevron-left" size={20} color={theme.onPrimary} />
-                                    </Pressable>
-                                </>
-                            )}
+                                    <MaterialCommunityIcons name="chevron-left" size={18} color={theme.textSecondary} />
+                                </Pressable>
+                            ))}
                         </View>
                     </View>
-                </View>
+                ))}
 
-                <View style={styles.sectionWrap}>
-                    <ThemedText type="smallBold" style={[styles.sectionTitle, { color: theme.text }]}>اطلاعات برنامه</ThemedText>
-
+                {user ? (
                     <Pressable
-                        onPress={() => runDebouncedAction(lastPressRef, () => router.push('/(tabs)/account/app-info' as any))}
+                        accessibilityRole="button"
+                        disabled={signOutBusy}
+                        onPress={() => setSignOutConfirmationVisible(true)}
                         style={({ pressed }) => [
-                            styles.appInfoListItem,
+                            styles.signOutButton,
                             {
                                 backgroundColor: theme.surface,
                                 borderColor: theme.border,
-                                opacity: pressed ? 0.88 : 1,
+                                opacity: pressed || signOutBusy ? 0.72 : 1,
                             },
                         ]}
                     >
-                        <View style={[styles.actionIcon, { backgroundColor: theme.primaryContainer }]}>
-                            <MaterialCommunityIcons name="information-outline" size={20} color={theme.primaryText} />
-                        </View>
-
-                        <View style={styles.actionTextWrap}>
-                            <ThemedText type="smallBold" style={[styles.actionLabel, { color: theme.text }]}>
-                                اطلاعات برنامه
-                            </ThemedText>
-                            <ThemedText type="small" style={[styles.actionSubtitle, { color: theme.textSecondary }]}>
-                                نام، نسخه و وضعیت برنامه
-                            </ThemedText>
-                        </View>
-
-                        <View style={[styles.valuePill, { backgroundColor: theme.primaryContainer, borderColor: theme.border }]}>
-                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.primaryText }]}>
-                                {appVersion}
-                            </ThemedText>
-                        </View>
-
-                        <MaterialCommunityIcons name="chevron-left" size={18} color={theme.textSecondary} />
+                        <MaterialCommunityIcons name="logout" size={19} color={theme.primaryText} />
+                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>خروج از حساب</ThemedText>
                     </Pressable>
-                </View>
-
-                <View style={styles.sectionWrap}>
-                    <ThemedText type="smallBold" style={[styles.sectionTitle, { color: theme.text }]}>فعالیت‌ها</ThemedText>
-
-                    <View style={[styles.actionsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        {profileActions.map((action, index) => (
-                            <Pressable
-                                key={action.key}
-                                onPress={() => handleUnavailableAction(action.key)}
-                                style={({ pressed }) => [
-                                    styles.actionItem,
-                                    index === 0 && styles.firstActionItem,
-                                    {
-                                        opacity: pressed ? 0.88 : 1,
-                                        borderTopColor: theme.border,
-                                    },
-                                ]}
-                            >
-                                <View style={[styles.actionIcon, { backgroundColor: theme.primaryContainer }]}>
-                                    <MaterialCommunityIcons name={action.icon} size={20} color={theme.primaryText} />
-                                </View>
-
-                                <View style={styles.actionTextWrap}>
-                                    <ThemedText type="smallBold" style={[styles.actionLabel, { color: theme.text }]}>
-                                        {action.label}
-                                    </ThemedText>
-                                    <ThemedText type="small" style={[styles.actionSubtitle, { color: theme.textSecondary }]}>
-                                        {action.subtitle}
-                                    </ThemedText>
-                                </View>
-
-                                <MaterialCommunityIcons name="chevron-left" size={18} color={theme.textSecondary} />
-                            </Pressable>
-                        ))}
-                    </View>
-                </View>
+                ) : null}
 
             </ScrollView>
+
+            <ConfirmationModal
+                visible={signOutConfirmationVisible}
+                title="خروج از حساب؟"
+                message="از این دستگاه خارج می‌شوید. برای استفادهٔ دوباره باید وارد حساب شوید."
+                confirmLabel="خروج از حساب"
+                icon="logout"
+                busy={signOutBusy}
+                onCancel={() => setSignOutConfirmationVisible(false)}
+                onConfirm={handleSignOut}
+            />
 
             <Snackbar
                 visible={snackbarVisible}
@@ -364,6 +312,11 @@ export default function ProfileScreen() {
                     {snackbarMessage}
                 </ThemedText>
             </Snackbar>
+            <ProfilePhotoPreview
+                uri={profilePhotoUrl}
+                visible={photoPreviewVisible}
+                onClose={() => setPhotoPreviewVisible(false)}
+            />
         </ThemedView>
     );
 }
@@ -376,44 +329,58 @@ const styles = StyleSheet.create({
         paddingTop: Spacing.four,
         gap: Spacing.three,
     },
-    profileCard: {
-        borderRadius: Radius.md,
+    profileHero: {
+        borderRadius: Radius.lg,
         borderWidth: 1,
-        overflow: 'hidden',
-    },
-    guestCard: {
+        paddingHorizontal: Spacing.four,
+        paddingVertical: Spacing.five,
         alignItems: 'center',
-        padding: Spacing.four,
         gap: Spacing.two,
     },
-    guestIcon: {
-        width: 64,
-        height: 64,
-        borderRadius: 22,
+    guestHero: {
+        paddingVertical: Spacing.four,
+    },
+    heroAvatar: {
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        overflow: 'hidden',
         alignItems: 'center',
         justifyContent: 'center',
+        marginBottom: Spacing.one,
     },
-    guestTitle: {
+    heroAvatarButton: {
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        marginBottom: Spacing.one,
+    },
+    heroName: {
         textAlign: 'center',
+    },
+    heroContact: {
+        maxWidth: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.one,
+    },
+    heroPhone: {
+        writingDirection: 'ltr',
+        textAlign: 'left',
+    },
+    heroEmail: {
+        writingDirection: 'ltr',
+        textAlign: 'left',
+        flexShrink: 1,
+    },
+    syncError: {
+        alignItems: 'center',
+        gap: Spacing.one,
+        marginTop: Spacing.one,
     },
     guestDescription: {
         textAlign: 'center',
-    },
-    deviceList: {
-        width: '100%',
-        gap: Spacing.one,
-        marginTop: Spacing.two,
-    },
-    deviceItem: {
-        minHeight: 54,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.two,
-        paddingTop: Spacing.two,
-        borderTopWidth: StyleSheet.hairlineWidth,
-    },
-    secondaryAction: {
-        paddingVertical: Spacing.two,
     },
     signInButton: {
         width: '100%',
@@ -428,55 +395,36 @@ const styles = StyleSheet.create({
     signInButtonText: {
         textAlign: 'center',
     },
-    appInfoCard: {
-        borderRadius: Radius.md,
+    signOutButton: {
+        minHeight: 52,
         borderWidth: 1,
-        padding: Spacing.three,
-        gap: Spacing.two,
-    },
-    appInfoListItem: {
+        borderRadius: Radius.md,
+        paddingHorizontal: Spacing.three,
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: Spacing.two,
-        paddingHorizontal: Spacing.three,
-        paddingVertical: Spacing.three,
-        borderRadius: 20,
-        borderWidth: 1,
+        marginTop: Spacing.one,
     },
     sectionWrap: {
         gap: Spacing.one,
+    },
+    sectionTitle: {
+        marginHorizontal: Spacing.one,
     },
     actionsCard: {
         borderRadius: Radius.md,
         borderWidth: 1,
         overflow: 'hidden',
     },
-    sectionHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.one,
-    },
-    sectionTitle: {
-        marginBottom: Spacing.one,
-    },
-    appInfoRows: {
-        gap: Spacing.one,
-    },
-    appInfoRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderTopWidth: 1,
-        paddingTop: Spacing.three,
-        paddingBottom: Spacing.one,
-    },
     actionItem: {
-        flexDirection: 'row',
+        minHeight: 70,
         alignItems: 'center',
+        flexDirection: 'row',
         gap: Spacing.two,
         paddingHorizontal: Spacing.three,
-        paddingVertical: Spacing.three,
         borderTopWidth: 1,
+        borderTopColor: 'transparent',
     },
     actionItemSeparated: {
         borderTopWidth: 1,
@@ -485,22 +433,21 @@ const styles = StyleSheet.create({
         borderTopWidth: 0,
     },
     actionIcon: {
-        width: 44,
-        height: 44,
-        borderRadius: 14,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         alignItems: 'center',
         justifyContent: 'center',
     },
     actionTextWrap: {
         flex: 1,
-        gap: Spacing.one,
+        justifyContent: 'center',
+        gap: 2,
     },
-    actionLabel: {
-        flex: 1,
-    },
+    actionLabel: {},
     actionSubtitle: {
-        fontSize: 14,
-        lineHeight: 20,
+        fontSize: 13,
+        lineHeight: 18,
     },
     valuePill: {
         paddingHorizontal: Spacing.two,

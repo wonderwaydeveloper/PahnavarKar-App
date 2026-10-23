@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AuthApiError, fetchCurrentUser, fetchDevices, getDeviceId, getStoredAuthToken, removeStoredAuthToken, revokeAllSessions, revokeCurrentSession, revokeDevice, storeAuthToken, verifyOtp, type AuthDevice, type AuthenticatedUser } from '@/services/auth-api';
+import { AuthApiError, changePhone as changePhoneRequest, deleteAccount as deleteAccountRequest, deleteProfilePhoto as deleteProfilePhotoRequest, fetchCurrentUser, fetchDevices, getDeviceId, getStoredAuthToken, removeStoredAuthToken, revokeAllSessions, revokeCurrentSession, revokeDevice, sendEmailVerificationCode as sendEmailVerificationCodeRequest, storeAuthToken, updateInactivityDeletion as updateInactivityDeletionRequest, updateProfile as updateProfileRequest, uploadProfilePhoto as uploadProfilePhotoRequest, verifyEmail as verifyEmailRequest, verifyOtp, type AuthDevice, type AuthenticatedUser } from '@/services/auth-api';
 import { AuthContext, type AuthContextType } from './auth.context';
 
 interface AuthProviderProps {
@@ -15,6 +15,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [sessionError, setSessionError] = useState<string | null>(null);
+
+    const withActiveSession = useCallback(async <T,>(request: Promise<T>): Promise<T> => {
+        try {
+            return await request;
+        } catch (error) {
+            if (error instanceof AuthApiError && error.status === 401) {
+                setUser(null);
+                setToken(null);
+                setSessionError(null);
+                await removeStoredAuthToken();
+            }
+            throw error;
+        }
+    }, []);
 
     const refreshUser = useCallback(async () => {
         const savedToken = token ?? await getStoredAuthToken();
@@ -75,7 +89,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, []);
 
     const signInWithOtp = useCallback<AuthContextType['signInWithOtp']>(async (input) => {
-        const session = await verifyOtp(input);
+        const result = await verifyOtp(input);
+        if (result.status === 'profile_required') {
+            return 'profile_required';
+        }
+
+        const session = result;
 
         try {
             await storeAuthToken(session.token);
@@ -94,7 +113,96 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setToken(session.token);
         setUser(session.user);
         setSessionError(null);
+        return 'authenticated';
     }, []);
+
+    const uploadProfilePhoto = useCallback(async (uri: string) => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای بارگذاری تصویر ابتدا وارد حساب شوید.');
+        }
+
+        const updatedUser = await withActiveSession(uploadProfilePhotoRequest(activeToken, uri));
+        setToken(activeToken);
+        setUser(updatedUser);
+    }, [token, withActiveSession]);
+
+    const updateProfile = useCallback(async (input: { name: string; email: string | null }) => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای ویرایش پروفایل ابتدا وارد حساب شوید.');
+        }
+
+        const updatedUser = await withActiveSession(updateProfileRequest(activeToken, input));
+        setToken(activeToken);
+        setUser(updatedUser);
+    }, [token, withActiveSession]);
+
+    const updateInactivityDeletion = useCallback(async (periodMonths: 6 | 12 | 18 | null) => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای تغییر تنظیم حذف خودکار ابتدا وارد حساب شوید.');
+        }
+
+        const updatedUser = await withActiveSession(updateInactivityDeletionRequest(activeToken, periodMonths));
+        setToken(activeToken);
+        setUser(updatedUser);
+    }, [token, withActiveSession]);
+
+    const removeProfilePhoto = useCallback(async () => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای ویرایش پروفایل ابتدا وارد حساب شوید.');
+        }
+
+        const updatedUser = await withActiveSession(deleteProfilePhotoRequest(activeToken));
+        setToken(activeToken);
+        setUser(updatedUser);
+    }, [token, withActiveSession]);
+
+    const sendEmailVerificationCode = useCallback(async () => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای تأیید ایمیل ابتدا وارد حساب شوید.');
+        }
+
+        const response = await withActiveSession(sendEmailVerificationCodeRequest(activeToken));
+        return { resend_after: response.resend_after };
+    }, [token, withActiveSession]);
+
+    const verifyEmail = useCallback(async (code: string) => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای تأیید ایمیل ابتدا وارد حساب شوید.');
+        }
+
+        const updatedUser = await withActiveSession(verifyEmailRequest(activeToken, code));
+        setToken(activeToken);
+        setUser(updatedUser);
+    }, [token, withActiveSession]);
+
+    const changePhone = useCallback(async (phone: string, code: string) => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای تغییر شماره ابتدا وارد حساب شوید.');
+        }
+
+        const updatedUser = await withActiveSession(changePhoneRequest(activeToken, phone, code));
+        setToken(activeToken);
+        setUser(updatedUser);
+    }, [token, withActiveSession]);
+
+    const deleteAccount = useCallback(async (code: string) => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای حذف حساب ابتدا وارد شوید.');
+        }
+
+        await withActiveSession(deleteAccountRequest(activeToken, code));
+        setUser(null);
+        setToken(null);
+        await removeStoredAuthToken();
+    }, [token, withActiveSession]);
 
     const signOut = useCallback(async () => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -136,8 +244,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             throw new Error('برای مشاهدهٔ دستگاه‌ها ابتدا وارد حساب شوید.');
         }
 
-        return fetchDevices(activeToken);
-    }, [token]);
+        return withActiveSession(fetchDevices(activeToken));
+    }, [token, withActiveSession]);
 
     const revokeUserDevice = useCallback(async (deviceId: number) => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -145,16 +253,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
             throw new Error('برای مدیریت دستگاه‌ها ابتدا وارد حساب شوید.');
         }
 
-        const currentDeviceId = await getDeviceId();
-        const activeDevices = await fetchDevices(activeToken);
-        const deviceToRevoke = activeDevices.find((device) => device.id === deviceId);
-        await revokeDevice(activeToken, deviceId);
-        if (deviceToRevoke?.device_id === currentDeviceId) {
-            setUser(null);
-            setToken(null);
-            await removeStoredAuthToken();
-        }
-    }, [token]);
+        await withActiveSession((async () => {
+            const currentDeviceId = await getDeviceId();
+            const activeDevices = await fetchDevices(activeToken);
+            const deviceToRevoke = activeDevices.find((device) => device.id === deviceId);
+            await revokeDevice(activeToken, deviceId);
+            if (deviceToRevoke?.device_id === currentDeviceId) {
+                setUser(null);
+                setToken(null);
+                await removeStoredAuthToken();
+            }
+        })());
+    }, [token, withActiveSession]);
 
     const value = useMemo<AuthContextType>(() => ({
         user,
@@ -162,11 +272,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         sessionError,
         refreshUser,
         signInWithOtp,
+        uploadProfilePhoto,
+        removeProfilePhoto,
+        updateProfile,
+        updateInactivityDeletion,
+        sendEmailVerificationCode,
+        verifyEmail,
+        changePhone,
+        deleteAccount,
         signOut,
         signOutAll,
         getDevices,
         revokeUserDevice,
-    }), [getDevices, isLoading, refreshUser, revokeUserDevice, sessionError, signInWithOtp, signOut, signOutAll, user]);
+    }), [changePhone, deleteAccount, getDevices, isLoading, refreshUser, removeProfilePhoto, revokeUserDevice, sendEmailVerificationCode, sessionError, signInWithOtp, signOut, signOutAll, updateInactivityDeletion, updateProfile, uploadProfilePhoto, user, verifyEmail]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

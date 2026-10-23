@@ -113,6 +113,8 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
         return { title: 'پروفایل' };
       case 'edit-profile':
         return { title: 'ویرایش پروفایل' };
+      case 'privacy-security':
+        return { title: 'حریم خصوصی و امنیت' };
       case 'settings':
         return { title: 'تنظیمات' };
       case 'support':
@@ -209,7 +211,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
     : routeTitle;
   const isHomeRoute = actualRouteName === 'home' || actualRouteName === 'index';
   const activeTool = TOOL_DEFINITIONS.find((tool) => tool.key === actualRouteName);
-  const showBackButton = ['edit-profile', 'settings', 'support', 'about-us', 'app-info', 'yearly-info', 'group-calculation', 'base-salary', 'family-allowance', 'housing-allowance', 'monthly-allowance', 'minimum-bonus', 'maximum-bonus', 'bonus-entitlement', 'spousal-allowance', 'monthly-shift-work', 'overtime-entitlement', 'night-shift-entitlement', 'insurance-days-entitlement', 'unemployment-insurance-entitlement', 'unemployment-insurance-allowance', 'unused-leave-entitlement', 'unused-leave-wage', 'suspension-wage', 'end-of-service-years', 'entitled-seniority', 'mission-allowance', 'friday-work', 'official-holiday-work', 'official-holidays-in-range', 'illegal-foreign-worker-penalty', 'article-87', 'social-security-premium-ceiling', 'ordinary-work-hours', 'hazardous-work-hours', 'young-worker-work-hours', 'category', 'title', 'chapter', 'topic', 'article'].includes(actualRouteName);
+  const showBackButton = ['edit-profile', 'privacy-security', 'settings', 'support', 'about-us', 'app-info', 'yearly-info', 'group-calculation', 'base-salary', 'family-allowance', 'housing-allowance', 'monthly-allowance', 'minimum-bonus', 'maximum-bonus', 'bonus-entitlement', 'spousal-allowance', 'monthly-shift-work', 'overtime-entitlement', 'night-shift-entitlement', 'insurance-days-entitlement', 'unemployment-insurance-entitlement', 'unemployment-insurance-allowance', 'unused-leave-entitlement', 'unused-leave-wage', 'suspension-wage', 'end-of-service-years', 'entitled-seniority', 'mission-allowance', 'friday-work', 'official-holiday-work', 'official-holidays-in-range', 'illegal-foreign-worker-penalty', 'article-87', 'social-security-premium-ceiling', 'ordinary-work-hours', 'hazardous-work-hours', 'young-worker-work-hours', 'category', 'title', 'chapter', 'topic', 'article'].includes(actualRouteName);
   const shouldAlignSecondaryHeaderStart = showBackButton && !centerContent;
 
   const { width } = useWindowDimensions();

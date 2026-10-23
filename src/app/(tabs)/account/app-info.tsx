@@ -14,7 +14,6 @@ export default function AppInfoScreen() {
     const appInfo = [
         { label: 'نام برنامه', value: 'پهناور کار' },
         { label: 'نسخه برنامه', value: appVersion },
-        { label: 'وضعیت برنامه', value: 'فعال' },
         { label: 'کاربرد', value: 'محاسبه حقوق و دستمزد' },
     ];
 
@@ -41,13 +40,7 @@ export default function AppInfoScreen() {
                             <ThemedText type="small" style={[styles.infoLabel, { color: theme.textSecondary }]}>
                                 {item.label}
                             </ThemedText>
-                            <ThemedText
-                                type="smallBold"
-                                style={[
-                                    styles.infoValue,
-                                    { color: item.label === 'وضعیت برنامه' ? theme.success : theme.text },
-                                ]}
-                            >
+                            <ThemedText type="smallBold" style={[styles.infoValue, { color: theme.text }]}>
                                 {item.value}
                             </ThemedText>
                         </View>

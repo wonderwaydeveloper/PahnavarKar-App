@@ -182,7 +182,6 @@ export default function SettingsScreen() {
         calculationSound,
         calculationSoundError,
         setCalculationSound,
-        previewCalculationSound,
         clearCalculationSoundError,
     } = useAppContext();
     const [fontActionError, setFontActionError] = useState('');
@@ -228,9 +227,6 @@ export default function SettingsScreen() {
     };
 
     const handleCalculationSoundChange = async (value: CalculationSound) => {
-        if (value !== 'off') {
-            previewCalculationSound(value);
-        }
         if (value === calculationSound) return;
 
         setCalculationSoundActionError('');

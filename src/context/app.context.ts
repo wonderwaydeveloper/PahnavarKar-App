@@ -18,8 +18,6 @@ export interface AppContextType {
     calculationSound: CalculationSound;
     calculationSoundError: string | null;
     calculationFeedbackSequence: number;
-    calculationSoundPreviewSequence: number;
-    calculationSoundPreview: Exclude<CalculationSound, 'off'> | null;
     themeReady: boolean;
     colors: AppColorPalette;
     isRTL: boolean;
@@ -29,7 +27,6 @@ export interface AppContextType {
     setCurrencyPreference: (currency: CurrencyPreference) => Promise<void>;
     setCalculationSound: (sound: CalculationSound) => Promise<void>;
     notifyCalculationCompleted: () => void;
-    previewCalculationSound: (sound: Exclude<CalculationSound, 'off'>) => void;
     clearFontError: () => void;
     clearCurrencyError: () => void;
     clearCalculationSoundError: () => void;

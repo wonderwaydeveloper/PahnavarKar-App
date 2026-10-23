@@ -1,4 +1,6 @@
 import * as Crypto from 'expo-crypto';
+import * as Device from 'expo-device';
+import { File } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
@@ -8,17 +10,28 @@ const DEVICE_ID_KEY = 'pahnavarkar.auth.device-id';
 export interface AuthenticatedUser {
     id: number;
     name: string;
-    email: string;
+    email: string | null;
+    pending_email: string | null;
+    email_verified_at: string | null;
     phone: string;
+    profile_photo_path: string | null;
     phone_verified_at: string | null;
+    last_active_at: string | null;
+    inactivity_deletion_period_months: 6 | 12 | 18 | null;
+    inactivity_deletion_scheduled_at: string | null;
 }
 
 export interface AuthDevice {
     id: number;
     device_id: string;
     device_name: string | null;
+    device_model: string | null;
+    platform: 'ios' | 'android' | 'web' | 'windows' | 'macos' | 'linux' | 'desktop' | 'unknown';
     last_activity: string | null;
     created_at: string;
+    expires_at: string | null;
+    is_current: boolean;
+    is_stale: boolean;
 }
 
 interface ApiErrorPayload {
@@ -32,6 +45,10 @@ interface SessionResponse {
     expires_at: string;
     user: AuthenticatedUser;
 }
+
+export type OtpVerificationResult =
+    | { status: 'profile_required' }
+    | ({ status: 'authenticated' } & SessionResponse);
 
 export class AuthApiError extends Error {
     constructor(message: string, public readonly status: number) {
@@ -49,10 +66,20 @@ function getApiBaseUrl(): string {
     return baseUrl;
 }
 
+export function getProfilePhotoUrl(path: string | null): string | null {
+    if (!path) {
+        return null;
+    }
+
+    const serverUrl = getApiBaseUrl().replace(/\/api\/v1$/, '');
+    const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+    return `${serverUrl}/storage/${encodedPath}`;
+}
+
 async function request<T>(
     path: string,
     options: {
-        method?: 'GET' | 'POST' | 'DELETE';
+        method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
         token?: string;
         body?: Record<string, unknown>;
         deviceId?: string;
@@ -173,9 +200,13 @@ export async function verifyOtp(input: {
     code: string;
     name?: string;
     email?: string;
-}): Promise<SessionResponse> {
+}): Promise<OtpVerificationResult> {
     const deviceId = await getDeviceId();
-    const deviceName = `${Platform.OS} device`;
+    const deviceName = Device.deviceName?.trim() || null;
+    const deviceModel = Device.modelName?.trim() || null;
+    const platform = Platform.OS === 'ios' || Platform.OS === 'android' || Platform.OS === 'web'
+        ? Platform.OS
+        : 'desktop';
 
     return request('/auth/otp/verify', {
         method: 'POST',
@@ -183,15 +214,139 @@ export async function verifyOtp(input: {
         body: {
             ...input,
             device_id: deviceId,
-            device_name: deviceName,
-            platform: Platform.OS === 'ios' ? 'ios' : 'android',
+            device_name: deviceName?.slice(0, 255) ?? null,
+            device_model: deviceModel?.slice(0, 255) ?? null,
+            platform,
         },
     });
+}
+
+export async function uploadProfilePhoto(token: string, uri: string): Promise<AuthenticatedUser> {
+    const formData = new FormData();
+    formData.append('photo', new File(uri), 'profile-photo.jpg');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
+    try {
+        const response = await fetch(`${getApiBaseUrl()}/auth/profile/photo`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${token}`,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: formData,
+            signal: controller.signal,
+        });
+
+        const responseText = await response.text();
+        let payload: { user?: AuthenticatedUser; message?: string; errors?: Record<string, string[]> };
+
+        try {
+            payload = responseText
+                ? JSON.parse(responseText) as typeof payload
+                : {};
+        } catch (error) {
+            if (error instanceof SyntaxError) {
+                throw new Error('پاسخ سرور برای بارگذاری تصویر قابل خواندن نیست.');
+            }
+            throw error;
+        }
+
+        if (!response.ok) {
+            const validationMessage = Object.values(payload.errors ?? {})
+                .flat()
+                .find((message) => typeof message === 'string');
+            throw new AuthApiError(
+                validationMessage ?? payload.message ?? 'بارگذاری تصویر پروفایل ناموفق بود.',
+                response.status,
+            );
+        }
+
+        if (!payload.user) {
+            throw new Error('پاسخ سرور پس از بارگذاری تصویر ناقص است.');
+        }
+
+        return payload.user;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+export async function deleteProfilePhoto(token: string): Promise<AuthenticatedUser> {
+    const response = await request<{ user: AuthenticatedUser }>('/auth/profile/photo', {
+        method: 'DELETE',
+        token,
+    });
+
+    return response.user;
 }
 
 export async function fetchCurrentUser(token: string): Promise<AuthenticatedUser> {
     const response = await request<{ user: AuthenticatedUser }>('/auth/me', { token });
     return response.user;
+}
+
+export async function updateProfile(
+    token: string,
+    input: { name: string; email: string | null },
+): Promise<AuthenticatedUser> {
+    const response = await request<{ user: AuthenticatedUser }>('/auth/profile', {
+        method: 'PATCH',
+        token,
+        body: input,
+    });
+
+    return response.user;
+}
+
+export async function updateInactivityDeletion(
+    token: string,
+    periodMonths: 6 | 12 | 18 | null,
+): Promise<AuthenticatedUser> {
+    const response = await request<{ user: AuthenticatedUser }>('/auth/privacy/inactivity-deletion', {
+        method: 'PATCH',
+        token,
+        body: { period_months: periodMonths },
+    });
+
+    return response.user;
+}
+
+export function sendEmailVerificationCode(token: string): Promise<{ message: string; resend_after: number }> {
+    return request('/auth/profile/email/verification-code', {
+        method: 'POST',
+        token,
+    });
+}
+
+export async function verifyEmail(token: string, code: string): Promise<AuthenticatedUser> {
+    const response = await request<{ user: AuthenticatedUser }>('/auth/profile/email/verify', {
+        method: 'POST',
+        token,
+        body: { code },
+    });
+
+    return response.user;
+}
+
+export async function changePhone(
+    token: string,
+    phone: string,
+    code: string,
+): Promise<AuthenticatedUser> {
+    const response = await request<{ user: AuthenticatedUser }>('/auth/profile/phone', {
+        method: 'POST',
+        token,
+        body: { phone, code },
+    });
+
+    return response.user;
+}
+
+export function deleteAccount(token: string, code: string): Promise<void> {
+    return request('/auth/account', { method: 'DELETE', token, body: { code } });
 }
 
 export function revokeCurrentSession(token: string): Promise<void> {

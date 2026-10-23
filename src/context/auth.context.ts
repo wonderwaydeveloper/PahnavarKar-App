@@ -12,7 +12,15 @@ export interface AuthContextType {
         code: string;
         name?: string;
         email?: string;
-    }) => Promise<void>;
+    }) => Promise<'profile_required' | 'authenticated'>;
+    uploadProfilePhoto: (uri: string) => Promise<void>;
+    removeProfilePhoto: () => Promise<void>;
+    updateProfile: (input: { name: string; email: string | null }) => Promise<void>;
+    updateInactivityDeletion: (periodMonths: 6 | 12 | 18 | null) => Promise<void>;
+    sendEmailVerificationCode: () => Promise<{ resend_after: number }>;
+    verifyEmail: (code: string) => Promise<void>;
+    changePhone: (phone: string, code: string) => Promise<void>;
+    deleteAccount: (code: string) => Promise<void>;
     signOut: () => Promise<void>;
     signOutAll: () => Promise<void>;
     getDevices: () => Promise<AuthDevice[]>;
