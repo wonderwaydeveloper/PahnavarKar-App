@@ -55,7 +55,7 @@ export default function AboutUsScreen() {
                             <View key={section.title}>
                                 <View style={styles.sectionRow}>
                                     <View style={[styles.iconWrap, { backgroundColor: theme.primaryContainer, borderRadius: 999, width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }]}>
-                                        <MaterialCommunityIcons name={section.icon as any} size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name={section.icon as any} size={20} color={theme.primaryText} />
                                     </View>
 
                                     <View style={styles.textBlock}>

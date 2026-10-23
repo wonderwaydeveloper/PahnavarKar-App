@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View, type AccessibilityRole, type Accessibility
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import type { ToolDefinition } from '@/constants/tool-definitions';
+import { useAppContext } from '@/hooks/use-app-context';
 import { useTheme } from '@/hooks/use-theme';
 
 interface ToolListItemProps {
@@ -31,6 +32,7 @@ export function ToolListItem({
     accessibilityState,
 }: ToolListItemProps) {
     const theme = useTheme();
+    const { colors } = useAppContext();
 
     return (
         <Pressable
@@ -50,9 +52,9 @@ export function ToolListItem({
             <View style={[
                 styles.icon,
                 compactIcon && styles.compactIcon,
-                { backgroundColor: tool.accent, borderColor: tool.accent },
+                { backgroundColor: theme.primary, borderColor: theme.primary },
             ]}>
-                <MaterialCommunityIcons name={tool.icon} size={compactIcon ? 20 : 23} color="#FFFFFF" />
+                <MaterialCommunityIcons name={tool.icon} size={compactIcon ? 20 : 23} color={colors.onPrimary} />
             </View>
             <View style={styles.textWrap}>
                 {titleContent ?? (

@@ -2,7 +2,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { useWindowDimensions, View, type TextStyle } from 'react-native';
+import { Animated, useWindowDimensions, View, type TextStyle } from 'react-native';
 import { Appbar } from 'react-native-paper';
 
 import { ThemedText } from '@/components/themed-text';
@@ -17,56 +17,72 @@ interface AppHeaderProps {
 
 const HOME_HEADER_TITLES = ['پهناور کار', 'در خدمت جامعه ی کار'];
 
-function TypewriterTitle({ titles, style }: { titles: string[]; style: TextStyle }) {
-  const [typedTitle, setTypedTitle] = useState('');
+function RotatingTitle({ titles, style }: { titles: string[]; style: TextStyle }) {
+  const [titleIndex, setTitleIndex] = useState(0);
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [translateY] = useState(() => new Animated.Value(-10));
 
   useEffect(() => {
-    let titleIndex = 0;
-    let characters = Array.from(titles[titleIndex] ?? '');
-    let characterIndex = 0;
-    let isDeleting = false;
-    let timeout: ReturnType<typeof setTimeout>;
+    let titleTimeout: ReturnType<typeof setTimeout>;
 
-    const animateTitle = () => {
-      if (isDeleting) {
-        characterIndex -= 1;
-        setTypedTitle(characters.slice(0, characterIndex).join(''));
-
-        if (characterIndex === 0) {
-          isDeleting = false;
-          titleIndex = (titleIndex + 1) % titles.length;
-          characters = Array.from(titles[titleIndex] ?? '');
-          timeout = setTimeout(animateTitle, 400);
-          return;
-        }
-      } else {
-        characterIndex += 1;
-        setTypedTitle(characters.slice(0, characterIndex).join(''));
-
-        if (characterIndex === characters.length) {
-          isDeleting = true;
-          timeout = setTimeout(animateTitle, 1400);
-          return;
-        }
-      }
-
-      timeout = setTimeout(animateTitle, isDeleting ? 100 : 150);
+    const animateTitleIn = () => {
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 350,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 0,
+          duration: 350,
+          useNativeDriver: true,
+        }),
+      ]).start();
     };
 
-    timeout = setTimeout(animateTitle, 150);
+    const showNextTitle = () => {
+      Animated.parallel([
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(translateY, {
+          toValue: 10,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (!finished) return;
 
-    return () => clearTimeout(timeout);
-  }, [titles]);
+        setTitleIndex((currentIndex) => (currentIndex + 1) % titles.length);
+        translateY.setValue(-10);
+        animateTitleIn();
+        titleTimeout = setTimeout(showNextTitle, 2600);
+      });
+    };
+
+    animateTitleIn();
+    titleTimeout = setTimeout(showNextTitle, 2600);
+
+    return () => {
+      clearTimeout(titleTimeout);
+      opacity.stopAnimation();
+      translateY.stopAnimation();
+    };
+  }, [opacity, titles.length, translateY]);
 
   return (
-    <ThemedText
-      accessibilityLabel={titles.join('، ')}
-      numberOfLines={1}
-      ellipsizeMode="tail"
-      style={style}
-    >
-      {typedTitle}
-    </ThemedText>
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      <ThemedText
+        accessibilityLabel={titles.join('، ')}
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={style}
+      >
+        {titles[titleIndex]}
+      </ThemedText>
+    </Animated.View>
   );
 }
 
@@ -136,7 +152,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
       case 'spousal-allowance':
         return { title: 'حق تاهل' };
       case 'monthly-shift-work':
-        return { title: 'نوبت کاری ماهیانه' };
+        return { title: 'نوبت‌کاری' };
       case 'overtime-entitlement':
         return { title: 'اضافه کاری' };
       case 'night-shift-entitlement':
@@ -262,14 +278,20 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                   borderRadius: 16,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: activeTool.accent,
+                  backgroundColor: colors.primaryContainer,
+                  borderColor: colors.border,
+                  borderWidth: 1,
                 }}
               >
-                <MaterialCommunityIcons name={activeTool.icon} size={18} color="#FFFFFF" />
+                <MaterialCommunityIcons
+                  name={activeTool.icon}
+                  size={18}
+                  color={colors.primaryText}
+                />
               </View>
             ) : null}
             {isHomeRoute ? (
-              <TypewriterTitle
+              <RotatingTitle
                 titles={HOME_HEADER_TITLES}
                 style={{
                   flexShrink: 1,

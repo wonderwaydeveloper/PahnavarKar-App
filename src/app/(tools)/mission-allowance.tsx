@@ -30,6 +30,7 @@ import {
     type MissionAllowancePeriodRange,
     type SalaryPeriodBucket,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 type DateTarget = 'employment' | 'missionStart' | 'missionEnd';
 
@@ -247,6 +248,7 @@ export default function MissionAllowanceScreen() {
         setPickerTarget(null);
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const employment = parseDateInput(employmentDate);
         const missionStart = parseDateInput(missionStartDate);
@@ -319,6 +321,7 @@ export default function MissionAllowanceScreen() {
         }
 
         setResult(calculation);
+        notifyCalculationCompleted();
         setShowDetailedBreakdown(false);
     };
 
@@ -394,7 +397,7 @@ export default function MissionAllowanceScreen() {
                                                 <ThemedText type="smallBold" style={{ color: theme.text }}>
                                                     {selectedGroup == null ? 'انتخاب گروه شغلی' : `گروه ${toPersianDigits(selectedGroup)}`}
                                                 </ThemedText>
-                                                <MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primary} />
+                                                <MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primaryText} />
                                             </Pressable>
                                         )}
                                     >
@@ -447,7 +450,7 @@ export default function MissionAllowanceScreen() {
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`کاهش روزهای مأموریت سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                                 </Pressable>
                                                 <NumericInputField
                                                     value={displayedValue}
@@ -470,7 +473,7 @@ export default function MissionAllowanceScreen() {
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`افزایش روزهای مأموریت سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                                 </Pressable>
                                             </View>
                                         </View>
@@ -510,7 +513,7 @@ export default function MissionAllowanceScreen() {
                                     onPress={handleCalculate}
                                     icon="briefcase-clock"
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     loading={isLoadingData}
@@ -526,7 +529,7 @@ export default function MissionAllowanceScreen() {
                                         <CalculationResultHeading />
                                         <View style={[styles.summaryBoxContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مبلغ فوق‌العاده مأموریت</ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                                 {formatCurrency(result.totalAmount)}
                                             </ThemedText>
                                         </View>
@@ -538,7 +541,7 @@ export default function MissionAllowanceScreen() {
                                             <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                                 مبلغ فوق‌العادهٔ مأموریت پس از کسر مبلغ پرداخت‌شده به کارگر
                                             </ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                                 {remainingMissionAllowance === null
                                                     ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                     : formatCurrency(remainingMissionAllowance)}
@@ -547,10 +550,10 @@ export default function MissionAllowanceScreen() {
                                         <View style={styles.breakdownSectionHeader}>
                                             <ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات دوره‌ها</ThemedText>
                                             <Pressable onPress={() => setShowDetailedBreakdown((current) => !current)} style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetailedBreakdown ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
-                                                <MaterialCommunityIcons name={showDetailedBreakdown ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primary} />
+                                                <MaterialCommunityIcons name={showDetailedBreakdown ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primaryText} />
                                             </Pressable>
                                         </View>
                                         {showDetailedBreakdown ? (
@@ -565,7 +568,7 @@ export default function MissionAllowanceScreen() {
                                                         <View style={styles.breakdownDetailGrid}>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {formatParsedDate(item.startDate)} تا {formatParsedDate(item.endDate)}
                                                                 </ThemedText>
                                                             </View>
@@ -597,7 +600,7 @@ export default function MissionAllowanceScreen() {
                                                             </View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مبلغ این بخش</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatCurrency(item.amount)}</ThemedText>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatCurrency(item.amount)}</ThemedText>
                                                             </View>
                                                         </View>
                                                     </View>
@@ -629,10 +632,10 @@ export default function MissionAllowanceScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
-                action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.surface } }}
+                style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }}
+                action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>{snackbarMessage}</ThemedText>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText>
             </Snackbar>
         </ThemedView>
     );
@@ -645,7 +648,7 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerRow: { alignItems: 'flex-start' },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },

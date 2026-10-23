@@ -23,6 +23,7 @@ import {
     parseDateInput,
     type UnemploymentInsuranceAllowanceCalculationResult,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 const latinDigits = '0123456789';
@@ -84,7 +85,7 @@ function ResultDetail({ label, value, emphasized = false }: { label: string; val
     return (
         <View style={[styles.detailBox, { backgroundColor: emphasized ? theme.primaryContainer : theme.surface, borderColor: emphasized ? theme.primary : theme.border }]}>
             <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
-            <ThemedText type="smallBold" style={[styles.detailValue, { color: emphasized ? theme.primary : theme.text }]}>{value}</ThemedText>
+            <ThemedText type="smallBold" style={[styles.detailValue, { color: emphasized ? theme.primaryText : theme.text }]}>{value}</ThemedText>
         </View>
     );
 }
@@ -166,6 +167,7 @@ export default function UnemploymentInsuranceAllowanceScreen() {
         setSnackbarVisible(true);
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const unemployment = parseDateInput(unemploymentDate);
         const wages = Number(normalizeDigits(totalWages || '0'));
@@ -199,6 +201,7 @@ export default function UnemploymentInsuranceAllowanceScreen() {
         );
 
         setResult(calculation);
+        notifyCalculationCompleted();
     };
 
     return (
@@ -272,14 +275,14 @@ export default function UnemploymentInsuranceAllowanceScreen() {
                                     <ThemedText type="small" style={[styles.dependentsLimit, { color: theme.textMuted }]}>۰ تا ۴ نفر</ThemedText>
                                 </View>
                                 <View style={[styles.stepper, styles.dependentsStepper, { backgroundColor: theme.surface, borderColor: theme.border, direction: 'ltr' }]}>
-                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, -1))} disabled={Number(normalizeDigits(dependents || '0')) <= 0} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) <= 0 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="کاهش افراد تحت تکفل"><MaterialCommunityIcons name="minus" size={20} color={theme.primary} /></Pressable>
+                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, -1))} disabled={Number(normalizeDigits(dependents || '0')) <= 0} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) <= 0 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="کاهش افراد تحت تکفل"><MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} /></Pressable>
                                     <NumericInputField value={dependents} onChangeText={setDependents} style={[styles.stepperInput, { color: theme.text, direction: 'ltr' }]} textAlign="center" accessibilityLabel="تعداد افراد تحت تکفل" />
-                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, 1, 4))} disabled={Number(normalizeDigits(dependents || '0')) >= 4} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) >= 4 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="افزایش افراد تحت تکفل"><MaterialCommunityIcons name="plus" size={20} color={theme.primary} /></Pressable>
+                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, 1, 4))} disabled={Number(normalizeDigits(dependents || '0')) >= 4} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) >= 4 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="افزایش افراد تحت تکفل"><MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} /></Pressable>
                                 </View>
                             </View>
 
                             <View style={styles.actionsGroup}>
-                                <Button mode="contained" onPress={handleCalculate} icon="cash-clock" buttonColor={theme.primary} textColor={theme.surface} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoadingData} disabled={isLoadingData}>محاسبه</Button>
+                                <Button mode="contained" onPress={handleCalculate} icon="cash-clock" buttonColor={theme.primary} textColor={theme.onPrimary} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoadingData} disabled={isLoadingData}>محاسبه</Button>
                             </View>
 
                             {result ? (
@@ -288,7 +291,7 @@ export default function UnemploymentInsuranceAllowanceScreen() {
                                         <CalculationResultHeading />
                                         <View style={[styles.summaryBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مقرری ماهیانه بیمه بیکاری</ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>{formatCurrency(result.monthlyAmount)}</ThemedText>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>{formatCurrency(result.monthlyAmount)}</ThemedText>
                                         </View>
                                         <View style={styles.breakdownGrid}>
                                             <ResultDetail label="متوسط مزد روزانه" value={formatCurrency(result.averageDailyWage)} />
@@ -308,7 +311,7 @@ export default function UnemploymentInsuranceAllowanceScreen() {
             </ScrollView>
 
             <PersianDatePickerModal visible={pickerTarget !== null} value={selectedDate} title="انتخاب تاریخ" onClose={() => setPickerTarget(null)} onSelect={handleDateSelect} availableYears={yearPeriods.map((item) => item.year)} />
-            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.error, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false) }}><ThemedText type="small" style={{ color: theme.surface }}>{snackbarMessage}</ThemedText></Snackbar>
+            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false) }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
         </ThemedView>
     );
 }
@@ -319,7 +322,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },

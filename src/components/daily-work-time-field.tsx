@@ -16,6 +16,7 @@ interface DailyWorkTimeFieldProps {
     label?: string;
     pickerTitle?: string;
     showFullTimeHint?: boolean;
+    embedded?: boolean;
 }
 
 export function DailyWorkTimeField({
@@ -26,6 +27,7 @@ export function DailyWorkTimeField({
     label,
     pickerTitle = 'انتخاب ساعات کارکرد روزانه',
     showFullTimeHint = true,
+    embedded = false,
 }: DailyWorkTimeFieldProps) {
     const theme = useTheme();
     const [visible, setVisible] = useState(false);
@@ -33,7 +35,11 @@ export function DailyWorkTimeField({
 
     return (
         <>
-            <View style={{ backgroundColor: theme.surfaceVariant, borderRadius: 14, padding: Spacing.two, gap: Spacing.one }}>
+            <View
+                style={embedded
+                    ? { gap: Spacing.one }
+                    : { backgroundColor: theme.surfaceVariant, borderRadius: 14, padding: Spacing.two, gap: Spacing.one }}
+            >
                 <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18, fontFamily: 'AppFont-Medium' }}>
                     {label ?? (isFullTime ? 'ساعات کارکرد روزانه بر اساس ماده ۵۱ قانون کار' : 'ساعات کارکرد روزانه بر اساس ماده ۳۹ قانون کار')}
                 </ThemedText>
@@ -42,7 +48,7 @@ export function DailyWorkTimeField({
                     style={{ minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 8, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.surface }}
                 >
                     <ThemedText type="smallBold" style={{ color: theme.text }}>{value.replace(/\d/g, (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)])}</ThemedText>
-                    <MaterialCommunityIcons name="clock-outline" size={18} color={theme.primary} />
+                    <MaterialCommunityIcons name="clock-outline" size={18} color={theme.primaryText} />
                 </Pressable>
                 {showFullTimeHint ? (
                     <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18 }}>مبنای تمام‌وقت: ۷ ساعت و ۲۰ دقیقه در روز</ThemedText>

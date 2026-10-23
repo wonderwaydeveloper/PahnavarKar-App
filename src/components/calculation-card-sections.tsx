@@ -57,6 +57,7 @@ export function CalculationResultHeading({ topRadius = Radius.md }: CalculationR
 
 const styles = StyleSheet.create({
     descriptionBox: {
+        alignSelf: 'stretch',
         borderTopLeftRadius: Radius.md,
         borderTopRightRadius: Radius.md,
         borderBottomLeftRadius: 0,
@@ -73,6 +74,7 @@ const styles = StyleSheet.create({
         shadowRadius: 3,
     },
     resultHeading: {
+        alignSelf: 'stretch',
         alignItems: 'center',
         borderWidth: StyleSheet.hairlineWidth,
         elevation: 2,

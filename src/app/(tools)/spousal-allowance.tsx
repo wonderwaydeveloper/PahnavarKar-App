@@ -8,23 +8,30 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FontAwareButton as Button } from '@/components/font-aware-paper';
 import { CurrencyAmountInput } from '@/components/currency-amount-input';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
+import { NumericInputField } from '@/components/numeric-input-field';
 import { DateInputField } from '@/components/date-input-field';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
 import { ThemedText } from '@/components/themed-text';
 import { CalculationDescriptionBox, CalculationResultHeading } from '@/components/calculation-card-sections';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
+import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
+import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
+    calculateOrdinaryWorkHoursFromPeriodData,
     calculateSpousalAllowanceFromPeriodData,
     parseDateInput,
     type SalaryPeriodBucket,
     type SpousalAllowanceCalculationResult,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
+
+type WorkHoursMethod = 'daily' | 'period';
+const SPOUSAL_ALLOWANCE_START_WARNING = 'توجه : حق تاهل از سال 1403 به بعد تعلق می گیرد.';
 
 export default function SpousalAllowanceScreen() {
     const theme = useTheme();
@@ -43,6 +50,7 @@ export default function SpousalAllowanceScreen() {
     const [endDate, setEndDate] = useState(defaultEndDate);
     const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
     const [pickerVisible, setPickerVisible] = useState(false);
+    const [workHoursMethod, setWorkHoursMethod] = useState<WorkHoursMethod>('daily');
     const [periodBuckets, setPeriodBuckets] = useState<SalaryPeriodBucket[]>([]);
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
@@ -50,6 +58,9 @@ export default function SpousalAllowanceScreen() {
     const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
     const [isLegalBasisVisible, setIsLegalBasisVisible] = useState(false);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [actualWorkedHours, setActualWorkedHours] = useState<string | null>(null);
+    const [workedHoursError, setWorkedHoursError] = useState('');
+    const [officialHolidayDates, setOfficialHolidayDates] = useState<string[]>([]);
     const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -83,11 +94,21 @@ export default function SpousalAllowanceScreen() {
                     });
                 }
 
+                const sortedYears = years.map((year) => year.year).sort((left, right) => left - right);
+                const holidays = sortedYears.length > 0
+                    ? await fetchOfficialHolidaysBetweenDates(
+                        `${sortedYears[0]}/01/01`,
+                        `${sortedYears[sortedYears.length - 1]}/12/${String(jalaaliMonthLength(sortedYears[sortedYears.length - 1], 12)).padStart(2, '0')}`,
+                    )
+                    : [];
+
                 if (isMounted) {
                     setPeriodBuckets(buckets);
-                    setAvailableYears(years.map((year) => year.year));
+                    setOfficialHolidayDates(holidays.map((holiday) => holiday.holiday_date));
+                    setAvailableYears(sortedYears);
                 }
-            } catch {
+            } catch (error) {
+                console.error('Failed to load spousal allowance calculation data:', error);
                 if (isMounted) {
                     setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
                     setSnackbarVisible(true);
@@ -153,15 +174,97 @@ export default function SpousalAllowanceScreen() {
         return 0;
     };
 
+    const parsedStartDate = useMemo(() => parseDateInput(startDate), [startDate]);
+    const parsedEndDate = useMemo(() => parseDateInput(endDate), [endDate]);
+    const isDateRangeValid = !!parsedStartDate
+        && !!parsedEndDate
+        && compareDates(startDate, endDate) <= 0;
+    const requiredWorkHours = useMemo(() => {
+        if (!isDateRangeValid || !parsedStartDate || !parsedEndDate) {
+            return null;
+        }
+
+        const yearsInRange = Array.from(
+            { length: parsedEndDate.year - parsedStartDate.year + 1 },
+            (_, index) => parsedStartDate.year + index,
+        );
+        if (yearsInRange.some((year) => !periodBuckets.some((bucket) => bucket.year === year))) {
+            return null;
+        }
+
+        const calculation = calculateOrdinaryWorkHoursFromPeriodData(
+            parsedStartDate,
+            parsedEndDate,
+            periodBuckets,
+            officialHolidayDates,
+        );
+
+        return calculation.breakdown.length > 0 ? calculation.totalHours : null;
+    }, [isDateRangeValid, officialHolidayDates, parsedEndDate, parsedStartDate, periodBuckets]);
+    const maximumAllowedWorkHours = requiredWorkHours;
+    const actualWorkedHoursValue = actualWorkedHours ?? (requiredWorkHours?.toFixed(2) ?? '');
+    const normalizedActualWorkedHours = Number(actualWorkedHoursValue);
+    const isActualWorkedHoursValid = actualWorkedHoursValue.trim().length > 0
+        && Number.isFinite(normalizedActualWorkedHours)
+        && normalizedActualWorkedHours >= 0;
+
+    const getMaximumWorkHoursError = () =>
+        `حداکثر ساعات قابل ورود در این بازه ${toPersianDigits((maximumAllowedWorkHours ?? 0).toFixed(2))} ساعت است.`;
+
+    const handleActualWorkedHoursChange = (value: string) => {
+        const normalizedValue = normalizeWorkHoursInput(value);
+        const numericValue = Number(normalizedValue);
+        if (
+            maximumAllowedWorkHours !== null
+            && Number.isFinite(numericValue)
+            && numericValue > maximumAllowedWorkHours
+        ) {
+            setActualWorkedHours(maximumAllowedWorkHours.toFixed(2));
+            setWorkedHoursError(getMaximumWorkHoursError());
+        } else {
+            setActualWorkedHours(normalizedValue);
+            setWorkedHoursError('');
+        }
+
+        setResult(null);
+    };
+
+    const changeActualWorkedHours = (amount: number) => {
+        const currentValue = Number(actualWorkedHoursValue) || 0;
+        const nextValue = Math.max(0, currentValue + amount);
+        const cappedValue = maximumAllowedWorkHours === null
+            ? nextValue
+            : Math.min(nextValue, maximumAllowedWorkHours);
+
+        handleActualWorkedHoursChange(cappedValue.toFixed(2));
+    };
+
+    const handleWorkHoursMethodChange = (method: WorkHoursMethod) => {
+        setWorkHoursMethod(method);
+        setWorkedHoursError('');
+        setResult(null);
+    };
+
     const handleDateSelect = (value: string) => {
         if (pickerTarget === 'start') {
-            setStartDate(value);
+            const selectedDate = parseDateInput(value);
+            const isBeforeEntitlementStart = selectedDate !== null && selectedDate.year < 1403;
+            const normalizedStartDate = isBeforeEntitlementStart ? '1403/01/01' : value;
+            setStartDate(normalizedStartDate);
+            setActualWorkedHours(null);
+            setWorkedHoursError('');
+            setResult(null);
 
             if (endDate) {
-                const comparison = compareDates(value, endDate);
+                const comparison = compareDates(normalizedStartDate, endDate);
                 if (comparison > 0) {
-                    setEndDate(value);
+                    setEndDate(normalizedStartDate);
                 }
+            }
+
+            if (isBeforeEntitlementStart) {
+                setSnackbarMessage(SPOUSAL_ALLOWANCE_START_WARNING);
+                setSnackbarVisible(true);
             }
 
             return;
@@ -172,6 +275,9 @@ export default function SpousalAllowanceScreen() {
                 const comparison = compareDates(value, startDate);
                 if (comparison < 0) {
                     setEndDate(startDate);
+                    setActualWorkedHours(null);
+                    setWorkedHoursError('');
+                    setResult(null);
                     setSnackbarMessage('تاریخ پایان باید برابر یا بزرگتر از تاریخ شروع باشد.');
                     setSnackbarVisible(true);
                     return;
@@ -179,43 +285,72 @@ export default function SpousalAllowanceScreen() {
             }
 
             setEndDate(value);
+            setActualWorkedHours(null);
+            setWorkedHoursError('');
+            setResult(null);
         }
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
-        const parsedStart = parseDateInput(startDate);
-        const parsedEnd = parseDateInput(endDate);
-
-        if (!parsedStart || !parsedEnd) {
+        if (!parsedStartDate || !parsedEndDate || !isDateRangeValid) {
             setResult(null);
-            return;
-        }
-
-        if (parsedStart.year > parsedEnd.year ||
-            (parsedStart.year === parsedEnd.year && parsedStart.month > parsedEnd.month) ||
-            (parsedStart.year === parsedEnd.year && parsedStart.month === parsedEnd.month && parsedStart.day > parsedEnd.day)) {
-            setResult(null);
+            setSnackbarMessage('بازهٔ زمانی واردشده معتبر نیست.');
+            setSnackbarVisible(true);
             return;
         }
 
         if (periodBuckets.length === 0) {
             setResult(null);
+            setSnackbarMessage('اطلاعات حق تأهل برای محاسبه در دسترس نیست.');
+            setSnackbarVisible(true);
             return;
         }
 
+        if (workHoursMethod === 'period' && !isActualWorkedHoursValid) {
+            setResult(null);
+            setWorkedHoursError('مجموع ساعات کارکرد کارگر را به‌صورت عدد معتبر وارد کنید.');
+            return;
+        }
+
+        if (workHoursMethod === 'period' && requiredWorkHours === null) {
+            setResult(null);
+            setSnackbarMessage('برای بازهٔ انتخاب‌شده اطلاعات ساعات کارکرد موظفی در دسترس نیست.');
+            setSnackbarVisible(true);
+            return;
+        }
+
+        if (workHoursMethod === 'period' && (requiredWorkHours ?? 0) <= 0) {
+            setResult(null);
+            setSnackbarMessage('برای بازهٔ انتخاب‌شده ساعات کارکرد موظفی قابل محاسبه نیست.');
+            setSnackbarVisible(true);
+            return;
+        }
+
+        if (
+            workHoursMethod === 'period'
+            && maximumAllowedWorkHours !== null
+            && normalizedActualWorkedHours > maximumAllowedWorkHours
+        ) {
+            setResult(null);
+            setWorkedHoursError(getMaximumWorkHoursError());
+            return;
+        }
+
+        setWorkedHoursError('');
         const calculation = calculateSpousalAllowanceFromPeriodData(
-            parsedStart,
-            parsedEnd,
+            parsedStartDate,
+            parsedEndDate,
             periodBuckets,
         );
 
         const unavailableYears = periodBuckets
-            .filter((bucket) => bucket.year >= parsedStart.year && bucket.year <= parsedEnd.year)
+            .filter((bucket) => bucket.year >= parsedStartDate.year && bucket.year <= parsedEndDate.year)
             .filter((bucket) => bucket.periods.some((period) => period.marital_allowance == null))
             .map((bucket) => bucket.year);
 
         if (unavailableYears.length > 0) {
-            const message = parsedEnd.year < 1403
+            const message = parsedEndDate.year < 1403
                 ? 'حق تأهل از سال ۱۴۰۳ ایجاد شده است و شما در این بازهٔ زمانی مستحق دریافت آن نیستید.'
                 : `برای سال‌های ${unavailableYears.map((year) => toPersianDigits(String(year))).join('، ')} مبلغ حق تأهل در داده‌های مصوب ثبت نشده است.`;
 
@@ -228,7 +363,11 @@ export default function SpousalAllowanceScreen() {
             return;
         }
 
-        setResult(scaleWageCalculationResult(calculation, getDailyWorkRatio(getDailyWorkMinutes(dailyWorkTime))));
+        const workRatio = workHoursMethod === 'daily'
+            ? getDailyWorkRatio(getDailyWorkMinutes(dailyWorkTime))
+            : Math.min(normalizedActualWorkedHours, requiredWorkHours ?? 0) / (requiredWorkHours ?? 1);
+        setResult(scaleWageCalculationResult(calculation, workRatio));
+        notifyCalculationCompleted();
         setShowDetailedBreakdown(false);
     };
 
@@ -320,7 +459,139 @@ export default function SpousalAllowanceScreen() {
                                 />
                             </View>
 
-                            <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+                            <View style={[styles.workHoursSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                    روش محاسبهٔ ساعات کارکرد
+                                </ThemedText>
+                                <View accessibilityRole="radiogroup" style={styles.workHoursMethods}>
+                                    {([
+                                        { value: 'daily', label: 'ساعات کارکرد روزانه' },
+                                        { value: 'period', label: 'مجموع ساعات کارکرد کارگر در بازه ی زمانی انتخابی' },
+                                    ] as const).map((option) => {
+                                        const selected = workHoursMethod === option.value;
+                                        return (
+                                            <Pressable
+                                                key={option.value}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ selected }}
+                                                accessibilityLabel={option.label}
+                                                onPress={() => handleWorkHoursMethodChange(option.value)}
+                                                style={[
+                                                    styles.workHoursMethodOption,
+                                                    {
+                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        borderColor: selected ? theme.primary : theme.border,
+                                                        borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
+                                                    },
+                                                ]}
+                                            >
+                                                <MaterialCommunityIcons
+                                                    name={selected ? 'radiobox-marked' : 'radiobox-blank'}
+                                                    size={20}
+                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                />
+                                                <ThemedText
+                                                    type="smallBold"
+                                                    style={[
+                                                        styles.workHoursMethodLabel,
+                                                        { color: selected ? theme.primaryText : theme.text },
+                                                    ]}
+                                                >
+                                                    {option.label}
+                                                </ThemedText>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                                <View style={[styles.workHoursDivider, { backgroundColor: theme.border }]} />
+                                {workHoursMethod === 'daily' ? (
+                                    <DailyWorkTimeField
+                                        value={dailyWorkTime}
+                                        embedded
+                                        onChange={(value) => {
+                                            setDailyWorkTime(value);
+                                            setResult(null);
+                                        }}
+                                    />
+                                ) : (
+                                    <View style={styles.workHoursDetails}>
+                                        <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                            ساعات کارکرد کارگر در بازه ی زمانی انتخاب شده
+                                        </ThemedText>
+                                        <View
+                                            style={[
+                                                styles.workHoursStepper,
+                                                {
+                                                    backgroundColor: theme.surface,
+                                                    borderColor: workedHoursError ? theme.error : theme.border,
+                                                    direction: 'ltr',
+                                                },
+                                            ]}
+                                        >
+                                            <Pressable
+                                                onPress={() => changeActualWorkedHours(-1)}
+                                                disabled={normalizedActualWorkedHours <= 0}
+                                                style={({ pressed }) => [
+                                                    styles.workHoursStepperButton,
+                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
+                                                ]}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="کاهش ساعات کارکرد کارگر"
+                                            >
+                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                            </Pressable>
+                                            <NumericInputField
+                                                mode="decimal"
+                                                accessibilityLabel="ساعات کارکرد کارگر در بازه ی زمانی انتخاب شده"
+                                                onChangeText={handleActualWorkedHoursChange}
+                                                placeholder="ساعات موظفی بازه"
+                                                placeholderTextColor={theme.textMuted}
+                                                returnKeyType="done"
+                                                style={[styles.workHoursInput, { color: theme.text }]}
+                                                textAlign="center"
+                                                value={actualWorkedHoursValue}
+                                            />
+                                            <Pressable
+                                                onPress={() => changeActualWorkedHours(1)}
+                                                disabled={
+                                                    maximumAllowedWorkHours !== null
+                                                    && normalizedActualWorkedHours >= maximumAllowedWorkHours
+                                                }
+                                                style={({ pressed }) => [
+                                                    styles.workHoursStepperButton,
+                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    maximumAllowedWorkHours !== null
+                                                    && normalizedActualWorkedHours >= maximumAllowedWorkHours
+                                                    && styles.workHoursStepperButtonDisabled,
+                                                ]}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="افزایش ساعات کارکرد کارگر"
+                                            >
+                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                            </Pressable>
+                                        </View>
+                                        {workedHoursError ? (
+                                            <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
+                                                {workedHoursError}
+                                            </ThemedText>
+                                        ) : null}
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • ساعات موظفی این بازه: {requiredWorkHours === null
+                                                ? isLoadingData ? 'در حال محاسبه…' : 'در دسترس نیست'
+                                                : `${toPersianDigits(requiredWorkHours.toFixed(2))} ساعت`}
+                                        </ThemedText>
+                                        {maximumAllowedWorkHours !== null ? (
+                                            <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                                • حداکثر ساعات کارکرد مجاز: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
+                                            </ThemedText>
+                                        ) : null}
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • نسبت کارکرد = ساعات کارکرد کارگر ÷ ساعات موظفی کارگر
+                                        </ThemedText>
+                                    </View>
+                                )}
+                            </View>
 
                             <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                 <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -354,7 +625,7 @@ export default function SpousalAllowanceScreen() {
                                 <MaterialCommunityIcons
                                     name={isWorkerInsuranceExempt ? 'checkbox-marked' : 'checkbox-blank-outline'}
                                     size={22}
-                                    color={isWorkerInsuranceExempt ? theme.primary : theme.textSecondary}
+                                    color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
                                     <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
@@ -376,13 +647,13 @@ export default function SpousalAllowanceScreen() {
                                     onPress={() => setIsLegalBasisVisible((visible) => !visible)}
                                     style={styles.insuranceLegalToggle}
                                 >
-                                    <ThemedText type="smallBold" style={[styles.insuranceLegalToggleLabel, { color: theme.primary }]}>
+                                    <ThemedText type="smallBold" style={[styles.insuranceLegalToggleLabel, { color: theme.primaryText }]}>
                                         مبنای قانونی معافیت
                                     </ThemedText>
                                     <MaterialCommunityIcons
                                         name={isLegalBasisVisible ? 'chevron-up' : 'chevron-down'}
                                         size={18}
-                                        color={theme.primary}
+                                        color={theme.primaryText}
                                     />
                                 </Pressable>
                                 {isLegalBasisVisible ? (
@@ -400,7 +671,7 @@ export default function SpousalAllowanceScreen() {
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     loading={isLoadingData}
                                     disabled={isLoadingData}
                                 >
@@ -443,7 +714,7 @@ export default function SpousalAllowanceScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         حق تاهل پس از کسر سهم بیمه ی کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
                                                     </ThemedText>
                                                 </View>
@@ -451,7 +722,7 @@ export default function SpousalAllowanceScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         حق تأهل پس از کسر مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {remainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : formatCurrency(remainingClaimAmount)}
@@ -461,7 +732,7 @@ export default function SpousalAllowanceScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         حق تأهل پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {finalRemainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : formatCurrency(finalRemainingClaimAmount)}
@@ -484,13 +755,13 @@ export default function SpousalAllowanceScreen() {
                                                     },
                                                 ]}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetailedBreakdown ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
                                                 <MaterialCommunityIcons
                                                     name={showDetailedBreakdown ? 'chevron-up' : 'chevron-down'}
                                                     size={18}
-                                                    color={theme.primary}
+                                                    color={theme.primaryText}
                                                 />
                                             </Pressable>
                                         </View>
@@ -520,7 +791,7 @@ export default function SpousalAllowanceScreen() {
                                                                     تعداد ماه‌های شمول
                                                                 </ThemedText>
                                                                 <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>
-                                                                    {toPersianDigits(item.monthsCovered.toFixed(2).replace(/\.00$/, ''))} ماه
+                                                                    {toPersianDigits(Number(item.monthsCovered.toFixed(2)).toString())} ماه
                                                                 </ThemedText>
                                                             </View>
 
@@ -537,7 +808,7 @@ export default function SpousalAllowanceScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                     مبلغ این دوره
                                                                 </ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(formatCurrency(item.amount))}
                                                                 </ThemedText>
                                                             </View>
@@ -546,7 +817,7 @@ export default function SpousalAllowanceScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                     حق بیمه پرداختی به سازمان تامین اجتماعی
                                                                 </ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(formatCurrency(Math.round(item.amount * 0.3)))}
                                                                 </ThemedText>
                                                             </View>
@@ -576,14 +847,17 @@ export default function SpousalAllowanceScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
+                style={{
+                    backgroundColor: snackbarMessage === SPOUSAL_ALLOWANCE_START_WARNING ? theme.infoFill : theme.errorFill,
+                    borderRadius: Radius.md,
+                }}
                 action={{
                     label: 'بستن',
                     onPress: () => setSnackbarVisible(false),
-                    labelStyle: { color: theme.surface },
+                    labelStyle: { color: theme.onStatus },
                 }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>
                     {snackbarMessage}
                 </ThemedText>
             </Snackbar>
@@ -617,6 +891,7 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     headerText: {
+        alignSelf: 'stretch',
         flex: 1,
         gap: Spacing.one,
     },
@@ -749,6 +1024,66 @@ const styles = StyleSheet.create({
         padding: Spacing.two,
         borderWidth: StyleSheet.hairlineWidth,
         borderRadius: 12,
+    },
+    workHoursSection: {
+        gap: Spacing.two,
+        padding: Spacing.two,
+        borderRadius: 12,
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    workHoursMethods: {
+        gap: Spacing.one,
+    },
+    workHoursMethodOption: {
+        minHeight: 52,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.two,
+        paddingHorizontal: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+    },
+    workHoursMethodLabel: {
+        flexShrink: 1,
+        lineHeight: 20,
+    },
+    workHoursDivider: {
+        height: StyleSheet.hairlineWidth,
+        marginVertical: Spacing.one,
+    },
+    workHoursDetails: {
+        gap: Spacing.two,
+    },
+    workHoursInput: {
+        flex: 1,
+        minHeight: 48,
+        paddingVertical: 0,
+        fontFamily: 'AppFont-Bold',
+        fontSize: 16,
+        writingDirection: 'ltr',
+    },
+    workHoursHint: {
+        fontSize: 12,
+        lineHeight: 18,
+    },
+    workHoursStepper: {
+        minHeight: 54,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+        padding: Spacing.one,
+        gap: Spacing.one,
+    },
+    workHoursStepperButton: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 10,
+    },
+    workHoursStepperButtonDisabled: {
+        opacity: 0.4,
     },
     paidAmountSection: {
         gap: Spacing.one,

@@ -1,6 +1,7 @@
 import { loadAsync } from 'expo-font';
 import { StyleSheet, type StyleProp, type TextStyle } from 'react-native';
 
+import { ColorPalettes, type ThemePalette } from '@/constants/theme';
 import type { FontPreference, ThemeType } from '@/context/app.context';
 import { darkTheme, lightTheme } from '@/constants/themes';
 
@@ -122,8 +123,49 @@ export function getAppFontStyle(
     };
 }
 
-export function getAppPaperTheme(theme: ThemeType, preference: FontPreference) {
+export function getAppPaperTheme(
+    theme: ThemeType,
+    preference: FontPreference,
+    palette: ThemePalette = 'default',
+) {
     const baseTheme = theme === 'dark' ? darkTheme : lightTheme;
+    const colors = ColorPalettes[palette][theme];
+    const paperColors = {
+        ...baseTheme.colors,
+        primary: colors.primary,
+        onPrimary: colors.onPrimary,
+        primaryContainer: colors.primaryContainer,
+        onPrimaryContainer: palette === 'default'
+            ? theme === 'dark' ? '#E0F7FA' : '#002528'
+            : colors.text,
+        secondary: colors.secondary,
+        onSecondary: colors.onSecondary,
+        secondaryContainer: palette === 'default'
+            ? baseTheme.colors.secondaryContainer
+            : colors.primaryContainer,
+        onSecondaryContainer: palette === 'default'
+            ? baseTheme.colors.onSecondaryContainer
+            : colors.text,
+        background: colors.background,
+        surface: colors.surface,
+        surfaceVariant: colors.surfaceVariant,
+        surfaceContainer: colors.surfaceElevated,
+        outline: colors.borderStrong,
+        outlineVariant: colors.border,
+        error: colors.error,
+        ...(palette !== 'default' && {
+            onBackground: colors.text,
+            onSurface: colors.text,
+            onSurfaceVariant: colors.textSecondary,
+            surfaceTint: colors.primary,
+            inversePrimary: colors.primary,
+            surfaceContainerLowest: colors.surface,
+            surfaceContainerLow: colors.surface,
+            surfaceContainerHigh: colors.surfaceElevated,
+            surfaceContainerHighest: colors.surfaceVariant,
+            backdrop: colors.overlay,
+        }),
+    };
     const fonts = Object.fromEntries(
         Object.entries(baseTheme.fonts).map(([variant, font]) => {
             const weight = getAppFontWeight(font.fontFamily);
@@ -138,5 +180,5 @@ export function getAppPaperTheme(theme: ThemeType, preference: FontPreference) {
         })
     ) as typeof baseTheme.fonts;
 
-    return { ...baseTheme, fonts };
+    return { ...baseTheme, colors: paperColors, fonts };
 }

@@ -1,5 +1,10 @@
 # Welcome to your Expo app 👋
 
+## Mobile account authentication
+
+The account screen supports phone-based OTP sign-in and registration through the Laravel API. Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_URL` to the backend API root ending in `/api/v1` before starting Expo. Use a URL reachable from the device (for example, an Android emulator can reach the host machine through `http://10.0.2.2:8000/api/v1`; a physical phone needs the computer's reachable LAN address). Use HTTPS outside local development.
+
+The access token is stored with Expo SecureStore on native iOS and Android. Web authentication is intentionally unavailable because browser storage does not provide the same native secure-storage guarantee. OTP delivery requires the backend's Melipayamak credentials; no development OTP or SMS-success fallback is enabled.
 
 # build auto
 npx eas-cli@latest workflow:run create-production-builds.yml

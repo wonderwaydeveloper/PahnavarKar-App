@@ -21,6 +21,7 @@ import {
     type SalaryPeriodBucket,
     type SocialSecurityPremiumCeilingCalculationResult,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 type PickerTarget = 'start' | 'end';
 
@@ -151,6 +152,7 @@ export default function SocialSecurityPremiumCeilingScreen() {
         setPickerTarget(null);
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const parsedStart = parseDateInput(startDate);
         const parsedEnd = parseDateInput(endDate);
@@ -182,6 +184,7 @@ export default function SocialSecurityPremiumCeilingScreen() {
         }
 
         setResult(calculation);
+        notifyCalculationCompleted();
         setShowDetails(false);
     };
 
@@ -236,7 +239,7 @@ export default function SocialSecurityPremiumCeilingScreen() {
                                     onPress={handleCalculate}
                                     icon="calculator"
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     loading={isLoadingData}
@@ -255,7 +258,7 @@ export default function SocialSecurityPremiumCeilingScreen() {
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                                 سقف حق بیمه
                                             </ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                                 {toPersianDigits(formatCurrency(result.totalAmount))}
                                             </ThemedText>
                                         </View>
@@ -268,10 +271,10 @@ export default function SocialSecurityPremiumCeilingScreen() {
                                                 onPress={() => setShowDetails((value) => !value)}
                                                 style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
-                                                <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primary} />
+                                                <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primaryText} />
                                             </Pressable>
                                         </View>
 
@@ -333,9 +336,9 @@ export default function SocialSecurityPremiumCeilingScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error }}
+                style={{ backgroundColor: theme.errorFill }}
             >
-                <ThemedText type="smallBold" style={{ color: theme.surface }}>
+                <ThemedText type="smallBold" style={{ color: theme.onStatus }}>
                     {snackbarMessage}
                 </ThemedText>
             </Snackbar>
@@ -349,7 +352,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },

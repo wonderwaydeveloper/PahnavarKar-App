@@ -209,14 +209,18 @@ function PeriodCardLocal({
                   },
                 ]}
               >
-                <MaterialCommunityIcons
-                  name={seniorityGroupExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={theme.surface}
-                />
-                <ThemedText style={[styles.nestedToggleLabel, { color: theme.surface }]}>
-                  {seniorityGroupExpanded ? 'عدم نمایش' : 'نمایش جزئیات'}
-                </ThemedText>
+                {({ pressed }) => (
+                  <>
+                    <MaterialCommunityIcons
+                      name={seniorityGroupExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={16}
+                      color={pressed ? theme.primaryText : theme.onPrimary}
+                    />
+                    <ThemedText style={[styles.nestedToggleLabel, { color: pressed ? theme.primaryText : theme.onPrimary }]}>
+                      {seniorityGroupExpanded ? 'عدم نمایش' : 'نمایش جزئیات'}
+                    </ThemedText>
+                  </>
+                )}
               </Pressable>
             ) : null}
           </View>
@@ -345,7 +349,7 @@ function PeriodCardLocal({
             </ThemedText>
             <ThemedText type="small" style={[styles.pageDescription, { color: theme.textSecondary }]}>
               {periodDateRange && (
-                <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
                   {periodDateRange.displayText}
                 </ThemedText>
               )}
@@ -359,7 +363,7 @@ function PeriodCardLocal({
               شماره دوره
             </ThemedText>
             <View style={styles.metricContent}>
-              <MaterialCommunityIcons name="calendar-range-outline" size={20} color={theme.primary} />
+              <MaterialCommunityIcons name="calendar-range-outline" size={20} color={theme.primaryText} />
               <ThemedText type="bodyBold" style={[styles.fieldValue, { color: theme.text }]}>
                 {periodsLength === 1 ? 'دوره کامل' : new Intl.NumberFormat('fa-IR').format(index + 1)}
               </ThemedText>
@@ -371,7 +375,7 @@ function PeriodCardLocal({
               مدت زمان
             </ThemedText>
             <View style={styles.metricContent}>
-              <MaterialCommunityIcons name="calendar-month" size={20} color={theme.primary} />
+              <MaterialCommunityIcons name="calendar-month" size={20} color={theme.primaryText} />
               <ThemedText type="bodyBold" style={[styles.fieldValue, { color: theme.text }]}>
                 {`${period.month_count?.toLocaleString('fa-IR') ?? '-'} ماه`}
               </ThemedText>
@@ -388,14 +392,18 @@ function PeriodCardLocal({
             },
           ]}
         >
-          <MaterialCommunityIcons
-            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-            size={18}
-            color={theme.surface}
-          />
-          <ThemedText style={[styles.buttonLabel, { color: theme.surface }]}>
-            {isExpanded ? 'عدم نمایش' : 'نمایش جزئیات'}
-          </ThemedText>
+          {({ pressed }) => (
+            <>
+              <MaterialCommunityIcons
+                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={pressed ? theme.primaryText : theme.onPrimary}
+              />
+              <ThemedText style={[styles.buttonLabel, { color: pressed ? theme.primaryText : theme.onPrimary }]}>
+                {isExpanded ? 'عدم نمایش' : 'نمایش جزئیات'}
+              </ThemedText>
+            </>
+          )}
         </Pressable>
 
         {isExpanded ? (
@@ -587,7 +595,7 @@ export default function YearlyInfoScreen() {
       <ThemedView style={[styles.screen, { backgroundColor: theme.background }]}>
         {loading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator animating size="large" color={theme.primary} />
+            <ActivityIndicator animating size="large" color={theme.primaryText} />
             <ThemedText type="small" style={styles.loadingText}>در حال بارگذاری داده‌ها...</ThemedText>
           </View>
         ) : (
@@ -610,18 +618,18 @@ export default function YearlyInfoScreen() {
             <View style={{ marginTop: Spacing.two }}>
               <View style={styles.periodsSectionHeader}>
                 <ThemedText type="smallBold" themeColor="text" style={styles.periodsSectionTitle}>جزئیات دوره‌ها</ThemedText>
-                {loadingPeriods && <ActivityIndicator size="small" color={theme.primary} />}
+                {loadingPeriods && <ActivityIndicator size="small" color={theme.primaryText} />}
               </View>
 
               {loadingPeriods ? (
                 <View style={styles.centerContainer}>
-                  <ActivityIndicator animating size="large" color={theme.primary} />
+                  <ActivityIndicator animating size="large" color={theme.primaryText} />
                 </View>
               ) : periods.length === 0 ? (
                 <Card style={[styles.emptyStateCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                   <Card.Content style={styles.emptyStateContent}>
                     <View style={[styles.emptyStateIcon, { backgroundColor: theme.primaryContainer }]}>
-                      <MaterialCommunityIcons name="calendar-blank" size={24} color={theme.primary} />
+                      <MaterialCommunityIcons name="calendar-blank" size={24} color={theme.primaryText} />
                     </View>
                     <ThemedText type="smallBold" style={styles.emptyText}>برای این سال دوره‌ای ثبت نشده است</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary" style={styles.emptySubText}>
@@ -646,14 +654,14 @@ export default function YearlyInfoScreen() {
         visible={showError}
         onDismiss={() => setShowError(false)}
         duration={5000}
-        style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
+        style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }}
         action={{
           label: 'بستن',
           onPress: () => setShowError(false),
-          labelStyle: { color: theme.surface },
+          labelStyle: { color: theme.onStatus },
         }}
       >
-        <ThemedText type="small" style={{ color: theme.surface }}>
+        <ThemedText type="small" style={{ color: theme.onStatus }}>
           {error ?? 'خطایی رخ داده است.'}
         </ThemedText>
       </Snackbar>

@@ -2,7 +2,7 @@
   "expo": {
     "name": "پهناور کار",
     "slug": "PahnavarKar",
-    "version": "1.6.1",
+    "version": "1.6.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "pahnavarkar",
@@ -42,6 +42,14 @@
       "expo-font",
       "expo-image",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "برای انتخاب تصویر پروفایل، برنامه به دسترسی عکس‌های شما نیاز دارد.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-navigation-bar",
         {
           "enforceContrast": false
@@ -57,7 +65,17 @@
       "expo-status-bar",
       "expo-web-browser",
       "expo-sharing",
-      "expo-asset"
+      "expo-asset",
+      "expo-secure-store",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

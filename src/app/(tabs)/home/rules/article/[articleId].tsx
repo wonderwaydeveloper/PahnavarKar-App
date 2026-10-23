@@ -105,7 +105,7 @@ export default function LegalArticleScreen() {
                                             <MaterialCommunityIcons
                                                 name={expanded ? 'chevron-up' : 'chevron-down'}
                                                 size={22}
-                                                color={theme.primary}
+                                                color={theme.primaryText}
                                             />
                                         </Pressable>
                                         {expanded ? (

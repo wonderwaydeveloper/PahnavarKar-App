@@ -22,6 +22,7 @@ import {
     type IllegalForeignWorkerPenaltyCalculationResult,
     type SalaryPeriodBucket,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 type PickerTarget = 'start' | 'end';
 
@@ -163,6 +164,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
         setPickerTarget(null);
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const parsedStart = parseDateInput(startDate);
         const parsedEnd = parseDateInput(endDate);
@@ -202,6 +204,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
         }
 
         setResult(calculation);
+        notifyCalculationCompleted();
         setShowDetails(false);
     };
 
@@ -266,7 +269,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش تعداد کارگران غیرمجاز"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                     </Pressable>
 
                                     <NumericInputField
@@ -296,7 +299,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش تعداد کارگران غیرمجاز"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -307,7 +310,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                     onPress={handleCalculate}
                                     icon="calculator"
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     loading={isLoadingData}
@@ -325,7 +328,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                                 مبلغ نهایی جریمه
                                             </ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                                 {toPersianDigits(formatCurrency(result.totalAmount))}
                                             </ThemedText>
                                         </View>
@@ -338,10 +341,10 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                                 onPress={() => setShowDetails((value) => !value)}
                                                 style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
-                                                <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primary} />
+                                                <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primaryText} />
                                             </Pressable>
                                         </View>
 
@@ -424,7 +427,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },

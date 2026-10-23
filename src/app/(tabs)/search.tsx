@@ -229,13 +229,13 @@ export default function SearchTabScreen() {
         return (
             <ThemedText style={style}>
                 {value.slice(0, matchIndex)}
-                <ThemedText style={{ color: theme.primary, fontFamily: 'AppFont-Bold' }}>
+                <ThemedText style={{ color: theme.primaryText, fontFamily: 'AppFont-Bold' }}>
                     {value.slice(matchIndex, matchIndex + matchQuery.length)}
                 </ThemedText>
                 {value.slice(matchIndex + matchQuery.length)}
             </ThemedText>
         );
-    }, [debouncedQuery, theme.primary]);
+    }, [debouncedQuery, theme.primaryText]);
 
     const renderSearchRow = useCallback(({ item, index, section }: { item: SearchRow; index: number; section: SearchSection }) => {
         if (item.kind === 'calculation') {
@@ -290,7 +290,7 @@ export default function SearchTabScreen() {
                 ]}
             >
                 <View style={[styles.legalResultIcon, { backgroundColor: theme.primaryContainer }]}>
-                    <MaterialCommunityIcons name={iconByType[item.result.type]} size={22} color={theme.primary} />
+                    <MaterialCommunityIcons name={iconByType[item.result.type]} size={22} color={theme.primaryText} />
                 </View>
                 <View style={styles.legalResultText}>
                     <ThemedText type="smallBold" style={{ color: theme.text }}>{item.result.title}</ThemedText>
@@ -301,7 +301,7 @@ export default function SearchTabScreen() {
                 <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
             </Pressable>
         );
-    }, [renderHighlightedText, router, theme.primary, theme.primaryContainer, theme.surface, theme.surfaceVariant, theme.text, theme.textSecondary, theme.textMuted, theme.border]);
+    }, [renderHighlightedText, router, theme.primaryContainer, theme.primaryText, theme.surface, theme.surfaceVariant, theme.text, theme.textSecondary, theme.textMuted, theme.border]);
 
     const renderSectionHeader = useCallback(({ section }: { section: SearchSection }) => (
         section.data.length > 0 ? (
@@ -339,7 +339,7 @@ export default function SearchTabScreen() {
                             >
                                 <ThemedText
                                     type={selected ? 'smallBold' : 'small'}
-                                    style={{ color: selected ? theme.primary : theme.textSecondary }}
+                                    style={{ color: selected ? theme.primaryText : theme.textSecondary }}
                                 >
                                     {filter.title}
                                 </ThemedText>
@@ -358,13 +358,13 @@ export default function SearchTabScreen() {
                             accessibilityRole="button"
                             onPress={() => setLegalSearchRetry((retry) => retry + 1)}
                         >
-                            <ThemedText type="smallBold" themeColor="primary">تلاش دوباره</ThemedText>
+                            <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
                         </Pressable>
                     </View>
                 ) : null}
             </View>
         );
-    }, [hasLegalSearch, legalSearchError, legalSearchLoading, scope, theme.border, theme.primary, theme.primaryContainer, theme.surface, theme.textSecondary]);
+    }, [hasLegalSearch, legalSearchError, legalSearchLoading, scope, theme.border, theme.primary, theme.primaryContainer, theme.primaryText, theme.surface, theme.textSecondary]);
 
     const emptyState = useMemo(() => (
         <View style={[styles.emptyState, { backgroundColor: theme.surface, borderColor: theme.border }]}>

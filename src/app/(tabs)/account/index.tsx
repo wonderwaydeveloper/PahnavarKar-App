@@ -1,7 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,24 +11,22 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAuth } from '@/hooks/use-auth';
+import type { AuthDevice } from '@/services/auth-api';
+
+type ProfileAction = {
+    key: string;
+    label: string;
+    subtitle: string;
+    icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+};
 
 const profileActions = [
-    { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'تغییر اطلاعات شخصی و حساب شما', icon: 'account-edit', color: '#4f46e5' },
-    { key: 'settings', label: 'تنظیمات', subtitle: 'ظاهر برنامه، فونت برنامه', icon: 'cog-outline', color: '#14b8a6' },
-    { key: 'support', label: 'پشتیبانی', subtitle: 'ارتباط سریع با تیم پشتیبانی', icon: 'lifebuoy', color: '#2563eb' },
-    { key: 'about-us', label: 'درباره ما', subtitle: 'معرفی پروژه و اهداف ما', icon: 'information-outline', color: '#8b5cf6' },
-];
-
-const profileFields = [
-    { key: 'fullName', label: 'نام و نام خانوادگی', value: 'کاربر نمونه', type: 'text' },
-    { key: 'username', label: 'نام کاربری', value: 'user_demo', type: 'text' },
-    { key: 'email', label: 'ایمیل', value: 'user@example.com', type: 'text' },
-    { key: 'phone', label: 'شماره تلفن', value: '۰۹۱۲-۳۴۵-۶۷۸۹', type: 'text' },
-    { key: 'membership', label: 'نوع عضویت', value: 'عادی', type: 'text' },
-    { key: 'joinedAt', label: 'تاریخ عضویت', value: '۱۴۰۳/۰۲/۰۱', type: 'text' },
-    { key: 'wallet', label: 'مبلغ کیف پول', value: '۱۲٬۳۴۵ تومان', type: 'text' },
-    { key: 'status', label: 'وضعیت حساب', value: 'فعال', type: 'chip' },
-];
+    { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'تغییر اطلاعات شخصی و حساب شما', icon: 'account-edit' },
+    { key: 'settings', label: 'تنظیمات', subtitle: 'ظاهر برنامه، فونت برنامه', icon: 'cog-outline' },
+    { key: 'support', label: 'پشتیبانی', subtitle: 'ارتباط سریع با تیم پشتیبانی', icon: 'lifebuoy' },
+    { key: 'about-us', label: 'درباره ما', subtitle: 'معرفی پروژه و اهداف ما', icon: 'information-outline' },
+] satisfies ProfileAction[];
 
 function runDebouncedAction(lastPressRef: { current: number }, callback: () => void) {
     const now = Date.now();
@@ -47,7 +44,66 @@ export default function ProfileScreen() {
     const insets = useSafeAreaInsets();
     const lastPressRef = useRef(0);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('به زودی فعال می‌شود');
+    const [devices, setDevices] = useState<AuthDevice[]>([]);
+    const [authBusy, setAuthBusy] = useState(false);
+    const { user, isLoading: authLoading, sessionError, refreshUser, getDevices, signOut, signOutAll, revokeUserDevice } = useAuth();
     const appVersion = appConfig.expo?.version ?? '1.0.0';
+    const visibleDevices = user ? devices : [];
+
+    useEffect(() => {
+        let isMounted = true;
+        if (!user) {
+            return;
+        }
+
+        void getDevices()
+            .then((activeDevices) => {
+                if (isMounted) {
+                    setDevices(activeDevices);
+                }
+            })
+            .catch((error: unknown) => {
+                if (isMounted) {
+                    setSnackbarMessage(error instanceof Error ? error.message : 'دریافت فهرست دستگاه‌ها ناموفق بود.');
+                    setSnackbarVisible(true);
+                }
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [getDevices, user]);
+
+    const handleSignOut = async (allDevices: boolean) => {
+        setAuthBusy(true);
+        try {
+            if (allDevices) {
+                await signOutAll();
+            } else {
+                await signOut();
+            }
+            setDevices([]);
+        } catch (error) {
+            setSnackbarMessage(error instanceof Error ? error.message : 'خروج از حساب ناموفق بود.');
+            setSnackbarVisible(true);
+        } finally {
+            setAuthBusy(false);
+        }
+    };
+
+    const handleRevokeDevice = async (device: AuthDevice) => {
+        setAuthBusy(true);
+        try {
+            await revokeUserDevice(device.id);
+            setDevices((current) => current.filter(({ id }) => id !== device.id));
+        } catch (error) {
+            setSnackbarMessage(error instanceof Error ? error.message : 'غیرفعال‌کردن دستگاه ناموفق بود.');
+            setSnackbarVisible(true);
+        } finally {
+            setAuthBusy(false);
+        }
+    };
 
     const handleUnavailableAction = (key: string) => {
         if (key === 'settings' || key === 'about-us' || key === 'app-info') {
@@ -55,7 +111,10 @@ export default function ProfileScreen() {
             return;
         }
 
-        runDebouncedAction(lastPressRef, () => setSnackbarVisible(true));
+        runDebouncedAction(lastPressRef, () => {
+            setSnackbarMessage('به زودی فعال می‌شود');
+            setSnackbarVisible(true);
+        });
     };
 
     return (
@@ -70,53 +129,147 @@ export default function ProfileScreen() {
                 showsVerticalScrollIndicator={false}
             >
                 <View style={styles.sectionWrap}>
-                    <ThemedText type="smallBold" style={[styles.sectionTitle, { color: theme.text }]}>اطلاعات کاربری</ThemedText>
-
+                    <ThemedText type="smallBold" style={[styles.sectionTitle, { color: theme.text }]}>حساب کاربری</ThemedText>
                     <View style={[styles.profileCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        <View style={[styles.profileHeader, { backgroundColor: theme.surface }]}>
-                            <Image
-                                source={require('@/assets/images/logo-white.png')}
-                                contentFit="contain"
-                                allowDownscaling={false}
-                                style={[styles.avatarWrap, { backgroundColor: theme.primary }]}
-                            />
-
-                            {/* identity block removed per request: name and username are not shown under avatar */}
-                        </View>
-
-                        <View style={styles.infoCard}>
-                            {profileFields.filter(f => f.type !== 'avatar').map((field, index) => (
-                                <View
-                                    key={field.key}
-                                    style={[
-                                        styles.infoRow,
-                                        index !== 0 && styles.infoRowSeparated,
-                                        { borderTopColor: theme.border },
-                                    ]}
-                                >
-                                    <ThemedText type="small" style={[styles.infoLabel, { color: theme.textSecondary }]}>
-                                        {field.label}
+                        <View style={styles.guestCard}>
+                            <View style={[styles.guestIcon, { backgroundColor: theme.primaryContainer }]}>
+                                <MaterialCommunityIcons
+                                    name={user ? 'account-check-outline' : 'account-outline'}
+                                    size={30}
+                                    color={theme.primaryText}
+                                />
+                            </View>
+                            {authLoading ? (
+                                <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
+                                    در حال بررسی وضعیت حساب...
+                                </ThemedText>
+                            ) : user ? (
+                                <>
+                                    <ThemedText type="largeTitle" style={styles.guestTitle}>{user.name}</ThemedText>
+                                    <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
+                                        {user.phone}
                                     </ThemedText>
-                                    {field.type === 'chip' ? (
-                                        <View style={styles.statusStack}>
-                                            <View
-                                                style={[
-                                                    styles.valueChip,
-                                                    { backgroundColor: `${theme.success}1A`, borderColor: `${theme.success}33` },
-                                                ]}
+                                    <ThemedText type="small" style={[styles.guestDescription, { color: theme.textSecondary }]}>
+                                        {user.email}
+                                    </ThemedText>
+                                    {sessionError ? (
+                                        <>
+                                            <ThemedText type="small" style={{ color: theme.error }}>
+                                                همگام‌سازی حساب ناموفق بود: {sessionError}
+                                            </ThemedText>
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                onPress={() => void refreshUser().catch((error: unknown) => {
+                                                    setSnackbarMessage(error instanceof Error ? error.message : 'همگام‌سازی حساب ناموفق بود.');
+                                                    setSnackbarVisible(true);
+                                                })}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.statusChipText, { color: theme.success }]}>
-                                                    {field.value}
+                                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                                    تلاش دوباره
                                                 </ThemedText>
-                                            </View>
-                                        </View>
-                                    ) : (
-                                        <ThemedText type="smallBold" style={[styles.infoValue, { color: theme.text }]}>
-                                            {field.value}
+                                            </Pressable>
+                                        </>
+                                    ) : null}
+                                    <View style={styles.deviceList}>
+                                        <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                            دستگاه‌های فعال
                                         </ThemedText>
-                                    )}
-                                </View>
-                            ))}
+                                        {visibleDevices.map((device) => (
+                                            <View
+                                                key={device.id}
+                                                style={[styles.deviceItem, { borderTopColor: theme.border }]}
+                                            >
+                                                <View style={styles.actionTextWrap}>
+                                                    <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                                        {device.device_name || 'دستگاه موبایل'}
+                                                    </ThemedText>
+                                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                        آخرین فعالیت:{' '}
+                                                        {device.last_activity
+                                                            ? new Date(device.last_activity).toLocaleString('fa-IR')
+                                                            : 'نامشخص'}
+                                                    </ThemedText>
+                                                </View>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`غیرفعال‌کردن ${device.device_name || 'دستگاه'}`}
+                                                    disabled={authBusy}
+                                                    onPress={() => void handleRevokeDevice(device)}
+                                                >
+                                                    <MaterialCommunityIcons name="logout" size={20} color={theme.error} />
+                                                </Pressable>
+                                            </View>
+                                        ))}
+                                        {visibleDevices.length === 0 ? (
+                                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                دستگاه فعالی پیدا نشد.
+                                            </ThemedText>
+                                        ) : null}
+                                    </View>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        disabled={authBusy}
+                                        onPress={() => void handleSignOut(false)}
+                                        style={({ pressed }) => [
+                                            styles.signInButton,
+                                            { backgroundColor: theme.primary, opacity: pressed || authBusy ? 0.72 : 1 },
+                                        ]}
+                                    >
+                                        <ThemedText type="smallBold" style={[styles.signInButtonText, { color: theme.onPrimary }]}>
+                                            خروج از این دستگاه
+                                        </ThemedText>
+                                        <MaterialCommunityIcons name="logout" size={20} color={theme.onPrimary} />
+                                    </Pressable>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        disabled={authBusy}
+                                        onPress={() => void handleSignOut(true)}
+                                        style={styles.secondaryAction}
+                                    >
+                                        <ThemedText type="smallBold" style={{ color: theme.error }}>
+                                            خروج از همهٔ دستگاه‌ها
+                                        </ThemedText>
+                                    </Pressable>
+                                </>
+                            ) : (
+                                <>
+                                    <ThemedText type="largeTitle" style={styles.guestTitle}>پروفایل مهمان</ThemedText>
+                                    <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
+                                        برای ورود یا ساخت حساب، شمارهٔ موبایل خود را تأیید کنید.
+                                    </ThemedText>
+                                    {sessionError ? (
+                                        <>
+                                            <ThemedText type="small" style={{ color: theme.error }}>
+                                                بازیابی نشست ناموفق بود: {sessionError}
+                                            </ThemedText>
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                onPress={() => void refreshUser().catch((error: unknown) => {
+                                                    setSnackbarMessage(error instanceof Error ? error.message : 'بازیابی نشست ناموفق بود.');
+                                                    setSnackbarVisible(true);
+                                                })}
+                                            >
+                                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                                    تلاش دوباره
+                                                </ThemedText>
+                                            </Pressable>
+                                        </>
+                                    ) : null}
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        onPress={() => runDebouncedAction(lastPressRef, () => router.push('/auth'))}
+                                        style={({ pressed }) => [
+                                            styles.signInButton,
+                                            { backgroundColor: theme.primary, opacity: pressed ? 0.86 : 1 },
+                                        ]}
+                                    >
+                                        <ThemedText type="smallBold" style={[styles.signInButtonText, { color: theme.onPrimary }]}>
+                                            ورود یا ثبت‌نام
+                                        </ThemedText>
+                                        <MaterialCommunityIcons name="chevron-left" size={20} color={theme.onPrimary} />
+                                    </Pressable>
+                                </>
+                            )}
                         </View>
                     </View>
                 </View>
@@ -135,8 +288,8 @@ export default function ProfileScreen() {
                             },
                         ]}
                     >
-                        <View style={[styles.actionIcon, { backgroundColor: '#26C6DA1A' }]}>
-                            <MaterialCommunityIcons name="information-outline" size={20} color={theme.primary} />
+                        <View style={[styles.actionIcon, { backgroundColor: theme.primaryContainer }]}>
+                            <MaterialCommunityIcons name="information-outline" size={20} color={theme.primaryText} />
                         </View>
 
                         <View style={styles.actionTextWrap}>
@@ -148,8 +301,8 @@ export default function ProfileScreen() {
                             </ThemedText>
                         </View>
 
-                        <View style={[styles.valuePill, { backgroundColor: `${theme.primary}1A`, borderColor: `${theme.primary}33` }]}>
-                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.primary }]}>
+                        <View style={[styles.valuePill, { backgroundColor: theme.primaryContainer, borderColor: theme.border }]}>
+                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.primaryText }]}>
                                 {appVersion}
                             </ThemedText>
                         </View>
@@ -175,8 +328,8 @@ export default function ProfileScreen() {
                                     },
                                 ]}
                             >
-                                <View style={[styles.actionIcon, { backgroundColor: `${action.color}1A` }]}>
-                                    <MaterialCommunityIcons name={action.icon as any} size={20} color={action.color} />
+                                <View style={[styles.actionIcon, { backgroundColor: theme.primaryContainer }]}>
+                                    <MaterialCommunityIcons name={action.icon} size={20} color={theme.primaryText} />
                                 </View>
 
                                 <View style={styles.actionTextWrap}>
@@ -194,28 +347,21 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                <Pressable
-                    onPress={() => setSnackbarVisible(true)}
-                    style={[styles.logoutButton, { backgroundColor: theme.error }]}
-                >
-                    <MaterialCommunityIcons name="logout" size={18} color="#ffffff" />
-                    <ThemedText type="smallBold" style={styles.logoutText}>خروج از حساب</ThemedText>
-                </Pressable>
             </ScrollView>
 
             <Snackbar
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.info, borderRadius: Radius.md }}
+                style={{ backgroundColor: theme.infoFill, borderRadius: Radius.md }}
                 action={{
                     label: 'بستن',
                     onPress: () => setSnackbarVisible(false),
-                    labelStyle: { color: theme.surface },
+                    labelStyle: { color: theme.onStatus },
                 }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>
-                    به زودی فعال می‌شود
+                <ThemedText type="small" style={{ color: theme.onStatus }}>
+                    {snackbarMessage}
                 </ThemedText>
             </Snackbar>
         </ThemedView>
@@ -235,98 +381,52 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         overflow: 'hidden',
     },
-    profileHeader: {
-        flexDirection: 'column',
+    guestCard: {
         alignItems: 'center',
-        gap: Spacing.one,
-        paddingHorizontal: Spacing.three,
-        paddingVertical: Spacing.three,
+        padding: Spacing.four,
+        gap: Spacing.two,
     },
-    avatarWrap: {
+    guestIcon: {
         width: 64,
         height: 64,
-        borderRadius: 24,
+        borderRadius: 22,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#041E28',
-        shadowOpacity: 0.18,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 2,
     },
-    identityBlock: {
-        flex: 1,
-        alignItems: 'flex-start',
+    guestTitle: {
+        textAlign: 'center',
+    },
+    guestDescription: {
+        textAlign: 'center',
+    },
+    deviceList: {
+        width: '100%',
         gap: Spacing.one,
+        marginTop: Spacing.two,
     },
-
-    identityCentered: {
-        alignItems: 'center',
-        marginTop: Spacing.one,
-    },
-    name: {},
-    role: {},
-    metricRow: {
+    deviceItem: {
+        minHeight: 54,
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        alignItems: 'center',
         gap: Spacing.two,
-        paddingHorizontal: Spacing.four,
+        paddingTop: Spacing.two,
+        borderTopWidth: StyleSheet.hairlineWidth,
+    },
+    secondaryAction: {
         paddingVertical: Spacing.two,
     },
-    metricBox: {
-        flex: 1,
-        borderRadius: 16,
-        paddingVertical: Spacing.two,
+    signInButton: {
+        width: '100%',
+        minHeight: 48,
+        borderRadius: Radius.md,
+        marginTop: Spacing.one,
+        flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: Spacing.one,
+        gap: Spacing.two,
     },
-    metricNumber: {
-        fontSize: 20,
-    },
-    metricLabel: {
-        fontSize: 12,
-    },
-    infoCard: {
-        paddingHorizontal: Spacing.three,
-        paddingBottom: Spacing.three,
-    },
-    infoRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderTopWidth: 0,
-        paddingTop: Spacing.three,
-        paddingBottom: Spacing.three,
-    },
-    infoRowSeparated: {
-        borderTopWidth: 1,
-    },
-    infoLabel: {
-        opacity: 0.82,
-    },
-    infoValue: {
-        marginLeft: Spacing.two,
-    },
-    listAvatar: {
-        width: 40,
-        height: 40,
-        borderRadius: 12,
-        alignSelf: 'flex-end',
-    },
-    valueChip: {
-        paddingHorizontal: Spacing.two,
-        paddingVertical: Spacing.one,
-        borderRadius: 999,
-        borderWidth: 1,
-        alignSelf: 'flex-end',
-    },
-    statusStack: {
-        alignItems: 'flex-end',
-        marginTop: Spacing.one,
-    },
-    statusChipText: {
-        fontSize: 11,
+    signInButtonText: {
+        textAlign: 'center',
     },
     appInfoCard: {
         borderRadius: Radius.md,
@@ -406,20 +506,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.two,
         paddingVertical: Spacing.one,
         borderRadius: 999,
-        backgroundColor: '#E3F0F4',
     },
     valueText: {
         fontSize: 11,
-    },
-    logoutButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: Spacing.two,
-        paddingVertical: Spacing.three,
-        borderRadius: 16,
-    },
-    logoutText: {
-        color: '#ffffff',
     },
 });

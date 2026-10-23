@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { I18nManager, StatusBar } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { AppProvider } from '@/context';
+import { AppProvider, AuthProvider } from '@/context';
 import { useAppContext } from '@/hooks/use-app-context';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
@@ -66,6 +66,7 @@ function FontLoadedApp() {
       <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} backgroundColor={headerBackgroundColor} />
       <NavigationBar style={theme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(tools)" options={{ headerShown: false }} />
       </Stack>
@@ -78,7 +79,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AppProvider>
-          <AppContent />
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
         </AppProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -51,7 +51,7 @@ export function YearSelectorCard({
                 سال کارکرد فعلی
               </ThemedText>
               <View style={styles.metricContent}>
-                <MaterialCommunityIcons name="calendar-month-outline" size={20} color={theme.primary} />
+                <MaterialCommunityIcons name="calendar-month-outline" size={20} color={theme.primaryText} />
                 <ThemedText type="bodyBold" style={[styles.fieldValue, { color: theme.text }]}>
                   {selectedYear ? formatYear(selectedYear.year) : 'انتخاب سال'}
                 </ThemedText>
@@ -63,7 +63,7 @@ export function YearSelectorCard({
                 تعداد دوره‌ها
               </ThemedText>
               <View style={styles.metricContent}>
-                <MaterialCommunityIcons name="calendar-multiple" size={20} color={theme.primary} />
+                <MaterialCommunityIcons name="calendar-multiple" size={20} color={theme.primaryText} />
                 <ThemedText type="bodyBold" style={[styles.fieldValue, { color: theme.text }]}>
                   {selectedYear ? `${selectedYear.period_count?.toLocaleString('fa-IR') ?? '-'} دوره` : '-'}
                 </ThemedText>
@@ -80,10 +80,18 @@ export function YearSelectorCard({
               },
             ]}
           >
-            <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.surface} />
-            <ThemedText style={[styles.buttonLabel, { color: theme.surface }]}>
-              انتخاب سال
-            </ThemedText>
+            {({ pressed }) => (
+              <>
+                <MaterialCommunityIcons
+                  name="calendar-month-outline"
+                  size={18}
+                  color={pressed ? theme.primaryText : theme.onPrimary}
+                />
+                <ThemedText style={[styles.buttonLabel, { color: pressed ? theme.primaryText : theme.onPrimary }]}>
+                  انتخاب سال
+                </ThemedText>
+              </>
+            )}
           </Pressable>
         </Card.Content>
       </Card>
@@ -123,12 +131,12 @@ export function YearSelectorCard({
                     <View style={styles.yearPickerItemContent}>
                       <ThemedText
                         type="labelBold"
-                        style={{ color: isSelected ? theme.primary : theme.text }}
+                        style={{ color: isSelected ? theme.primaryText : theme.text }}
                       >
                         {formatYear(year.year)}
                       </ThemedText>
                       {isSelected ? (
-                        <MaterialCommunityIcons name="check-circle" size={18} color={theme.primary} />
+                        <MaterialCommunityIcons name="check-circle" size={18} color={theme.primaryText} />
                       ) : (
                         <MaterialCommunityIcons name="circle-outline" size={18} color={theme.textSecondary} />
                       )}

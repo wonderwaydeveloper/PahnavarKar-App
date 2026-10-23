@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Card, Snackbar } from 'react-native-paper';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button } from '@/components/font-aware-paper';
 import { CurrencyAmountInput } from '@/components/currency-amount-input';
+import { NumericInputField } from '@/components/numeric-input-field';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { CalculationDescriptionBox } from '@/components/calculation-card-sections';
@@ -15,16 +16,22 @@ import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
+import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
+import { getInclusiveDateCount, getMaximumAllowedWorkHours, normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
+    calculateOrdinaryWorkHoursFromPeriodData,
     calculateSalaryFromPeriodData,
+    calculateSalaryFromWorkRatio,
     parseDateInput,
     type SalaryCalculationResult,
     type SalaryPeriodBucket,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
+
+type WorkHoursMethod = 'daily' | 'period';
 
 export default function BaseSalaryScreen() {
     const theme = useTheme();
@@ -41,9 +48,13 @@ export default function BaseSalaryScreen() {
     const [endDate, setEndDate] = useState(defaultEndDate);
     const [pickerTarget, setPickerTarget] = useState<'start' | 'end' | null>(null);
     const [pickerVisible, setPickerVisible] = useState(false);
+    const [workHoursMethod, setWorkHoursMethod] = useState<WorkHoursMethod>('daily');
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [actualWorkedHours, setActualWorkedHours] = useState<string | null>(null);
+    const [workedHoursError, setWorkedHoursError] = useState('');
     const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [periodBuckets, setPeriodBuckets] = useState<SalaryPeriodBucket[]>([]);
+    const [officialHolidayDates, setOfficialHolidayDates] = useState<string[]>([]);
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [result, setResult] = useState<SalaryCalculationResult | null>(null);
@@ -52,6 +63,12 @@ export default function BaseSalaryScreen() {
     const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarType, setSnackbarType] = useState<'error' | 'info'>('error');
+    const showSnackbar = useCallback((message: string, type: 'error' | 'info' = 'error') => {
+        setSnackbarMessage(message);
+        setSnackbarType(type);
+        setSnackbarVisible(true);
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
@@ -80,13 +97,23 @@ export default function BaseSalaryScreen() {
                     });
                 }
 
+                const sortedYears = years.map((year) => year.year).sort((left, right) => left - right);
+                const holidays = sortedYears.length > 0
+                    ? await fetchOfficialHolidaysBetweenDates(
+                        `${sortedYears[0]}/01/01`,
+                        `${sortedYears[sortedYears.length - 1]}/12/${String(jalaaliMonthLength(sortedYears[sortedYears.length - 1], 12)).padStart(2, '0')}`,
+                    )
+                    : [];
+
                 if (isMounted) {
                     setPeriodBuckets(buckets);
-                    setAvailableYears(years.map((year) => year.year));
+                    setOfficialHolidayDates(holidays.map((holiday) => holiday.holiday_date));
+                    setAvailableYears(sortedYears);
                 }
-            } catch {
+            } catch (error) {
+                console.error('Failed to load base salary calculation data:', error);
                 if (isMounted) {
-                    // Handle error silently or show in snackbar if needed
+                    showSnackbar('بارگذاری اطلاعات محاسبه انجام نشد. دوباره تلاش کنید.');
                 }
             } finally {
                 if (isMounted) {
@@ -100,7 +127,7 @@ export default function BaseSalaryScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showSnackbar]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 
@@ -149,9 +176,106 @@ export default function BaseSalaryScreen() {
         return 0;
     };
 
+    const parsedStartDate = useMemo(() => parseDateInput(startDate), [startDate]);
+    const parsedEndDate = useMemo(() => parseDateInput(endDate), [endDate]);
+    const isDateRangeValid = !!parsedStartDate
+        && !!parsedEndDate
+        && compareDates(startDate, endDate) <= 0;
+    const periodDayCount = isDateRangeValid && parsedStartDate && parsedEndDate
+        ? getInclusiveDateCount(parsedStartDate, parsedEndDate)
+        : 0;
+    const requiredWorkHours = useMemo(() => {
+        if (!isDateRangeValid || !parsedStartDate || !parsedEndDate) {
+            return null;
+        }
+
+        const yearsInRange = Array.from(
+            { length: parsedEndDate.year - parsedStartDate.year + 1 },
+            (_, index) => parsedStartDate.year + index,
+        );
+        if (yearsInRange.some((year) => !periodBuckets.some((bucket) => bucket.year === year))) {
+            return null;
+        }
+
+        const calculation = calculateOrdinaryWorkHoursFromPeriodData(
+            parsedStartDate,
+            parsedEndDate,
+            periodBuckets,
+            officialHolidayDates,
+        );
+
+        return calculation.breakdown.length > 0 ? calculation.totalHours : null;
+    }, [isDateRangeValid, officialHolidayDates, parsedEndDate, parsedStartDate, periodBuckets]);
+    const overtimeHoursLimit = periodDayCount * 4;
+    const maximumAllowedWorkHours = getMaximumAllowedWorkHours(requiredWorkHours, periodDayCount);
+    const actualWorkedHoursValue = actualWorkedHours ?? (requiredWorkHours?.toFixed(2) ?? '');
+    const normalizedActualWorkedHours = Number(actualWorkedHoursValue);
+    const isActualWorkedHoursValid = actualWorkedHoursValue.trim().length > 0
+        && Number.isFinite(normalizedActualWorkedHours)
+        && normalizedActualWorkedHours >= 0;
+    const workRatio = requiredWorkHours && isActualWorkedHoursValid
+        ? Math.min(normalizedActualWorkedHours, requiredWorkHours) / requiredWorkHours
+        : null;
+
+    const getMaximumWorkHoursError = () =>
+        `حداکثر ساعات قابل ورود در این بازه ${toPersianDigits((maximumAllowedWorkHours ?? 0).toFixed(2))} ساعت است.`;
+
+    const handleActualWorkedHoursChange = (value: string) => {
+        const normalizedValue = normalizeWorkHoursInput(value);
+        const numericValue = Number(normalizedValue);
+        if (
+            maximumAllowedWorkHours !== null
+            && Number.isFinite(numericValue)
+            && numericValue > maximumAllowedWorkHours
+        ) {
+            setActualWorkedHours(maximumAllowedWorkHours.toFixed(2));
+            setWorkedHoursError(getMaximumWorkHoursError());
+        } else {
+            setActualWorkedHours(normalizedValue);
+            setWorkedHoursError('');
+        }
+
+        setResult(null);
+    };
+
+    const changeActualWorkedHours = (amount: number) => {
+        const currentValue = Number(actualWorkedHoursValue) || 0;
+        const nextValue = Math.max(0, currentValue + amount);
+        const cappedValue = maximumAllowedWorkHours === null
+            ? nextValue
+            : Math.min(nextValue, maximumAllowedWorkHours);
+
+        handleActualWorkedHoursChange(cappedValue.toFixed(2));
+    };
+
+    const formatOvertimeDuration = (hours: number) => {
+        const totalMinutes = Math.round(hours * 60);
+        const overtimeHours = Math.floor(totalMinutes / 60);
+        const overtimeMinutes = totalMinutes % 60;
+
+        if (overtimeHours > 0 && overtimeMinutes > 0) {
+            return `${toPersianDigits(String(overtimeHours))} ساعت و ${toPersianDigits(String(overtimeMinutes))} دقیقه`;
+        }
+
+        if (overtimeHours > 0) {
+            return `${toPersianDigits(String(overtimeHours))} ساعت`;
+        }
+
+        return `${toPersianDigits(String(overtimeMinutes))} دقیقه`;
+    };
+
+    const handleWorkHoursMethodChange = (method: WorkHoursMethod) => {
+        setWorkHoursMethod(method);
+        setWorkedHoursError('');
+        setResult(null);
+    };
+
     const handleDateSelect = (value: string) => {
         if (pickerTarget === 'start') {
             setStartDate(value);
+            setResult(null);
+            setActualWorkedHours(null);
+            setWorkedHoursError('');
 
             if (endDate) {
                 const comparison = compareDates(value, endDate);
@@ -168,45 +292,91 @@ export default function BaseSalaryScreen() {
                 const comparison = compareDates(value, startDate);
                 if (comparison < 0) {
                     setEndDate(startDate);
-                    setSnackbarMessage('تاریخ پایان باید برابر یا بزرگتر از تاریخ شروع باشد.');
-                    setSnackbarVisible(true);
+                    setActualWorkedHours(null);
+                    setWorkedHoursError('');
+                    setResult(null);
+                    showSnackbar('تاریخ پایان باید برابر یا بزرگتر از تاریخ شروع باشد.');
                     return;
                 }
             }
 
             setEndDate(value);
+            setResult(null);
+            setActualWorkedHours(null);
+            setWorkedHoursError('');
         }
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
-        const parsedStart = parseDateInput(startDate);
-        const parsedEnd = parseDateInput(endDate);
-
-        if (!parsedStart || !parsedEnd) {
+        if (!parsedStartDate || !parsedEndDate || !isDateRangeValid) {
             setResult(null);
+            showSnackbar('بازهٔ زمانی واردشده معتبر نیست.');
             return;
         }
 
-        if (parsedStart.year > parsedEnd.year || (parsedStart.year === parsedEnd.year && parsedStart.month > parsedEnd.month) ||
-            (parsedStart.year === parsedEnd.year && parsedStart.month === parsedEnd.month && parsedStart.day > parsedEnd.day)) {
+        if (workHoursMethod === 'period' && !isActualWorkedHoursValid) {
             setResult(null);
+            setWorkedHoursError('مجموع ساعات کارکرد واقعی را به‌صورت عدد معتبر وارد کنید.');
             return;
         }
 
-        if (periodBuckets.length === 0) {
+        if (workHoursMethod === 'period' && requiredWorkHours === null) {
             setResult(null);
+            showSnackbar('برای بازهٔ انتخاب‌شده اطلاعات ساعات کارکرد موظفی در دسترس نیست.');
             return;
         }
 
-        const calculation = calculateSalaryFromPeriodData(parsedStart, parsedEnd, periodBuckets, getDailyWorkMinutes(dailyWorkTime));
+        if (workHoursMethod === 'period' && (requiredWorkHours ?? 0) <= 0) {
+            setResult(null);
+            showSnackbar('برای بازهٔ انتخاب‌شده ساعات کارکرد موظفی قابل محاسبه نیست.');
+            return;
+        }
+
+        if (
+            workHoursMethod === 'period'
+            && maximumAllowedWorkHours !== null
+            && normalizedActualWorkedHours > maximumAllowedWorkHours
+        ) {
+            setResult(null);
+            setWorkedHoursError(getMaximumWorkHoursError());
+            return;
+        }
+
+        setWorkedHoursError('');
+        const countedWorkHours = Math.min(normalizedActualWorkedHours, requiredWorkHours ?? 0);
+        const calculation = workHoursMethod === 'daily'
+            ? calculateSalaryFromPeriodData(
+                parsedStartDate,
+                parsedEndDate,
+                periodBuckets,
+                getDailyWorkMinutes(dailyWorkTime),
+            )
+            : calculateSalaryFromWorkRatio(
+                parsedStartDate,
+                parsedEndDate,
+                periodBuckets,
+                countedWorkHours / (requiredWorkHours ?? 1),
+            );
 
         if (calculation.breakdown.length === 0) {
             setResult(null);
+            showSnackbar('برای بازهٔ انتخاب‌شده دادهٔ مزد روزانه‌ای برای محاسبه وجود ندارد.');
             return;
         }
 
         setResult(calculation);
+        notifyCalculationCompleted();
         setShowDetailedBreakdown(false);
+        setSnackbarVisible(false);
+
+        if (workHoursMethod === 'period' && normalizedActualWorkedHours > (requiredWorkHours ?? 0)) {
+            const overtimeHours = normalizedActualWorkedHours - (requiredWorkHours ?? 0);
+            showSnackbar(
+                `در این بازه ${formatOvertimeDuration(overtimeHours)} مشمول دریافت فوق العاده اضافه کاری می باشید.`,
+                'info',
+            );
+        }
     };
 
     const formattedResult = useMemo(() => {
@@ -265,7 +435,7 @@ export default function BaseSalaryScreen() {
                                 </View>
                             </View>
                             <HiddenCalculationGuide>
-                                مجموع دوره‌ها از محاسبهٔ زیر به دست می‌آید: حداقل مزد روزانهٔ مصوب × روزهای بازه در همان دوره × (دقایق کار روزانه ÷ ۴۴۰).
+                                یکی از دو روش را انتخاب کنید: نسبت ساعات روزانه به ۷ ساعت و ۲۰ دقیقه، یا نسبت مجموع ساعات واقعی کارکرد به ساعات موظفی بازه. مبلغ هر دوره از حاصل‌ضرب حداقل مزد روزانه، روزهای کارکرد و نسبت روش انتخابی به دست می‌آید.
                             </HiddenCalculationGuide>
                             <View style={styles.metricsRow}>
                                 <DateInputField
@@ -284,7 +454,145 @@ export default function BaseSalaryScreen() {
                                 />
                             </View>
 
-                            <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+                            <View style={[styles.workHoursSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                    روش محاسبهٔ ساعات کارکرد
+                                </ThemedText>
+                                <View accessibilityRole="radiogroup" style={styles.workHoursMethods}>
+                                    {([
+                                        { value: 'daily', label: 'ساعات کارکرد روزانه' },
+                                        { value: 'period', label: 'مجموع ساعات کارکرد کارگر در بازه ی زمانی انتخابی' },
+                                    ] as const).map((option) => {
+                                        const selected = workHoursMethod === option.value;
+                                        return (
+                                            <Pressable
+                                                key={option.value}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ selected }}
+                                                accessibilityLabel={option.label}
+                                                onPress={() => handleWorkHoursMethodChange(option.value)}
+                                                style={[
+                                                    styles.workHoursMethodOption,
+                                                    {
+                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        borderColor: selected ? theme.primary : theme.border,
+                                                        borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
+                                                    },
+                                                ]}
+                                            >
+                                                <MaterialCommunityIcons
+                                                    name={selected ? 'radiobox-marked' : 'radiobox-blank'}
+                                                    size={20}
+                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                />
+                                                <ThemedText
+                                                    type="smallBold"
+                                                    style={[
+                                                        styles.workHoursMethodLabel,
+                                                        { color: selected ? theme.primaryText : theme.text },
+                                                    ]}
+                                                >
+                                                    {option.label}
+                                                </ThemedText>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                                <View style={[styles.workHoursDivider, { backgroundColor: theme.border }]} />
+                                {workHoursMethod === 'daily' ? (
+                                    <DailyWorkTimeField
+                                        value={dailyWorkTime}
+                                        embedded
+                                        onChange={(value) => {
+                                            setDailyWorkTime(value);
+                                            setResult(null);
+                                        }}
+                                    />
+                                ) : (
+                                    <View style={styles.workHoursDetails}>
+                                        <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                            ساعات کارکرد کارگر در بازه ی زمانی انتخاب شده
+                                        </ThemedText>
+                                        <View
+                                            style={[
+                                                styles.workHoursStepper,
+                                                {
+                                                    backgroundColor: theme.surface,
+                                                    borderColor: workedHoursError ? theme.error : theme.border,
+                                                    direction: 'ltr',
+                                                },
+                                            ]}
+                                        >
+                                            <Pressable
+                                                onPress={() => changeActualWorkedHours(-1)}
+                                                disabled={normalizedActualWorkedHours <= 0}
+                                                style={({ pressed }) => [
+                                                    styles.workHoursStepperButton,
+                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
+                                                ]}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="کاهش ساعات کارکرد کارگر"
+                                            >
+                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                            </Pressable>
+                                            <NumericInputField
+                                                mode="decimal"
+                                                accessibilityLabel="ساعات کارکرد کارگر در بازه ی زمانی انتخاب شده"
+                                                onChangeText={handleActualWorkedHoursChange}
+                                                placeholder="مثلاً ۱۳۰"
+                                                placeholderTextColor={theme.textMuted}
+                                                returnKeyType="done"
+                                                style={[styles.workHoursInput, { color: theme.text }]}
+                                                textAlign="center"
+                                                value={actualWorkedHoursValue}
+                                            />
+                                            <Pressable
+                                                onPress={() => changeActualWorkedHours(1)}
+                                                disabled={
+                                                    maximumAllowedWorkHours !== null
+                                                    && normalizedActualWorkedHours >= maximumAllowedWorkHours
+                                                }
+                                                style={({ pressed }) => [
+                                                    styles.workHoursStepperButton,
+                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    maximumAllowedWorkHours !== null
+                                                    && normalizedActualWorkedHours >= maximumAllowedWorkHours
+                                                    && styles.workHoursStepperButtonDisabled,
+                                                ]}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="افزایش ساعات کارکرد کارگر"
+                                            >
+                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                            </Pressable>
+                                        </View>
+                                        {workedHoursError ? (
+                                            <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
+                                                {workedHoursError}
+                                            </ThemedText>
+                                        ) : null}
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • ساعات موظفی این بازه: {requiredWorkHours === null
+                                                ? isLoadingData ? 'در حال محاسبه…' : 'در دسترس نیست'
+                                                : `${toPersianDigits(requiredWorkHours.toFixed(2))} ساعت`}
+                                        </ThemedText>
+                                        {maximumAllowedWorkHours !== null ? (
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • حداکثر ساعات قابل ورود: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
+                                            {' '}(شامل {toPersianDigits(String(overtimeHoursLimit))} ساعت سقف اضافه‌کاری)
+                                        </ThemedText>
+                                        ) : null}
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • نسبت کارکرد = ساعات کارکرد کارگر ÷ ساعات موظفی کارگر
+                                        </ThemedText>
+                                        {workRatio !== null && requiredWorkHours !== null && requiredWorkHours > 0 ? (
+                                            <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                                • نسبت ساعات کارکرد: {toPersianDigits(workRatio.toFixed(4))}
+                                            </ThemedText>
+                                        ) : null}
+                                    </View>
+                                )}
+                            </View>
 
                             <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                 <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -318,7 +626,7 @@ export default function BaseSalaryScreen() {
                                 <MaterialCommunityIcons
                                     name={isWorkerInsuranceExempt ? 'checkbox-marked' : 'checkbox-blank-outline'}
                                     size={22}
-                                    color={isWorkerInsuranceExempt ? theme.primary : theme.textSecondary}
+                                    color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
                                     <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
@@ -340,13 +648,13 @@ export default function BaseSalaryScreen() {
                                     onPress={() => setIsLegalBasisVisible((visible) => !visible)}
                                     style={styles.insuranceLegalToggle}
                                 >
-                                    <ThemedText type="smallBold" style={[styles.insuranceLegalToggleLabel, { color: theme.primary }]}>
+                                    <ThemedText type="smallBold" style={[styles.insuranceLegalToggleLabel, { color: theme.primaryText }]}>
                                         مبنای قانونی معافیت
                                     </ThemedText>
                                     <MaterialCommunityIcons
                                         name={isLegalBasisVisible ? 'chevron-up' : 'chevron-down'}
                                         size={18}
-                                        color={theme.primary}
+                                        color={theme.primaryText}
                                     />
                                 </Pressable>
                                 {isLegalBasisVisible ? (
@@ -364,7 +672,7 @@ export default function BaseSalaryScreen() {
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     loading={isLoadingData}
                                     disabled={isLoadingData}
                                 >
@@ -411,7 +719,7 @@ export default function BaseSalaryScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         حقوق پایه پس از کسر سهم بیمهٔ کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
                                                     </ThemedText>
                                                 </View>
@@ -419,7 +727,7 @@ export default function BaseSalaryScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         حقوق پایه پس از کسر مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {remainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : toPersianDigits(formatCurrency(remainingClaimAmount))}
@@ -429,7 +737,7 @@ export default function BaseSalaryScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         حقوق پایه پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {finalRemainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : toPersianDigits(formatCurrency(finalRemainingClaimAmount))}
@@ -453,13 +761,13 @@ export default function BaseSalaryScreen() {
                                                     },
                                                 ]}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetailedBreakdown ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
                                                 <MaterialCommunityIcons
                                                     name={showDetailedBreakdown ? 'chevron-up' : 'chevron-down'}
                                                     size={18}
-                                                    color={theme.primary}
+                                                    color={theme.primaryText}
                                                 />
                                             </Pressable>
                                         </View>
@@ -486,7 +794,7 @@ export default function BaseSalaryScreen() {
                                                         <View style={styles.breakdownDetailGrid}>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>تعداد روزهای پوشش</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(String(item.daysCovered)) + ' روز'}
                                                                 </ThemedText>
                                                             </View>
@@ -504,7 +812,7 @@ export default function BaseSalaryScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                     مبلغ دوره
                                                                 </ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(formatCurrency(item.amount))}
                                                                 </ThemedText>
                                                             </View>
@@ -513,7 +821,7 @@ export default function BaseSalaryScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                     حق بیمه پرداختی به سازمان تامین اجتماعی
                                                                 </ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(formatCurrency(Math.round(item.amount * 0.3)))}
                                                                 </ThemedText>
                                                             </View>
@@ -543,14 +851,14 @@ export default function BaseSalaryScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
+                style={{ backgroundColor: snackbarType === 'info' ? theme.infoFill : theme.errorFill, borderRadius: Radius.md }}
                 action={{
                     label: 'بستن',
                     onPress: () => setSnackbarVisible(false),
-                    labelStyle: { color: theme.surface },
+                    labelStyle: { color: theme.onStatus },
                 }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>
                     {snackbarMessage}
                 </ThemedText>
             </Snackbar>
@@ -584,6 +892,7 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     headerText: {
+        alignSelf: 'stretch',
         flex: 1,
         gap: Spacing.one,
     },
@@ -787,6 +1096,66 @@ const styles = StyleSheet.create({
     pageDescription: {
         lineHeight: 20,
         fontSize: 13,
+    },
+    workHoursSection: {
+        gap: Spacing.two,
+        padding: Spacing.two,
+        borderRadius: 12,
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    workHoursMethods: {
+        gap: Spacing.one,
+    },
+    workHoursMethodOption: {
+        minHeight: 52,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.two,
+        paddingHorizontal: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 10,
+    },
+    workHoursMethodLabel: {
+        flexShrink: 1,
+        lineHeight: 20,
+    },
+    workHoursDivider: {
+        height: StyleSheet.hairlineWidth,
+        marginVertical: Spacing.one,
+    },
+    workHoursDetails: {
+        gap: Spacing.two,
+    },
+    workHoursInput: {
+        flex: 1,
+        minHeight: 48,
+        paddingVertical: 0,
+        fontFamily: 'AppFont-Bold',
+        fontSize: 16,
+        writingDirection: 'ltr',
+    },
+    workHoursHint: {
+        fontSize: 12,
+        lineHeight: 18,
+    },
+    workHoursStepper: {
+        minHeight: 54,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: 12,
+        padding: Spacing.one,
+        gap: Spacing.one,
+    },
+    workHoursStepperButton: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 10,
+    },
+    workHoursStepperButtonDisabled: {
+        opacity: 0.4,
     },
     sectionLabel: {
         fontSize: 11,

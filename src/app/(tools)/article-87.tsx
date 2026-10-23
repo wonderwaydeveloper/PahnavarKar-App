@@ -13,6 +13,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { calculateArticle87WorkPermitFee } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 const FIXED_RATE_PER_SQUARE_METER = 55000;
 
@@ -37,6 +38,7 @@ export default function Article87Screen() {
         });
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const numericValue = Number(normalizeDigits(area.trim()));
 
@@ -46,6 +48,7 @@ export default function Article87Screen() {
         }
 
         setResult(calculateArticle87WorkPermitFee(numericValue));
+        notifyCalculationCompleted();
     };
 
     return (
@@ -104,7 +107,7 @@ export default function Article87Screen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش متراژ زیربنا"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                     </Pressable>
 
                                     <NumericInputField
@@ -127,7 +130,7 @@ export default function Article87Screen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش متراژ زیربنا"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -138,7 +141,7 @@ export default function Article87Screen() {
                                     onPress={handleCalculate}
                                     icon="calculator"
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                 >
@@ -155,7 +158,7 @@ export default function Article87Screen() {
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                                 مبلغ نهایی
                                             </ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                                 {toPersianDigits(formatCurrency(result))}
                                             </ThemedText>
                                         </View>
@@ -176,7 +179,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },

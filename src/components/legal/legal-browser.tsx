@@ -40,7 +40,7 @@ export function LegalScreen({ loading, error, onRetry, children }: LegalScreenPr
                                 { backgroundColor: pressed ? theme.surfaceVariant : theme.primaryContainer },
                             ]}
                         >
-                            <ThemedText type="smallBold" style={{ color: theme.primary }}>تلاش دوباره</ThemedText>
+                            <ThemedText type="smallBold" style={{ color: theme.primaryText }}>تلاش دوباره</ThemedText>
                         </Pressable>
                     </View>
                 ) : children}
@@ -70,7 +70,7 @@ export function LegalListRow({ title, subtitle, icon, onPress, trailingLabel }: 
             ]}
         >
             <View style={[styles.rowIcon, { backgroundColor: theme.primaryContainer }]}>
-                <MaterialCommunityIcons name={icon} size={22} color={theme.primary} />
+                <MaterialCommunityIcons name={icon} size={22} color={theme.primaryText} />
             </View>
             <View style={styles.rowText}>
                 <ThemedText type="smallBold" style={{ color: theme.text }}>{title}</ThemedText>
@@ -117,7 +117,7 @@ export function LegalDescriptionCard({ children }: { children: ReactNode }) {
 
     return (
         <View style={[styles.descriptionCard, { backgroundColor: theme.primaryContainer, borderColor: theme.border }]}>
-            <MaterialCommunityIcons name="information-outline" size={20} color={theme.primary} />
+            <MaterialCommunityIcons name="information-outline" size={20} color={theme.primaryText} />
             <ThemedText type="small" style={{ color: theme.text, flex: 1 }}>
                 {children}
             </ThemedText>

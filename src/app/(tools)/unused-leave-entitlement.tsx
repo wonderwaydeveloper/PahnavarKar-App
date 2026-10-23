@@ -16,6 +16,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { calculateUnusedLeaveEntitlement, calculateUnusedLeaveMonths, parseDateInput, type UnusedLeaveEntitlementCalculationResult } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 export default function UnusedLeaveEntitlementScreen() {
     const theme = useTheme();
@@ -216,6 +217,7 @@ export default function UnusedLeaveEntitlementScreen() {
         return 0;
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const parsedStart = parseDateInput(startDate);
         const parsedEnd = parseDateInput(endDate);
@@ -260,6 +262,7 @@ export default function UnusedLeaveEntitlementScreen() {
         }
 
         setResult(calculation.totalSavedLeaveDays);
+        notifyCalculationCompleted();
         setCalculationDetails(calculation);
         setShowDetailedBreakdown(false);
     };
@@ -334,7 +337,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش ذخیره مرخصی سال‌های قبل"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                     <NumericInputField
                                         mode="decimal"
@@ -355,7 +358,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش ذخیره مرخصی سال‌های قبل"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -382,7 +385,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                                         accessibilityRole="button"
                                                         accessibilityLabel="کاهش مرخصی استفاده‌شده"
                                                     >
-                                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                                     </Pressable>
                                                     <NumericInputField
                                                         mode="decimal"
@@ -403,7 +406,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                                         accessibilityRole="button"
                                                         accessibilityLabel="افزایش مرخصی استفاده‌شده"
                                                     >
-                                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -418,7 +421,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                     onPress={handleCalculate}
                                     icon="calendar-clock"
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     loading={isLoadingData}
@@ -438,7 +441,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                                 <ThemedText type="small" style={[styles.resultLabel, { color: theme.textSecondary }]}>
                                                     ذخیره نهایی مرخصی کارگر
                                                 </ThemedText>
-                                                <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                                <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                                     {formattedResult}
                                                 </ThemedText>
                                             </View>
@@ -458,13 +461,13 @@ export default function UnusedLeaveEntitlementScreen() {
                                                     },
                                                 ]}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetailedBreakdown ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
                                                 <MaterialCommunityIcons
                                                     name={showDetailedBreakdown ? 'chevron-up' : 'chevron-down'}
                                                     size={18}
-                                                    color={theme.primary}
+                                                    color={theme.primaryText}
                                                 />
                                             </Pressable>
                                         </View>
@@ -478,7 +481,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                                     <View style={styles.breakdownDetailGrid}>
                                                         <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>کل استحقاق</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(calculationDetails.totalEntitlementDays)} روز</ThemedText></View>
                                                         <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>کل مرخصی استفاده‌شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(calculationDetails.totalUsedLeaveDays)} روز</ThemedText></View>
-                                                        <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره نهایی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatNumber(calculationDetails.totalSavedLeaveDays)} روز</ThemedText></View>
+                                                        <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره نهایی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(calculationDetails.totalSavedLeaveDays)} روز</ThemedText></View>
                                                     </View>
                                                 </View>
                                                 {calculationDetails.breakdown.map((item) => (
@@ -487,9 +490,9 @@ export default function UnusedLeaveEntitlementScreen() {
                                                         <View style={styles.breakdownDetailGrid}>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>استحقاق این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(item.entitlementDays)} روز</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مرخصی استفاده‌شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(item.usedLeaveDays)} روز</ThemedText></View>
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatNumber(item.savedLeaveDays)} روز</ThemedText></View>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(item.savedLeaveDays)} روز</ThemedText></View>
                                                             {item.excessUsedDays > 0 ? <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مازاد کسرشده از ذخیره قبل</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.error }]}>{formatNumber(item.excessUsedDays)} روز</ThemedText></View> : null}
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره تجمعی پس از این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatNumber(item.carryAfter)} روز</ThemedText></View>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره تجمعی پس از این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(item.carryAfter)} روز</ThemedText></View>
                                                         </View>
                                                     </View>
                                                 ))}
@@ -516,14 +519,14 @@ export default function UnusedLeaveEntitlementScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
+                style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }}
                 action={{
                     label: 'بستن',
                     onPress: () => setSnackbarVisible(false),
-                    labelStyle: { color: theme.surface },
+                    labelStyle: { color: theme.onStatus },
                 }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>
                     {snackbarMessage}
                 </ThemedText>
             </Snackbar>
@@ -598,6 +601,7 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     headerText: {
+        alignSelf: 'stretch',
         flex: 1,
         gap: Spacing.one,
     },

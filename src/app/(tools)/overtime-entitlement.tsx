@@ -28,6 +28,7 @@ import {
     type OvertimeEntitlementCalculationResult,
     type SalaryPeriodBucket,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 export default function OvertimeEntitlementScreen() {
     const theme = useTheme();
@@ -231,6 +232,7 @@ export default function OvertimeEntitlementScreen() {
         closePicker();
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const parsedStart = parseDateInput(startDate);
         const parsedEnd = parseDateInput(endDate);
@@ -285,6 +287,7 @@ export default function OvertimeEntitlementScreen() {
         }
 
         setResult(calculation);
+        notifyCalculationCompleted();
         setShowDetailedBreakdown(false);
     };
 
@@ -376,7 +379,7 @@ export default function OvertimeEntitlementScreen() {
                                 helperText="جهت محاسبه پایه سنوات استحقاقی و اعمال آن در محاسبات"
                             />
                             <WorkshopTypeSelector value={workshopType} onValueChange={setWorkshopType} />
-                            {workshopType === 'classified' ? <View style={[styles.metricBox, { backgroundColor: theme.surfaceVariant }]}><ThemedText type="small" style={[styles.sectionLabel, { color: theme.textSecondary }]}>گروه شغلی</ThemedText><Menu visible={groupMenuVisible} onDismiss={() => setGroupMenuVisible(false)} anchor={<Pressable onPress={() => setGroupMenuVisible(true)} style={[styles.dateInput, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={{ color: theme.text }}>{selectedGroup == null ? 'انتخاب گروه' : `گروه ${toPersianDigits(selectedGroup)}`}</ThemedText><MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primary} /></Pressable>}>{jobGroups.map((group) => <FontAwareMenuItem key={group.id} title={`گروه ${toPersianDigits(group.group_number)}`} onPress={() => { setSelectedGroup(group.group_number); setGroupMenuVisible(false); }} />)}</Menu></View> : null}
+                            {workshopType === 'classified' ? <View style={[styles.metricBox, { backgroundColor: theme.surfaceVariant }]}><ThemedText type="small" style={[styles.sectionLabel, { color: theme.textSecondary }]}>گروه شغلی</ThemedText><Menu visible={groupMenuVisible} onDismiss={() => setGroupMenuVisible(false)} anchor={<Pressable onPress={() => setGroupMenuVisible(true)} style={[styles.dateInput, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={{ color: theme.text }}>{selectedGroup == null ? 'انتخاب گروه' : `گروه ${toPersianDigits(selectedGroup)}`}</ThemedText><MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primaryText} /></Pressable>}>{jobGroups.map((group) => <FontAwareMenuItem key={group.id} title={`گروه ${toPersianDigits(group.group_number)}`} onPress={() => { setSelectedGroup(group.group_number); setGroupMenuVisible(false); }} />)}</Menu></View> : null}
                             <SettlementThrough1391Field checked={settledThrough1391} enabled={canUseSettlementPath} onChange={setSettledThrough1391} />
 
                             <View style={[styles.metricBox, { backgroundColor: theme.surfaceVariant }]}>
@@ -388,7 +391,7 @@ export default function OvertimeEntitlementScreen() {
                                         <ThemedText type="small" style={[styles.fieldValue, { color: theme.text }]}>
                                             {dailyOvertimeHours.split(':').map((part) => toPersianDigits(part)).join(':')}
                                         </ThemedText>
-                                        <MaterialCommunityIcons name="clock-outline" size={18} color={theme.primary} />
+                                        <MaterialCommunityIcons name="clock-outline" size={18} color={theme.primaryText} />
                                     </View>
                                 </Pressable>
                             </View>
@@ -425,7 +428,7 @@ export default function OvertimeEntitlementScreen() {
                                 <MaterialCommunityIcons
                                     name={isWorkerInsuranceExempt ? 'checkbox-marked' : 'checkbox-blank-outline'}
                                     size={22}
-                                    color={isWorkerInsuranceExempt ? theme.primary : theme.textSecondary}
+                                    color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
                                     <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
@@ -447,13 +450,13 @@ export default function OvertimeEntitlementScreen() {
                                     onPress={() => setIsLegalBasisVisible((visible) => !visible)}
                                     style={styles.insuranceLegalToggle}
                                 >
-                                    <ThemedText type="smallBold" style={[styles.insuranceLegalToggleLabel, { color: theme.primary }]}>
+                                    <ThemedText type="smallBold" style={[styles.insuranceLegalToggleLabel, { color: theme.primaryText }]}>
                                         مبنای قانونی معافیت
                                     </ThemedText>
                                     <MaterialCommunityIcons
                                         name={isLegalBasisVisible ? 'chevron-up' : 'chevron-down'}
                                         size={18}
-                                        color={theme.primary}
+                                        color={theme.primaryText}
                                     />
                                 </Pressable>
                                 {isLegalBasisVisible ? (
@@ -471,7 +474,7 @@ export default function OvertimeEntitlementScreen() {
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     loading={isLoadingData}
                                     disabled={isLoadingData}
                                 >
@@ -514,7 +517,7 @@ export default function OvertimeEntitlementScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         اضافه کاری پس از کسر سهم بیمه ی کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
                                                     </ThemedText>
                                                 </View>
@@ -522,7 +525,7 @@ export default function OvertimeEntitlementScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         اضافه‌کاری پس از کسر مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {remainingOvertimeAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : formatCurrency(remainingOvertimeAmount)}
@@ -532,7 +535,7 @@ export default function OvertimeEntitlementScreen() {
                                                     <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
                                                         اضافه‌کاری پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
                                                         {finalRemainingOvertimeAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : formatCurrency(finalRemainingOvertimeAmount)}
@@ -555,13 +558,13 @@ export default function OvertimeEntitlementScreen() {
                                                     },
                                                 ]}
                                             >
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>
                                                     {showDetailedBreakdown ? 'عدم نمایش' : 'نمایش جزئیات'}
                                                 </ThemedText>
                                                 <MaterialCommunityIcons
                                                     name={showDetailedBreakdown ? 'chevron-up' : 'chevron-down'}
                                                     size={18}
-                                                    color={theme.primary}
+                                                    color={theme.primaryText}
                                                 />
                                             </Pressable>
                                         </View>
@@ -586,7 +589,7 @@ export default function OvertimeEntitlementScreen() {
                                                         </View>
 
                                                         <View style={styles.breakdownDetailGrid}>
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{`${formatDisplayedDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا ${formatDisplayedDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}`}</ThemedText></View>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{`${formatDisplayedDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا ${formatDisplayedDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}`}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>نوع بازه</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{item.phase === 'before-anniversary' ? 'پیش از سالگرد استخدام' : 'بعد از سالگرد استخدام'}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
@@ -617,7 +620,7 @@ export default function OvertimeEntitlementScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                     مبلغ این دوره
                                                                 </ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(formatCurrency(item.amount))}
                                                                 </ThemedText>
                                                             </View>
@@ -625,7 +628,7 @@ export default function OvertimeEntitlementScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                     حق بیمه پرداختی به سازمان تامین اجتماعی
                                                                 </ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
                                                                     {toPersianDigits(formatCurrency(Math.round(item.amount * 0.3)))}
                                                                 </ThemedText>
                                                             </View>
@@ -667,14 +670,14 @@ export default function OvertimeEntitlementScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
+                style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }}
                 action={{
                     label: 'بستن',
                     onPress: () => setSnackbarVisible(false),
-                    labelStyle: { color: theme.surface },
+                    labelStyle: { color: theme.onStatus },
                 }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>
                     {snackbarMessage}
                 </ThemedText>
             </Snackbar>
@@ -709,6 +712,7 @@ const styles = StyleSheet.create({
     },
     headerText: {
         flex: 1,
+        alignSelf: 'stretch',
         gap: Spacing.one,
     },
     pageTitle: {

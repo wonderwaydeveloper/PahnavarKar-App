@@ -312,7 +312,7 @@ export function PersianDatePickerModal({
             <ThemedText type="small" style={{ color: theme.textSecondary }}>
               پیش‌نمایش تاریخ
             </ThemedText>
-            <ThemedText type="bodyBold" style={{ color: theme.primary }}>
+            <ThemedText type="bodyBold" style={{ color: theme.primaryText }}>
               {`${formatPersianNumber(year)}/${formatPersianNumber(month)}/${formatPersianNumber(resolvedDay)}`}
             </ThemedText>
           </View>
@@ -333,7 +333,7 @@ export function PersianDatePickerModal({
               compact
               onPress={handleConfirm}
               buttonColor={theme.primary}
-              textColor={theme.surface}
+              textColor={theme.onPrimary}
               style={styles.actionButton}
               labelStyle={styles.actionLabel}
             >

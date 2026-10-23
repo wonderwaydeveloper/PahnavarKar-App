@@ -91,7 +91,7 @@ function HomeTabItem({ route, isActive, onPress, theme, onLayout }: HomeTabItemP
             <ThemedText
                 type="smallBold"
                 numberOfLines={1}
-                style={[styles.tabLabel, { color: isActive ? theme.primary : theme.textSecondary }]}
+                style={[styles.tabLabel, { color: isActive ? theme.primaryText : theme.textSecondary }]}
             >
                 {route.label}
             </ThemedText>
@@ -261,8 +261,8 @@ export default function HomeTabScreen() {
                         },
                     ]}
                 >
-                    <MaterialCommunityIcons name="calculator-variant" size={22} color={theme.surface} />
-                    <ThemedText type="smallBold" style={{ color: theme.surface }}>
+                    <MaterialCommunityIcons name="calculator-variant" size={22} color={theme.onPrimary} />
+                    <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                         محاسبات جامع
                     </ThemedText>
                 </Pressable>

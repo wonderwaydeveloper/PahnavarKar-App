@@ -25,7 +25,7 @@ export function LegalCategoryList() {
             <View style={{ alignItems: 'center', gap: Spacing.two, padding: Spacing.four }}>
                 <ThemedText type="small" themeColor="error" style={{ textAlign: 'center' }}>{error}</ThemedText>
                 <Pressable onPress={retry} accessibilityRole="button" style={{ padding: Spacing.two }}>
-                    <ThemedText type="smallBold" themeColor="primary">تلاش دوباره</ThemedText>
+                    <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
                 </Pressable>
             </View>
         );

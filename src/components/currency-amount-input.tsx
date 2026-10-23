@@ -69,7 +69,7 @@ export function CurrencyAmountInput({
                 accessibilityRole="button"
                 accessibilityLabel="کاهش مبلغ پرداخت‌شده"
             >
-                <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
             </Pressable>
             <NumericInputField
                 value={isFocused ? value : formatAmount(value)}
@@ -95,7 +95,7 @@ export function CurrencyAmountInput({
                 accessibilityRole="button"
                 accessibilityLabel="افزایش مبلغ پرداخت‌شده"
             >
-                <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
             </Pressable>
         </View>
     );

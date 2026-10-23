@@ -51,11 +51,11 @@ export function WorkshopTypeSelector({ value, onValueChange }: WorkshopTypeSelec
                             <MaterialCommunityIcons
                                 name={isSelected ? 'radiobox-marked' : 'radiobox-blank'}
                                 size={20}
-                                color={isSelected ? theme.primary : theme.textSecondary}
+                                color={isSelected ? theme.primaryText : theme.textSecondary}
                             />
                             <ThemedText
                                 type="smallBold"
-                                style={[styles.optionLabel, { color: isSelected ? theme.primary : theme.text }]}
+                                style={[styles.optionLabel, { color: isSelected ? theme.primaryText : theme.text }]}
                             >
                                 {option.label}
                             </ThemedText>

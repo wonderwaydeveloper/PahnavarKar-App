@@ -15,7 +15,7 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
   return (
     <AppText
       style={[
-        { color: type === 'linkPrimary' ? theme.primary : theme[themeColor ?? 'text'] },
+        { color: type === 'linkPrimary' ? theme.primaryText : theme[themeColor ?? 'text'] },
         type === 'default' && styles.default,
         type === 'title' && styles.title,
         type === 'small' && styles.small,

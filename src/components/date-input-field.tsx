@@ -58,7 +58,7 @@ export function DateInputField({
                         {displayValue}
                     </ThemedText>
 
-                    <MaterialCommunityIcons name={iconName} size={18} color={theme.primary} />
+                    <MaterialCommunityIcons name={iconName} size={18} color={theme.primaryText} />
                 </View>
             </Pressable>
 

@@ -17,6 +17,7 @@ import {
     type UnemploymentInsuranceEntitlementResult,
     type UnemploymentInsuranceMaritalStatus,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 const latinDigits = '0123456789';
@@ -47,6 +48,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
     const [result, setResult] = useState<UnemploymentInsuranceEntitlementResult | null>(null);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const normalizedInsuranceMonths = Number(normalizeDigits(insuranceMonths || '0'));
         const normalizedUsedMonths = Number(normalizeDigits(usedMonths || '0'));
@@ -67,6 +69,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
             normalizedUsedMonths,
             maritalStatus,
         ));
+        notifyCalculationCompleted();
     };
 
     return (
@@ -120,7 +123,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش سابقه بیمه"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                     <NumericInputField
                                         value={insuranceMonths}
@@ -140,7 +143,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش سابقه بیمه"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -161,7 +164,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش مدت استفاده از مقرری"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                     <NumericInputField
                                         value={usedMonths}
@@ -181,7 +184,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش مدت استفاده از مقرری"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -214,9 +217,9 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                                 <MaterialCommunityIcons
                                                     name={isSelected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={19}
-                                                    color={isSelected ? theme.primary : theme.textSecondary}
+                                                    color={isSelected ? theme.primaryText : theme.textSecondary}
                                                 />
-                                                <ThemedText type="smallBold" style={{ color: isSelected ? theme.primary : theme.text }}>
+                                                <ThemedText type="smallBold" style={{ color: isSelected ? theme.primaryText : theme.text }}>
                                                     {label}
                                                 </ThemedText>
                                             </Pressable>
@@ -231,7 +234,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                     onPress={handleCalculate}
                                     icon="briefcase-account"
                                     buttonColor={theme.primary}
-                                    textColor={theme.surface}
+                                    textColor={theme.onPrimary}
                                     style={styles.actionButton}
                                     labelStyle={styles.actionLabel}
                                 >
@@ -256,7 +259,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                                 <ThemedText type="small" style={[styles.resultLabel, { color: theme.textSecondary }]}>
                                                     استحقاق نهایی
                                                 </ThemedText>
-                                                <ThemedText type="largeTitle" style={[styles.resultValue, { color: theme.primary }]}>
+                                                <ThemedText type="largeTitle" style={[styles.resultValue, { color: theme.primaryText }]}>
                                                     {formatMonths(result.remainingEntitlementMonths)}
                                                 </ThemedText>
                                             </View>
@@ -276,10 +279,10 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}
-                style={{ backgroundColor: theme.error, borderRadius: Radius.md }}
-                action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.surface } }}
+                style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }}
+                action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}
             >
-                <ThemedText type="small" style={{ color: theme.surface }}>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>
                     مقادیر واردشده معتبر نیستند.
                 </ThemedText>
             </Snackbar>
@@ -293,7 +296,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     rulesBox: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },

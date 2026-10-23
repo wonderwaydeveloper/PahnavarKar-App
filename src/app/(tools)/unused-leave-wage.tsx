@@ -17,12 +17,14 @@ import { CalculationDescriptionBox, CalculationResultHeading } from '@/component
 import { ThemedView } from '@/components/themed-view';
 import { WorkshopTypeSelector } from '@/components/workshop-type-selector';
 import { Radius, Spacing } from '@/constants/theme';
-import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
+import { fetchOfficialHolidaysBetweenDates, fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
+import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
+    calculateOrdinaryWorkHoursFromPeriodData,
     calculateEntitledSeniorityFromPeriodData,
     calculateUnusedLeaveEntitlement,
     calculateUnusedLeaveMonths,
@@ -33,8 +35,10 @@ import {
     type UnusedLeaveWageCalculationResult,
     type UnusedLeaveWageMaritalStatus,
 } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 type PickerTarget = 'start' | 'end' | 'employment';
+type WorkHoursMethod = 'daily' | 'period';
 const CHILDREN_OPTIONS = Array.from({ length: 13 }, (_, index) => index);
 
 export default function UnusedLeaveWageScreen() {
@@ -52,6 +56,7 @@ export default function UnusedLeaveWageScreen() {
     const [startDate, setStartDate] = useState(defaultStartDate);
     const [endDate, setEndDate] = useState(defaultEndDate);
     const [employmentDate, setEmploymentDate] = useState(defaultStartDate);
+    const [workHoursMethod, setWorkHoursMethod] = useState<WorkHoursMethod>('daily');
     const [workshopType, setWorkshopType] = useState<EntitledSeniorityWorkshopType>('unclassified');
     const [settledThrough1391, setSettledThrough1391] = useState(false);
     const [jobGroups, setJobGroups] = useState<{ id: number; group_number: number; sort_order: number }[]>([]);
@@ -64,10 +69,13 @@ export default function UnusedLeaveWageScreen() {
     const [initialSavedLeaveDays, setInitialSavedLeaveDays] = useState('۰');
     const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
     const [periodBuckets, setPeriodBuckets] = useState<SalaryPeriodBucket[]>([]);
+    const [officialHolidayDates, setOfficialHolidayDates] = useState<string[]>([]);
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [result, setResult] = useState<UnusedLeaveWageCalculationResult | null>(null);
     const [dailyWorkTime, setDailyWorkTime] = useState('07:20');
+    const [actualWorkedHours, setActualWorkedHours] = useState<string | null>(null);
+    const [workedHoursError, setWorkedHoursError] = useState('');
     const [amountPaidToWorker, setAmountPaidToWorker] = useState('۰');
     const [showDetails, setShowDetails] = useState(false);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
@@ -109,11 +117,20 @@ export default function UnusedLeaveWageScreen() {
                     });
                 }
 
+                const sortedYears = years.map((year) => year.year).sort((left, right) => left - right);
+                const holidays = sortedYears.length > 0
+                    ? await fetchOfficialHolidaysBetweenDates(
+                        `${sortedYears[0]}/01/01`,
+                        `${sortedYears[sortedYears.length - 1]}/12/${String(jalaaliMonthLength(sortedYears[sortedYears.length - 1], 12)).padStart(2, '0')}`,
+                    )
+                    : [];
+
                 if (isMounted) {
                     setPeriodBuckets(buckets);
+                    setOfficialHolidayDates(holidays.map((holiday) => holiday.holiday_date));
                     setJobGroups(groups);
                     setSelectedGroup(groups[0]?.group_number ?? null);
-                    setAvailableYears(years.map((year) => year.year));
+                    setAvailableYears(sortedYears);
                 }
             } catch {
                 if (isMounted) {
@@ -141,6 +158,87 @@ export default function UnusedLeaveWageScreen() {
         if (!parsedLeft || !parsedRight) return 0;
         return parsedLeft.year * 10000 + parsedLeft.month * 100 + parsedLeft.day - (parsedRight.year * 10000 + parsedRight.month * 100 + parsedRight.day);
     };
+
+    const parsedStartDate = useMemo(() => parseDateInput(startDate), [startDate]);
+    const parsedEndDate = useMemo(() => parseDateInput(endDate), [endDate]);
+    const isDateRangeValid = !!parsedStartDate
+        && !!parsedEndDate
+        && compareDates(startDate, endDate) <= 0;
+    const requiredWorkHours = useMemo(() => {
+        if (!isDateRangeValid || !parsedStartDate || !parsedEndDate) {
+            return null;
+        }
+
+        const yearsInRange = Array.from(
+            { length: parsedEndDate.year - parsedStartDate.year + 1 },
+            (_, index) => parsedStartDate.year + index,
+        );
+        if (yearsInRange.some((year) => !periodBuckets.some((bucket) => bucket.year === year))) {
+            return null;
+        }
+
+        const calculation = calculateOrdinaryWorkHoursFromPeriodData(
+            parsedStartDate,
+            parsedEndDate,
+            periodBuckets,
+            officialHolidayDates,
+        );
+
+        return calculation.breakdown.length > 0 ? calculation.totalHours : null;
+    }, [isDateRangeValid, officialHolidayDates, parsedEndDate, parsedStartDate, periodBuckets]);
+    const maximumAllowedWorkHours = requiredWorkHours;
+    const actualWorkedHoursValue = actualWorkedHours ?? (requiredWorkHours?.toFixed(2) ?? '');
+    const normalizedActualWorkedHours = Number(actualWorkedHoursValue);
+    const isActualWorkedHoursValid = actualWorkedHoursValue.trim().length > 0
+        && Number.isFinite(normalizedActualWorkedHours)
+        && normalizedActualWorkedHours >= 0;
+    const workRatio = requiredWorkHours && isActualWorkedHoursValid
+        ? Math.min(normalizedActualWorkedHours, requiredWorkHours) / requiredWorkHours
+        : null;
+
+    const getMaximumWorkHoursError = () =>
+        `حداکثر ساعات قابل ورود در این بازه ${toPersianDigits((maximumAllowedWorkHours ?? 0).toFixed(2))} ساعت است.`;
+
+    const handleActualWorkedHoursChange = (value: string) => {
+        const normalizedValue = normalizeWorkHoursInput(value);
+        const numericValue = Number(normalizedValue);
+        if (
+            maximumAllowedWorkHours !== null
+            && Number.isFinite(numericValue)
+            && numericValue > maximumAllowedWorkHours
+        ) {
+            setActualWorkedHours(maximumAllowedWorkHours.toFixed(2));
+            setWorkedHoursError(getMaximumWorkHoursError());
+        } else {
+            setActualWorkedHours(normalizedValue);
+            setWorkedHoursError('');
+        }
+
+        setResult(null);
+    };
+
+    const changeActualWorkedHours = (amount: number) => {
+        const currentValue = Number(actualWorkedHoursValue) || 0;
+        const nextValue = Math.max(0, currentValue + amount);
+        const cappedValue = maximumAllowedWorkHours === null
+            ? nextValue
+            : Math.min(nextValue, maximumAllowedWorkHours);
+
+        handleActualWorkedHoursChange(cappedValue.toFixed(2));
+    };
+
+    const handleWorkHoursMethodChange = (method: WorkHoursMethod) => {
+        setWorkHoursMethod(method);
+        setWorkedHoursError('');
+        setResult(null);
+    };
+
+    const resetWorkHoursForDateChange = () => {
+        setActualWorkedHours(null);
+        setWorkedHoursError('');
+        setResult(null);
+    };
+
     const canUseSettlementPath = (parseDateInput(employmentDate)?.year ?? 0) <= 1391;
     const normalizedAmountPaid = amountPaidToWorker
         .replace(/[۰-۹]/g, (digit) => String(persianDigits.indexOf(digit)))
@@ -163,7 +261,6 @@ export default function UnusedLeaveWageScreen() {
         const parsedEnd = parseDateInput(endDate);
         return parsedStart && parsedEnd ? calculateUnusedLeaveMonths(parsedStart, parsedEnd) : null;
     })();
-    const parsedStartDate = parseDateInput(startDate);
     const formatDateParts = (date: { year: number; month: number; day: number }) =>
         `${toPersianDigits(String(date.year))}/${toPersianDigits(String(date.month).padStart(2, '0'))}/${toPersianDigits(String(date.day).padStart(2, '0'))}`;
     const getFullYearLabel = (segmentIndex: number) => {
@@ -231,32 +328,61 @@ export default function UnusedLeaveWageScreen() {
         if (pickerTarget === 'employment') {
             setEmploymentDate(value);
             if (compareDates(value, endDate) > 0) setEndDate(value);
+            resetWorkHoursForDateChange();
         } else if (pickerTarget === 'start') {
             setStartDate(value);
             setEmploymentDate(value);
             if ((parseDateInput(value)?.year ?? 0) > 1391) setSettledThrough1391(false);
             if (compareDates(value, endDate) > 0) setEndDate(value);
+            resetWorkHoursForDateChange();
         } else if (pickerTarget === 'end') {
             if (compareDates(value, startDate) < 0) {
                 setSnackbarMessage('تاریخ پایان باید برابر یا بزرگتر از تاریخ شروع باشد.');
                 setSnackbarVisible(true);
             } else {
                 setEndDate(value);
+                resetWorkHoursForDateChange();
             }
         }
         setPickerTarget(null);
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
-        const start = parseDateInput(startDate);
-        const end = parseDateInput(endDate);
         const employment = parseDateInput(employmentDate);
-        if (!start || !end || !employment || compareDates(employmentDate, endDate) > 0) {
+        if (!parsedStartDate || !parsedEndDate || !employment || !isDateRangeValid || compareDates(employmentDate, endDate) > 0) {
             setResult(null);
             setSnackbarMessage('تاریخ‌های واردشده معتبر نیستند.');
             setSnackbarVisible(true);
             return;
         }
+        if (workHoursMethod === 'period' && !isActualWorkedHoursValid) {
+            setResult(null);
+            setWorkedHoursError('مجموع ساعات کارکرد کارگر را به‌صورت عدد معتبر وارد کنید.');
+            return;
+        }
+        if (workHoursMethod === 'period' && requiredWorkHours === null) {
+            setResult(null);
+            setSnackbarMessage('برای بازهٔ انتخاب‌شده اطلاعات ساعات کارکرد موظفی در دسترس نیست.');
+            setSnackbarVisible(true);
+            return;
+        }
+        if (workHoursMethod === 'period' && (requiredWorkHours ?? 0) <= 0) {
+            setResult(null);
+            setSnackbarMessage('برای بازهٔ انتخاب‌شده ساعات کارکرد موظفی قابل محاسبه نیست.');
+            setSnackbarVisible(true);
+            return;
+        }
+        if (
+            workHoursMethod === 'period'
+            && maximumAllowedWorkHours !== null
+            && normalizedActualWorkedHours > maximumAllowedWorkHours
+        ) {
+            setResult(null);
+            setWorkedHoursError(getMaximumWorkHoursError());
+            return;
+        }
+        setWorkedHoursError('');
         if (workshopType === 'classified' && selectedGroup == null) {
             setResult(null);
             setSnackbarMessage('گروه شغلی را انتخاب کنید.');
@@ -275,7 +401,7 @@ export default function UnusedLeaveWageScreen() {
             return;
         }
 
-        const leaveCalculation = calculateUnusedLeaveEntitlement(start, end, usedLeaveDays, initialSavedDays);
+        const leaveCalculation = calculateUnusedLeaveEntitlement(parsedStartDate, parsedEndDate, usedLeaveDays, initialSavedDays);
         if (!leaveCalculation) {
             setResult(null);
             setSnackbarMessage('محاسبه میزان مرخصی ذخیره‌شده امکان‌پذیر نیست.');
@@ -285,15 +411,15 @@ export default function UnusedLeaveWageScreen() {
 
         const seniority = calculateEntitledSeniorityFromPeriodData(
             employment,
-            end,
+            parsedEndDate,
             periodBuckets,
             workshopType,
             selectedGroup ?? undefined,
             settledThrough1391,
         );
         const calculation = calculateUnusedLeaveWageFromPeriodData(
-            start,
-            end,
+            parsedStartDate,
+            parsedEndDate,
             periodBuckets,
             maritalStatus,
             childrenCount,
@@ -306,7 +432,11 @@ export default function UnusedLeaveWageScreen() {
             setSnackbarVisible(true);
             return;
         }
-        setResult(scaleWageCalculationResult(calculation, getDailyWorkRatio(getDailyWorkMinutes(dailyWorkTime))));
+        const calculationWorkRatio = workHoursMethod === 'daily'
+            ? getDailyWorkRatio(getDailyWorkMinutes(dailyWorkTime))
+            : Math.min(normalizedActualWorkedHours, requiredWorkHours ?? 0) / (requiredWorkHours ?? 1);
+        setResult(scaleWageCalculationResult(calculation, calculationWorkRatio));
+        notifyCalculationCompleted();
         setShowDetails(false);
     };
 
@@ -363,7 +493,7 @@ export default function UnusedLeaveWageScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش ذخیره مرخصی سال‌های قبل"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                     <NumericInputField
                                         mode="decimal"
@@ -384,7 +514,7 @@ export default function UnusedLeaveWageScreen() {
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش ذخیره مرخصی سال‌های قبل"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -409,7 +539,7 @@ export default function UnusedLeaveWageScreen() {
                                                         accessibilityRole="button"
                                                         accessibilityLabel="کاهش مرخصی استفاده‌شده"
                                                     >
-                                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primary} />
+                                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
                                                     </Pressable>
                                                     <NumericInputField
                                                         mode="decimal"
@@ -430,7 +560,7 @@ export default function UnusedLeaveWageScreen() {
                                                         accessibilityRole="button"
                                                         accessibilityLabel="افزایش مرخصی استفاده‌شده"
                                                     >
-                                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primary} />
+                                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -448,7 +578,7 @@ export default function UnusedLeaveWageScreen() {
                                         anchor={
                                             <Pressable onPress={() => setGroupMenuVisible(true)} style={[styles.dateInput, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                 <ThemedText type="smallBold" style={{ color: theme.text }}>{selectedGroup == null ? 'انتخاب گروه' : `گروه ${toPersianDigits(selectedGroup)}`}</ThemedText>
-                                                <MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primary} />
+                                                <MaterialCommunityIcons name="briefcase-outline" size={18} color={theme.primaryText} />
                                             </Pressable>
                                         }
                                     >
@@ -477,7 +607,7 @@ export default function UnusedLeaveWageScreen() {
                                                 <ThemedText type="smallBold" style={[styles.fieldValue, { color: theme.text }]}>
                                                     {`${toPersianDigits(String(childrenCount))} فرزند`}
                                                 </ThemedText>
-                                                <MaterialCommunityIcons name="account-group-outline" size={18} color={theme.primary} />
+                                                <MaterialCommunityIcons name="account-group-outline" size={18} color={theme.primaryText} />
                                             </View>
                                         </Pressable>
                                     }
@@ -496,7 +626,144 @@ export default function UnusedLeaveWageScreen() {
                                     ))}
                                 </Menu>
                             </View>
-                            <DailyWorkTimeField value={dailyWorkTime} onChange={setDailyWorkTime} />
+                            <View style={[styles.workHoursSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                    روش محاسبهٔ ساعات کارکرد
+                                </ThemedText>
+                                <View accessibilityRole="radiogroup" style={styles.workHoursMethods}>
+                                    {([
+                                        { value: 'daily', label: 'ساعات کارکرد روزانه' },
+                                        { value: 'period', label: 'مجموع ساعات کارکرد کارگر در بازه ی زمانی انتخابی' },
+                                    ] as const).map((option) => {
+                                        const selected = workHoursMethod === option.value;
+                                        return (
+                                            <Pressable
+                                                key={option.value}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ selected }}
+                                                accessibilityLabel={option.label}
+                                                onPress={() => handleWorkHoursMethodChange(option.value)}
+                                                style={[
+                                                    styles.workHoursMethodOption,
+                                                    {
+                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        borderColor: selected ? theme.primary : theme.border,
+                                                        borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
+                                                    },
+                                                ]}
+                                            >
+                                                <MaterialCommunityIcons
+                                                    name={selected ? 'radiobox-marked' : 'radiobox-blank'}
+                                                    size={20}
+                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                />
+                                                <ThemedText
+                                                    type="smallBold"
+                                                    style={[
+                                                        styles.workHoursMethodLabel,
+                                                        { color: selected ? theme.primaryText : theme.text },
+                                                    ]}
+                                                >
+                                                    {option.label}
+                                                </ThemedText>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
+                                <View style={[styles.workHoursDivider, { backgroundColor: theme.border }]} />
+                                {workHoursMethod === 'daily' ? (
+                                    <DailyWorkTimeField
+                                        value={dailyWorkTime}
+                                        embedded
+                                        onChange={(value) => {
+                                            setDailyWorkTime(value);
+                                            setResult(null);
+                                        }}
+                                    />
+                                ) : (
+                                    <View style={styles.workHoursDetails}>
+                                        <ThemedText type="smallBold" style={{ color: theme.text }}>
+                                            ساعات کارکرد کارگر در بازه ی زمانی انتخاب شده
+                                        </ThemedText>
+                                        <View
+                                            style={[
+                                                styles.workHoursStepper,
+                                                {
+                                                    backgroundColor: theme.surface,
+                                                    borderColor: workedHoursError ? theme.error : theme.border,
+                                                    direction: 'ltr',
+                                                },
+                                            ]}
+                                        >
+                                            <Pressable
+                                                onPress={() => changeActualWorkedHours(-1)}
+                                                disabled={normalizedActualWorkedHours <= 0}
+                                                style={({ pressed }) => [
+                                                    styles.workHoursStepperButton,
+                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
+                                                ]}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="کاهش ساعات کارکرد کارگر"
+                                            >
+                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                            </Pressable>
+                                            <NumericInputField
+                                                mode="decimal"
+                                                accessibilityLabel="ساعات کارکرد کارگر در بازه ی زمانی انتخاب شده"
+                                                onChangeText={handleActualWorkedHoursChange}
+                                                placeholder="ساعات موظفی بازه"
+                                                placeholderTextColor={theme.textMuted}
+                                                returnKeyType="done"
+                                                style={[styles.workHoursInput, { color: theme.text }]}
+                                                textAlign="center"
+                                                value={actualWorkedHoursValue}
+                                            />
+                                            <Pressable
+                                                onPress={() => changeActualWorkedHours(1)}
+                                                disabled={
+                                                    maximumAllowedWorkHours !== null
+                                                    && normalizedActualWorkedHours >= maximumAllowedWorkHours
+                                                }
+                                                style={({ pressed }) => [
+                                                    styles.workHoursStepperButton,
+                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    maximumAllowedWorkHours !== null
+                                                    && normalizedActualWorkedHours >= maximumAllowedWorkHours
+                                                    && styles.workHoursStepperButtonDisabled,
+                                                ]}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="افزایش ساعات کارکرد کارگر"
+                                            >
+                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                            </Pressable>
+                                        </View>
+                                        {workedHoursError ? (
+                                            <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
+                                                {workedHoursError}
+                                            </ThemedText>
+                                        ) : null}
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • ساعات موظفی این بازه: {requiredWorkHours === null
+                                                ? isLoadingData ? 'در حال محاسبه…' : 'در دسترس نیست'
+                                                : `${toPersianDigits(requiredWorkHours.toFixed(2))} ساعت`}
+                                        </ThemedText>
+                                        {maximumAllowedWorkHours !== null ? (
+                                            <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                                • حداکثر ساعات کارکرد مجاز: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
+                                            </ThemedText>
+                                        ) : null}
+                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                            • نسبت کارکرد = ساعات کارکرد کارگر ÷ ساعات موظفی کارگر
+                                        </ThemedText>
+                                        {workRatio !== null && requiredWorkHours !== null && requiredWorkHours > 0 ? (
+                                            <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                                • نسبت ساعات کارکرد: {toPersianDigits(workRatio.toFixed(4))}
+                                            </ThemedText>
+                                        ) : null}
+                                    </View>
+                                )}
+                            </View>
                             <View style={[styles.paidAmountSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                 <ThemedText type="small" style={{ color: theme.textSecondary }}>
                                     مبلغ پرداخت‌شده به کارگر در این بازه ({getCurrencyLabel(currencyPreference)})
@@ -517,30 +784,30 @@ export default function UnusedLeaveWageScreen() {
                                 ) : null}
                             </View>
                             <View style={styles.actionsGroup}>
-                                <Button mode="contained" onPress={handleCalculate} icon="cash-clock" buttonColor={theme.primary} textColor={theme.surface} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoadingData} disabled={isLoadingData}>محاسبه</Button>
+                                <Button mode="contained" onPress={handleCalculate} icon="cash-clock" buttonColor={theme.primary} textColor={theme.onPrimary} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoadingData} disabled={isLoadingData}>محاسبه</Button>
                             </View>
                             {result ? <Card style={[styles.resultCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><Card.Content style={styles.resultContent}>
                                 <CalculationResultHeading />
-                                <View style={[styles.summaryBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مبلغ مزد مرخصی ذخیره شده کارگر</ThemedText><ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>{toPersianDigits(formatCurrency(unusedLeaveWageAmount))}</ThemedText></View>
+                                <View style={[styles.summaryBox, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مبلغ مزد مرخصی ذخیره شده کارگر</ThemedText><ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>{toPersianDigits(formatCurrency(unusedLeaveWageAmount))}</ThemedText></View>
                                 <View style={[styles.summaryBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                     <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                         مبلغ مزد مرخصی ذخیره‌شده پس از کسر مبلغ پرداخت‌شده به کارگر
                                     </ThemedText>
-                                    <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>
+                                    <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
                                         {remainingUnusedLeaveWage === null
                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                             : formatCurrency(remainingUnusedLeaveWage)}
                                     </ThemedText>
                                 </View>
-                                <View style={styles.breakdownHeader}><ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات محاسبه</ThemedText><Pressable onPress={() => setShowDetails((value) => !value)} style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>{showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}</ThemedText><MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primary} /></Pressable></View>
-                                {showDetails ? <View style={styles.breakdownGrid}><View style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}><View style={styles.breakdownItemHeaderRow}><ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>جزئیات مزد روزانه</ThemedText></View><View style={styles.breakdownDetailGrid}><View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>روزهای مرخصی ذخیره شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatNumber(result.unusedLeaveDays)} روز</ThemedText></View><View style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>روزهای تقویمی ماه آخر کارکرد</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(result.calendarDaysInLastMonth)} روز</ThemedText></View><ThemedText type="small" style={[styles.detailDescription, { color: theme.textSecondary }]}>آخرین ماه کارکرد: سال {toPersianDigits(result.year)}، دوره {toPersianDigits(result.periodIndex)}</ThemedText>{components.map(([label, value]) => <View key={label} style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{label}</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatCurrency(value)}</ThemedText></View>)}<View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مزد روزانه مشمول مرخصی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatCurrency(result.dailyWage)}</ThemedText></View></View></View></View> : null}
+                                <View style={styles.breakdownHeader}><ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات محاسبه</ThemedText><Pressable onPress={() => setShowDetails((value) => !value)} style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}><ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>{showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}</ThemedText><MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primaryText} /></Pressable></View>
+                                {showDetails ? <View style={styles.breakdownGrid}><View style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}><View style={styles.breakdownItemHeaderRow}><ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>جزئیات مزد روزانه</ThemedText></View><View style={styles.breakdownDetailGrid}><View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>روزهای مرخصی ذخیره شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(result.unusedLeaveDays)} روز</ThemedText></View><View style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>روزهای تقویمی ماه آخر کارکرد</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(result.calendarDaysInLastMonth)} روز</ThemedText></View><ThemedText type="small" style={[styles.detailDescription, { color: theme.textSecondary }]}>آخرین ماه کارکرد: سال {toPersianDigits(result.year)}، دوره {toPersianDigits(result.periodIndex)}</ThemedText>{components.map(([label, value]) => <View key={label} style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{label}</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatCurrency(value)}</ThemedText></View>)}<View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مزد روزانه مشمول مرخصی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatCurrency(result.dailyWage)}</ThemedText></View></View></View></View> : null}
                             </Card.Content></Card> : null}
                         </Card.Content>
                     </Card>
                 </SafeAreaView>
             </ScrollView>
             <PersianDatePickerModal visible={pickerTarget !== null} value={pickerTarget === 'employment' ? employmentDate : pickerTarget === 'start' ? startDate : endDate} title={pickerTarget === 'employment' ? 'انتخاب تاریخ استخدام' : pickerTarget === 'start' ? 'انتخاب تاریخ شروع' : 'انتخاب تاریخ پایان'} onClose={() => setPickerTarget(null)} onSelect={handleDateSelect} availableYears={availableYears} />
-            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.error, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.surface } }}><ThemedText type="small" style={{ color: theme.surface }}>{snackbarMessage}</ThemedText></Snackbar>
+            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
         </ThemedView>
     );
 }
@@ -552,7 +819,7 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerRow: { alignItems: 'flex-start' },
-    headerText: { flex: 1, gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', flex: 1, gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, gap: Spacing.one },
@@ -560,6 +827,17 @@ const styles = StyleSheet.create({
     formulaValue: { fontSize: 12, lineHeight: 20 },
     metricsRow: { flexDirection: 'row', gap: Spacing.two },
     metricBox: { flex: 1, borderRadius: 14, padding: Spacing.two, gap: Spacing.one },
+    workHoursSection: { gap: Spacing.two, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
+    workHoursMethods: { gap: Spacing.one },
+    workHoursMethodOption: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10 },
+    workHoursMethodLabel: { flexShrink: 1, lineHeight: 20 },
+    workHoursDivider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },
+    workHoursDetails: { gap: Spacing.two },
+    workHoursInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: 16, writingDirection: 'ltr' },
+    workHoursHint: { fontSize: 12, lineHeight: 18 },
+    workHoursStepper: { minHeight: 54, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: Spacing.one, gap: Spacing.one },
+    workHoursStepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+    workHoursStepperButtonDisabled: { opacity: 0.4 },
     sectionLabel: { fontSize: 11 },
     helpText: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' },
     dateInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, gap: Spacing.one },

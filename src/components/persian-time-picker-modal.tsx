@@ -201,7 +201,7 @@ export function PersianTimePickerModal({
                         <ThemedText type="small" style={{ color: theme.textSecondary }}>
                             پیش‌نمایش زمان
                         </ThemedText>
-                        <ThemedText type="bodyBold" style={{ color: theme.primary }}>
+                        <ThemedText type="bodyBold" style={{ color: theme.primaryText }}>
                             {formatTimeValue(hours, selectedMinutes).replace(/\d/g, (digit) => persianDigits[Number(digit)])}
                         </ThemedText>
                     </View>
@@ -222,7 +222,7 @@ export function PersianTimePickerModal({
                             compact
                             onPress={handleConfirm}
                             buttonColor={theme.primary}
-                            textColor={theme.surface}
+                            textColor={theme.onPrimary}
                             style={styles.actionButton}
                             labelStyle={styles.actionLabel}
                         >

@@ -109,7 +109,7 @@ export function buildGroupCalculationPdfHtml(
                 <td class="${wageTotal.claimError ? 'error-text' : 'amount'}">${escapeHtml(wageTotal.claimError ?? wageTotal.remainingClaim ?? 'محاسبه نشده')}</td>
             </tr>
             <tr class="wage-total-row">
-                <th>خالص ماندهٔ حقوق و مزایا پس از کسر ۷٪ سهم بیمهٔ کارگر</th>
+                <th>ماندهٔ حقوق و مزایا پس از کسر ۷٪ سهم بیمهٔ کارگر</th>
                 <td class="${wageTotal.claimError ? 'error-text' : 'amount'}">${escapeHtml(wageTotal.claimError ?? wageTotal.finalClaim ?? 'محاسبه نشده')}</td>
             </tr>
         ` : ''}

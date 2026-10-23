@@ -5,7 +5,7 @@ export interface SalaryCalculationBreakdownItem {
     periodIndex: number;
     daysCovered: number;
     dailyMinimumWage: number | null;
-    dailyWorkMinutes: number;
+    dailyWorkMinutes?: number;
     amount: number;
 }
 
@@ -1327,13 +1327,38 @@ export function calculateSalaryFromPeriodData(
     periodBuckets: SalaryPeriodBucket[],
     dailyWorkMinutes = 440,
 ): SalaryCalculationResult {
+    const normalizedDailyWorkMinutes = Math.min(440, Math.max(0, Number(dailyWorkMinutes) || 0));
+    return calculateSalaryFromWorkRatioInternal(
+        startDate,
+        endDate,
+        periodBuckets,
+        normalizedDailyWorkMinutes / 440,
+        normalizedDailyWorkMinutes,
+    );
+}
+
+export function calculateSalaryFromWorkRatio(
+    startDate: ParsedDateInput,
+    endDate: ParsedDateInput,
+    periodBuckets: SalaryPeriodBucket[],
+    workRatio: number,
+): SalaryCalculationResult {
+    return calculateSalaryFromWorkRatioInternal(startDate, endDate, periodBuckets, workRatio);
+}
+
+function calculateSalaryFromWorkRatioInternal(
+    startDate: ParsedDateInput,
+    endDate: ParsedDateInput,
+    periodBuckets: SalaryPeriodBucket[],
+    workRatio: number,
+    dailyWorkMinutes?: number,
+): SalaryCalculationResult {
     if (compareParsedDates(startDate, endDate) > 0) {
         return { totalAmount: 0, breakdown: [] };
     }
 
     const breakdown: SalaryCalculationBreakdownItem[] = [];
-    const normalizedDailyWorkMinutes = Math.min(440, Math.max(0, Number(dailyWorkMinutes) || 0));
-    const dailyWorkRatio = normalizedDailyWorkMinutes / 440;
+    const normalizedWorkRatio = Number.isFinite(workRatio) ? Math.max(0, workRatio) : 0;
 
     for (const bucket of [...periodBuckets].sort((a, b) => a.year - b.year)) {
         const sortedPeriods = [...bucket.periods].sort((a, b) => a.period_index - b.period_index);
@@ -1361,8 +1386,8 @@ export function calculateSalaryFromPeriodData(
                     periodIndex: period.period_index,
                     daysCovered,
                     dailyMinimumWage: period.daily_minimum_wage,
-                    dailyWorkMinutes: normalizedDailyWorkMinutes,
-                    amount: (period.daily_minimum_wage ?? 0) * daysCovered * dailyWorkRatio,
+                    ...(dailyWorkMinutes !== undefined ? { dailyWorkMinutes } : {}),
+                    amount: (period.daily_minimum_wage ?? 0) * daysCovered * normalizedWorkRatio,
                 });
             }
         }
@@ -2538,6 +2563,7 @@ export function calculateSpousalAllowanceFromPeriodData(
                         periodAmount += maritalAllowance;
                     } else if (includeDaysCovered) {
                         const proratedAmount = (maritalAllowance * overlapDays) / monthDays;
+                        monthsCovered += overlapDays / monthDays;
                         daysCovered += overlapDays;
                         periodAmount += proratedAmount;
                     }

@@ -15,6 +15,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
 import { calculateOfficialHolidaysInDateRange, parseDateInput, type OfficialHolidaysInDateRangeResult } from '@/utils/salary-calculation';
+import { useAppContext } from '@/hooks/use-app-context';
 
 type PickerTarget = 'start' | 'end';
 
@@ -105,6 +106,7 @@ export default function OfficialHolidaysInRangeScreen() {
         setPickerTarget(null);
     };
 
+    const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
         const start = parseDateInput(startDate);
         const end = parseDateInput(endDate);
@@ -117,6 +119,7 @@ export default function OfficialHolidaysInRangeScreen() {
 
         const calculation = calculateOfficialHolidaysInDateRange(start, end, holidayDates);
         setResult(calculation);
+        notifyCalculationCompleted();
         setShowDetails(false);
     };
 
@@ -144,7 +147,7 @@ export default function OfficialHolidaysInRangeScreen() {
                             </View>
 
                             <View style={styles.actionsGroup}>
-                                <Button mode="contained" onPress={handleCalculate} icon="calendar-check-outline" buttonColor={theme.primary} textColor={theme.surface} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoading} disabled={isLoading}>محاسبه</Button>
+                                <Button mode="contained" onPress={handleCalculate} icon="calendar-check-outline" buttonColor={theme.primary} textColor={theme.onPrimary} style={styles.actionButton} labelStyle={styles.actionLabel} loading={isLoading} disabled={isLoading}>محاسبه</Button>
                             </View>
 
                             {result ? (
@@ -153,7 +156,7 @@ export default function OfficialHolidaysInRangeScreen() {
                                         <CalculationResultHeading />
                                         <View style={[styles.summaryBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>تعداد تعطیلات رسمی در بازه</ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primary }]}>{toPersianDigits(result.totalHolidays)} روز</ThemedText>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>{toPersianDigits(result.totalHolidays)} روز</ThemedText>
                                         </View>
                                         <View style={[styles.rangeBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>بازهٔ بررسی‌شده</ThemedText>
@@ -162,8 +165,8 @@ export default function OfficialHolidaysInRangeScreen() {
                                         <View style={styles.breakdownHeader}>
                                             <ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.text }]}>جزئیات محاسبه</ThemedText>
                                             <Pressable onPress={() => setShowDetails((value) => !value)} style={[styles.toggleButton, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primary }]}>{showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}</ThemedText>
-                                                <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primary} />
+                                                <ThemedText type="smallBold" style={[styles.toggleButtonLabel, { color: theme.primaryText }]}>{showDetails ? 'عدم نمایش' : 'نمایش جزئیات'}</ThemedText>
+                                                <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primaryText} />
                                             </Pressable>
                                         </View>
                                         {showDetails ? (
@@ -176,7 +179,7 @@ export default function OfficialHolidaysInRangeScreen() {
                                                         <View style={styles.detailGrid}>
                                                             <View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی دوره</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primary }]}>{formatDate(`${period.startDate.year}/${period.startDate.month}/${period.startDate.day}`)} تا {formatDate(`${period.endDate.year}/${period.endDate.month}/${period.endDate.day}`)}</ThemedText>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatDate(`${period.startDate.year}/${period.startDate.month}/${period.startDate.day}`)} تا {formatDate(`${period.endDate.year}/${period.endDate.month}/${period.endDate.day}`)}</ThemedText>
                                                             </View>
                                                             <View style={[styles.detailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>تعداد تعطیلات این دوره</ThemedText>
@@ -196,8 +199,8 @@ export default function OfficialHolidaysInRangeScreen() {
             </ScrollView>
 
             <PersianDatePickerModal visible={pickerTarget !== null} value={pickerTarget === 'start' ? startDate : endDate} title={pickerTarget === 'start' ? 'انتخاب تاریخ شروع' : 'انتخاب تاریخ پایان'} onClose={() => setPickerTarget(null)} onSelect={handleDateSelect} availableYears={availableYears} />
-            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.error, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.surface } }}>
-                <ThemedText type="small" style={{ color: theme.surface }}>{snackbarMessage}</ThemedText>
+            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}>
+                <ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText>
             </Snackbar>
         </ThemedView>
     );
@@ -209,7 +212,7 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { gap: Spacing.one },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one },
     pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
     pageDescription: { fontSize: 13, lineHeight: 20 },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
