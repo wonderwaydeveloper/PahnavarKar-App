@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabView, type NavigationState, type SceneRendererProps } from 'react-native-tab-view';
@@ -15,6 +15,8 @@ import { Radius, Spacing } from '@/constants/theme';
 import { TOOL_DEFINITIONS, type ToolDefinition } from '@/constants/tool-definitions';
 import { getToolRoute } from '@/constants/tool-routes';
 import { useTheme } from '@/hooks/use-theme';
+import { usePlanAccess } from '@/hooks/use-plan-access';
+import { hasPlanFeature } from '@/utils/plan-access';
 
 type HomeTab = 'all' | 'wageContinuous' | 'wageNonContinuous' | 'nonWage' | 'yearlyInfo' | 'rules';
 
@@ -158,9 +160,14 @@ type SceneProps = {
     actions: HomeAction[];
     theme: ReturnType<typeof useTheme>;
     bottomInset: number;
+    accessLoading: boolean;
+    accessError: string | null;
+    accessResolved: boolean;
+    refreshAccess: () => Promise<void>;
+    legalAccess: boolean;
 };
 
-const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset }: SceneProps) {
+const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset, accessLoading, accessError, accessResolved, refreshAccess, legalAccess }: SceneProps) {
     const tabActions = filterActions(actions, tab);
     const continuousWageActions = tabActions.filter((action) => action.category === 'wageContinuous');
     const nonContinuousWageActions = tabActions.filter((action) => action.category === 'wageNonContinuous');
@@ -191,8 +198,36 @@ const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset }: 
             showsVerticalScrollIndicator={false}
         >
             <View style={styles.page}>
-                {tab === 'rules' ? (
+                {accessLoading ? (
+                    <View style={styles.emptyState}>
+                        <ActivityIndicator color={theme.primary} />
+                        <ThemedText type="small" style={{ color: theme.textSecondary }}>در حال بررسی دسترسی پلن…</ThemedText>
+                    </View>
+                ) : accessError ? (
+                    <View style={styles.emptyState}>
+                        <ThemedText type="small" themeColor="error" style={{ textAlign: 'center' }}>{accessError}</ThemedText>
+                        <Pressable onPress={() => void refreshAccess()} accessibilityRole="button">
+                            <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
+                        </Pressable>
+                    </View>
+                ) : !accessResolved ? (
+                    <View style={styles.emptyState}>
+                        <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
+                            دسترسی پلن هنوز تأیید نشده است.
+                        </ThemedText>
+                        <Pressable onPress={() => void refreshAccess()} accessibilityRole="button">
+                            <ThemedText type="smallBold" themeColor="primaryText">بررسی دوباره</ThemedText>
+                        </Pressable>
+                    </View>
+                ) : tab === 'rules' && legalAccess ? (
                     <LegalCategoryList />
+                ) : tab === 'rules' ? (
+                    <View style={[styles.listCard, { backgroundColor: theme.surface }]}>
+                        <View style={styles.emptyState}>
+                            <MaterialCommunityIcons name="lock-outline" size={28} color={theme.textMuted} />
+                            <ThemedText type="smallBold" style={{ color: theme.text }}>دسترسی به قوانین و مقررات در پلن فعلی فعال نیست</ThemedText>
+                        </View>
+                    </View>
                 ) : tabActions.length > 0 ? (
                     <>
                         {tab === 'all' ? renderSection(yearlyInfoActions) : null}
@@ -205,7 +240,7 @@ const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset }: 
                     <View style={[styles.listCard, { backgroundColor: theme.surface }]}>
                         <View style={styles.emptyState}>
                             <MaterialCommunityIcons name="book-open-page-variant-outline" size={28} color={theme.textMuted} />
-                            <ThemedText type="smallBold" style={{ color: theme.text }}>قوانین و مقررات به‌زودی اضافه می‌شود</ThemedText>
+                            <ThemedText type="smallBold" style={{ color: theme.text }}>در پلن فعلی دسترسی به این ابزارها فعال نیست</ThemedText>
                         </View>
                     </View>
                 )}
@@ -221,10 +256,27 @@ export default function HomeTabScreen() {
     const router = useRouter();
     const { width } = useWindowDimensions();
     const [tabIndex, setTabIndex] = useState(0);
-    const actions = useMemo(() => createHomeActions(router), [router]);
+    const { planAccess, isLoading: accessLoading, error: accessError, refresh: refreshAccess } = usePlanAccess();
+    const hasResolvedAccess = !accessLoading && !accessError && planAccess !== null;
+    const actions = useMemo(
+        () => hasResolvedAccess
+            ? createHomeActions(router).filter((action) => hasPlanFeature(planAccess, action.key))
+            : [],
+        [hasResolvedAccess, planAccess, router],
+    );
 
     const renderScene = ({ route }: { route: HomeRoute }) => (
-        <HomeScene tab={route.key} actions={actions} theme={theme} bottomInset={insets.bottom} />
+        <HomeScene
+            tab={route.key}
+            actions={actions}
+            theme={theme}
+            bottomInset={insets.bottom}
+            accessLoading={accessLoading}
+            accessError={accessError}
+            accessResolved={hasResolvedAccess}
+            refreshAccess={refreshAccess}
+            legalAccess={hasResolvedAccess && hasPlanFeature(planAccess, 'legal_library')}
+        />
     );
 
     const renderTabBar = (props: SceneRendererProps & { navigationState: NavigationState<HomeRoute> }) => (
@@ -247,7 +299,7 @@ export default function HomeTabScreen() {
                 initialLayout={{ width }}
                 style={styles.tabView}
             />
-            {HOME_ROUTES[tabIndex]?.key !== 'rules' ? (
+            {HOME_ROUTES[tabIndex]?.key !== 'rules' && hasResolvedAccess && hasPlanFeature(planAccess, 'group-calculation') ? (
                 <Pressable
                     onPress={() => router.push('/group-calculation' as never)}
                     accessibilityRole="button"

@@ -5,20 +5,95 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 const AUTH_TOKEN_KEY = 'pahnavarkar.auth.token';
+const AUTH_USER_CACHE_KEY = 'pahnavarkar.auth.user-cache';
 const DEVICE_ID_KEY = 'pahnavarkar.auth.device-id';
+export const OFFLINE_ACCESS_GRACE_PERIOD_MS = 48 * 60 * 60 * 1000;
+const MAX_READ_REQUEST_RETRIES = 1;
+const READ_REQUEST_RETRY_DELAY_MS = 500;
 
 export interface AuthenticatedUser {
     id: number;
     name: string;
-    email: string | null;
-    pending_email: string | null;
-    email_verified_at: string | null;
     phone: string;
     profile_photo_path: string | null;
     phone_verified_at: string | null;
     last_active_at: string | null;
     inactivity_deletion_period_months: 6 | 12 | 18 | null;
     inactivity_deletion_scheduled_at: string | null;
+}
+
+export interface PlanAccess {
+    key: string;
+    name: string;
+    features: Record<string, boolean>;
+    is_unlimited?: boolean;
+}
+
+export interface PlanDuration {
+    key: string;
+    name: string;
+    duration_days: number;
+}
+
+export interface PlanOffer {
+    key: string;
+    tier: string;
+    duration: string;
+    duration_days: number;
+    price: number;
+    is_available: boolean;
+}
+
+export interface PlanCatalog {
+    tiers: PlanAccess[];
+    durations: PlanDuration[];
+    offers: PlanOffer[];
+    feature_catalog: Record<string, { label: string; group: string }>;
+}
+
+export interface SubscriptionQuote {
+    plan_key: string;
+    tier: string;
+    duration: string;
+    duration_days: number;
+    change_type: 'purchase' | 'upgrade' | 'scheduled';
+    source_subscription_id: number | null;
+    source_plan_key: string | null;
+    gross_amount: number;
+    credit_amount: number;
+    discount_amount: number;
+    payable_amount: number;
+    starts_at: string;
+    ends_at: string;
+}
+
+export interface PaymentOrderStatus {
+    order: {
+        id: number;
+        reference: string;
+        kind: string;
+        subscription_change_type: 'purchase' | 'upgrade' | 'scheduled';
+        plan_key: string;
+        status: 'pending' | 'processing' | 'succeeded' | 'failed';
+        failure_code: string | null;
+        gross_amount: number;
+        discount_amount: number;
+        plan_credit_amount: number;
+        wallet_amount: number;
+        gateway_amount: number;
+        currency: string;
+        expires_at: string;
+        completed_at: string | null;
+    };
+    payments: { id: number; gateway: string; status: string; redirect_url: string | null }[];
+    subscription: unknown;
+}
+
+export interface ScheduledSubscription {
+    id: number;
+    plan_key: string;
+    starts_at: string;
+    ends_at: string;
 }
 
 export interface AuthDevice {
@@ -34,8 +109,49 @@ export interface AuthDevice {
     is_stale: boolean;
 }
 
+export interface TwoFactorStatus {
+    enabled: boolean;
+    enabled_at: string | null;
+    recovery_codes_remaining: number;
+}
+
+export interface TwoFactorEnrollment {
+    secret: string;
+    provisioning_uri: string;
+}
+
+export interface AuthSession {
+    token: string;
+    token_type: 'Bearer';
+    expires_at: string;
+    user: AuthenticatedUser;
+}
+
+export async function fetchPushSubscriptionStatus(token: string): Promise<boolean> {
+    const response = await request<{ enabled: boolean }>('/auth/notifications/push-token', { token });
+    return response.enabled;
+}
+
+export async function savePushSubscription(
+    token: string,
+    pushToken: string,
+    platform: 'android' | 'ios',
+): Promise<void> {
+    await request('/auth/notifications/push-token', {
+        method: 'PUT',
+        token,
+        body: { push_token: pushToken, platform },
+    });
+}
+
+export async function removePushSubscription(token: string): Promise<void> {
+    await request('/auth/notifications/push-token', { method: 'DELETE', token });
+}
+
 interface ApiErrorPayload {
     message?: string;
+    detail?: string;
+    retry_after?: number;
     errors?: Record<string, string[]>;
 }
 
@@ -48,13 +164,54 @@ interface SessionResponse {
 
 export type OtpVerificationResult =
     | { status: 'profile_required' }
+    | { status: 'two_factor_required'; challenge_token: string; expires_at: string }
     | ({ status: 'authenticated' } & SessionResponse);
 
 export class AuthApiError extends Error {
-    constructor(message: string, public readonly status: number) {
+    constructor(
+        message: string,
+        public readonly status: number,
+        public readonly retryAfterSeconds: number | null = null,
+    ) {
         super(message);
         this.name = 'AuthApiError';
     }
+}
+
+export function isTemporaryApiFailure(error: unknown): boolean {
+    return error instanceof AuthApiError
+        ? error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500
+        : error instanceof TypeError || (error instanceof Error && error.name === 'AbortError');
+}
+
+export function shouldRetryApiQuery(error: unknown): boolean {
+    return !(error instanceof AuthApiError && error.status === 429);
+}
+
+function getRetryAfterSeconds(header: string | null, payloadSeconds?: number): number | null {
+    if (header !== null) {
+        const seconds = Number(header);
+        if (Number.isFinite(seconds) && seconds >= 0) {
+            return Math.ceil(seconds);
+        }
+
+        const retryAt = Date.parse(header);
+        if (!Number.isNaN(retryAt)) {
+            return Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+        }
+    }
+
+    return typeof payloadSeconds === 'number' && Number.isFinite(payloadSeconds) && payloadSeconds >= 0
+        ? Math.ceil(payloadSeconds)
+        : null;
+}
+
+function formatRetryAfter(seconds: number): string {
+    if (seconds < 60) {
+        return `${seconds} ثانیه`;
+    }
+
+    return `${Math.ceil(seconds / 60)} دقیقه`;
 }
 
 function getApiBaseUrl(): string {
@@ -79,11 +236,13 @@ export function getProfilePhotoUrl(path: string | null): string | null {
 async function request<T>(
     path: string,
     options: {
-        method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+        method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
         token?: string;
         body?: Record<string, unknown>;
         deviceId?: string;
+        idempotencyKey?: string;
     } = {},
+    retryCount = 0,
 ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -100,6 +259,9 @@ async function request<T>(
     }
     if (options.deviceId) {
         headers['X-Device-Id'] = options.deviceId;
+    }
+    if (options.idempotencyKey) {
+        headers['Idempotency-Key'] = options.idempotencyKey;
     }
 
     try {
@@ -130,13 +292,52 @@ async function request<T>(
             const validationMessage = Object.values(errorPayload.errors ?? {})
                 .flat()
                 .find((message) => typeof message === 'string');
+            const retryAfterSeconds = response.status === 429
+                ? getRetryAfterSeconds(response.headers.get('Retry-After'), errorPayload.retry_after)
+                : null;
+            const responseMessage = validationMessage
+                ?? errorPayload.detail
+                ?? errorPayload.message;
+            const isGenericRateLimitMessage = responseMessage === 'Too Many Attempts.'
+                || responseMessage === 'Too Many Requests';
+            const message = response.status !== 429
+                ? responseMessage ?? 'درخواست احراز هویت ناموفق بود.'
+                : [
+                    isGenericRateLimitMessage || !responseMessage
+                        ? 'تعداد درخواست‌ها از حد مجاز بیشتر شده است.'
+                        : responseMessage,
+                    retryAfterSeconds !== null && retryAfterSeconds > 0
+                        ? `حدود ${formatRetryAfter(retryAfterSeconds)} دیگر دوباره تلاش کنید.`
+                        : null,
+                ].filter(Boolean).join(' ');
             throw new AuthApiError(
-                validationMessage ?? errorPayload.message ?? 'درخواست احراز هویت ناموفق بود.',
+                message,
                 response.status,
+                retryAfterSeconds,
             );
         }
 
         return payload as T;
+    } catch (error) {
+        const requestError = error instanceof AuthApiError
+            ? error
+            : error instanceof Error && error.name === 'AbortError'
+                ? new AuthApiError('زمان انتظار برای پاسخ سرور به پایان رسید. دوباره تلاش کنید.', 408)
+                : error instanceof TypeError
+                    ? new AuthApiError('ارتباط با سرور برقرار نشد. اتصال اینترنت خود را بررسی کنید و دوباره تلاش کنید.', 0)
+                    : error;
+
+        if (
+            (options.method ?? 'GET') === 'GET'
+            && retryCount < MAX_READ_REQUEST_RETRIES
+            && isTemporaryApiFailure(requestError)
+            && shouldRetryApiQuery(requestError)
+        ) {
+            await new Promise<void>((resolve) => setTimeout(resolve, READ_REQUEST_RETRY_DELAY_MS));
+            return request(path, options, retryCount + 1);
+        }
+
+        throw requestError;
     } finally {
         clearTimeout(timeout);
     }
@@ -165,17 +366,80 @@ export function getStoredAuthToken(): Promise<string | null> {
     return SecureStore.getItemAsync(AUTH_TOKEN_KEY);
 }
 
-export async function storeAuthToken(token: string): Promise<void> {
+export async function storeAuthToken(token: string, user: AuthenticatedUser): Promise<void> {
     if (Platform.OS === 'web') {
         throw new Error('ورود امن فعلاً فقط در نسخهٔ موبایل پشتیبانی می‌شود.');
     }
 
+    await storeCachedAuthenticatedUser(user, token);
     await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
+}
+
+export async function storeCachedAuthenticatedUser(user: AuthenticatedUser, token: string): Promise<void> {
+    if (Platform.OS === 'web') {
+        return;
+    }
+
+    const tokenHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, token);
+    await SecureStore.setItemAsync(AUTH_USER_CACHE_KEY, JSON.stringify({
+        user,
+        tokenHash,
+        verifiedAt: Date.now(),
+    }));
+}
+
+export async function getCachedAuthenticatedUser(token: string): Promise<AuthenticatedUser | null> {
+    if (Platform.OS === 'web') {
+        return null;
+    }
+
+    const raw = await SecureStore.getItemAsync(AUTH_USER_CACHE_KEY);
+    if (!raw) {
+        return null;
+    }
+
+    let cached: unknown;
+    try {
+        cached = JSON.parse(raw);
+    } catch {
+        await SecureStore.deleteItemAsync(AUTH_USER_CACHE_KEY);
+        return null;
+    }
+
+    if (!cached || typeof cached !== 'object' || !('user' in cached) || !('tokenHash' in cached) || !('verifiedAt' in cached)) {
+        await SecureStore.deleteItemAsync(AUTH_USER_CACHE_KEY);
+        return null;
+    }
+
+    const value = cached as { user: AuthenticatedUser; tokenHash: string; verifiedAt: number };
+    const tokenHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, token);
+    if (
+        typeof value.tokenHash !== 'string'
+        || value.tokenHash !== tokenHash
+        || !Number.isFinite(value.verifiedAt)
+        || value.verifiedAt > Date.now()
+        || Date.now() - value.verifiedAt > OFFLINE_ACCESS_GRACE_PERIOD_MS
+        || !value.user
+        || typeof value.user.id !== 'number'
+        || typeof value.user.name !== 'string'
+        || typeof value.user.phone !== 'string'
+        || (value.user.profile_photo_path !== null && typeof value.user.profile_photo_path !== 'string')
+        || (value.user.phone_verified_at !== null && typeof value.user.phone_verified_at !== 'string')
+        || (value.user.last_active_at !== null && typeof value.user.last_active_at !== 'string')
+        || ![6, 12, 18, null].includes(value.user.inactivity_deletion_period_months)
+        || (value.user.inactivity_deletion_scheduled_at !== null && typeof value.user.inactivity_deletion_scheduled_at !== 'string')
+    ) {
+        await SecureStore.deleteItemAsync(AUTH_USER_CACHE_KEY);
+        return null;
+    }
+
+    return value.user;
 }
 
 export async function removeStoredAuthToken(): Promise<void> {
     if (Platform.OS !== 'web') {
         await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+        await SecureStore.deleteItemAsync(AUTH_USER_CACHE_KEY);
     }
 }
 
@@ -183,7 +447,6 @@ export async function sendOtp(input: {
     phone: string;
     type: 'login' | 'register';
     name?: string;
-    email?: string;
 }): Promise<{ message: string; resend_after: number }> {
     const deviceId = await getDeviceId();
 
@@ -199,7 +462,6 @@ export async function verifyOtp(input: {
     type: 'login' | 'register';
     code: string;
     name?: string;
-    email?: string;
 }): Promise<OtpVerificationResult> {
     const deviceId = await getDeviceId();
     const deviceName = Device.deviceName?.trim() || null;
@@ -218,6 +480,41 @@ export async function verifyOtp(input: {
             device_model: deviceModel?.slice(0, 255) ?? null,
             platform,
         },
+    });
+}
+
+export async function verifyTwoFactorLogin(
+    challengeToken: string,
+    code: string,
+): Promise<AuthSession> {
+    return request('/auth/two-factor/verify-login', {
+        method: 'POST',
+        body: { challenge_token: challengeToken, code },
+    });
+}
+
+export async function fetchTwoFactorStatus(token: string): Promise<TwoFactorStatus> {
+    return request('/auth/two-factor', { token });
+}
+
+export async function beginTwoFactorEnrollment(token: string): Promise<TwoFactorEnrollment> {
+    return request('/auth/two-factor/setup', { method: 'POST', token });
+}
+
+export async function confirmTwoFactorEnrollment(token: string, code: string): Promise<string[]> {
+    const response = await request<{ recovery_codes: string[] }>('/auth/two-factor/confirm', {
+        method: 'POST',
+        token,
+        body: { code },
+    });
+    return response.recovery_codes;
+}
+
+export async function disableTwoFactor(token: string, code: string): Promise<void> {
+    await request('/auth/two-factor', {
+        method: 'DELETE',
+        token,
+        body: { code },
     });
 }
 
@@ -288,9 +585,73 @@ export async function fetchCurrentUser(token: string): Promise<AuthenticatedUser
     return response.user;
 }
 
+export async function fetchPlanCatalog(): Promise<PlanCatalog> {
+    return request('/plans');
+}
+
+export async function fetchCurrentPlan(token: string): Promise<{
+    plan: PlanAccess;
+    subscription: { ends_at: string } | null;
+    scheduled_subscription: ScheduledSubscription | null;
+}> {
+    return request('/auth/subscription', { token });
+}
+
+export async function quoteSubscription(
+    token: string,
+    input: { plan_key: string; discount_code?: string },
+): Promise<SubscriptionQuote> {
+    const response = await request<{ quote: SubscriptionQuote }>('/auth/subscription/quote', {
+        method: 'POST',
+        token,
+        body: input,
+    });
+    return response.quote;
+}
+
+export async function purchaseSubscription(
+    token: string,
+    input: {
+        plan_key: string;
+        discount_code?: string;
+        expected_quote: Pick<
+            SubscriptionQuote,
+            | 'gross_amount'
+            | 'credit_amount'
+            | 'discount_amount'
+            | 'payable_amount'
+            | 'duration_days'
+            | 'change_type'
+            | 'source_subscription_id'
+            | 'source_plan_key'
+        >;
+    },
+    idempotencyKey: string,
+): Promise<{ order: PaymentOrderStatus['order']; payment: { id: number; status: string; redirect_url: string | null } | null }> {
+    return request('/auth/subscription/purchase', {
+        method: 'POST',
+        token,
+        body: input,
+        idempotencyKey,
+    });
+}
+
+export async function fetchPaymentOrder(token: string, orderId: number): Promise<PaymentOrderStatus> {
+    return request(`/auth/payment-orders/${orderId}`, { token });
+}
+
+export async function fetchPendingSubscriptionOrder(
+    token: string,
+): Promise<{
+    order: PaymentOrderStatus['order'] | null;
+    payments: PaymentOrderStatus['payments'];
+}> {
+    return request('/auth/subscription/pending-order', { token });
+}
+
 export async function updateProfile(
     token: string,
-    input: { name: string; email: string | null },
+    input: { name: string },
 ): Promise<AuthenticatedUser> {
     const response = await request<{ user: AuthenticatedUser }>('/auth/profile', {
         method: 'PATCH',
@@ -309,23 +670,6 @@ export async function updateInactivityDeletion(
         method: 'PATCH',
         token,
         body: { period_months: periodMonths },
-    });
-
-    return response.user;
-}
-
-export function sendEmailVerificationCode(token: string): Promise<{ message: string; resend_after: number }> {
-    return request('/auth/profile/email/verification-code', {
-        method: 'POST',
-        token,
-    });
-}
-
-export async function verifyEmail(token: string, code: string): Promise<AuthenticatedUser> {
-    const response = await request<{ user: AuthenticatedUser }>('/auth/profile/email/verify', {
-        method: 'POST',
-        token,
-        body: { code },
     });
 
     return response.user;

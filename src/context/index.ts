@@ -10,3 +10,4 @@ export {
 export type { ThemePalette } from '@/constants/theme';
 export { AppProvider } from './app.provider';
 export { AuthProvider } from './auth.provider';
+export { PlanAccessProvider } from './plan-access.provider';

@@ -11,6 +11,7 @@ export default function AccountLayout() {
             })}
         >
             <Stack.Screen name="index" options={{ title: 'پروفایل' }} />
+            <Stack.Screen name="plans" options={{ title: 'پلن‌ها و اشتراک' }} />
             <Stack.Screen name="edit-profile" options={{ title: 'ویرایش پروفایل' }} />
             <Stack.Screen name="privacy-security" options={{ title: 'حریم خصوصی و امنیت' }} />
             <Stack.Screen name="settings" options={{ title: 'تنظیمات' }} />

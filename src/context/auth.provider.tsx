@@ -1,5 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AuthApiError, changePhone as changePhoneRequest, deleteAccount as deleteAccountRequest, deleteProfilePhoto as deleteProfilePhotoRequest, fetchCurrentUser, fetchDevices, getDeviceId, getStoredAuthToken, removeStoredAuthToken, revokeAllSessions, revokeCurrentSession, revokeDevice, sendEmailVerificationCode as sendEmailVerificationCodeRequest, storeAuthToken, updateInactivityDeletion as updateInactivityDeletionRequest, updateProfile as updateProfileRequest, uploadProfilePhoto as uploadProfilePhotoRequest, verifyEmail as verifyEmailRequest, verifyOtp, type AuthDevice, type AuthenticatedUser } from '@/services/auth-api';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { AuthApiError, changePhone as changePhoneRequest, deleteAccount as deleteAccountRequest, deleteProfilePhoto as deleteProfilePhotoRequest, fetchCurrentUser, fetchDevices, getCachedAuthenticatedUser, getDeviceId, getStoredAuthToken, isTemporaryApiFailure, removeStoredAuthToken, revokeAllSessions, revokeCurrentSession, revokeDevice, storeAuthToken, storeCachedAuthenticatedUser, updateInactivityDeletion as updateInactivityDeletionRequest, updateProfile as updateProfileRequest, uploadProfilePhoto as uploadProfilePhotoRequest, verifyOtp, verifyTwoFactorLogin as verifyTwoFactorLoginRequest, type AuthenticatedUser, type AuthDevice } from '@/services/auth-api';
+import { clearCachedPlanAccess } from '@/services/plan-access-cache';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
+import { useAuthSessionStore } from '@/stores/auth-session.store';
 import { AuthContext, type AuthContextType } from './auth.context';
 
 interface AuthProviderProps {
@@ -7,34 +11,44 @@ interface AuthProviderProps {
 }
 
 function errorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : 'خطای نامشخص در احراز هویت رخ داد.';
+    return getUserFacingErrorMessage(error, 'خطای نامشخص در احراز هویت رخ داد.');
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-    const [user, setUser] = useState<AuthenticatedUser | null>(null);
-    const [token, setToken] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [sessionError, setSessionError] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+    const user = useAuthSessionStore((state) => state.user);
+    const token = useAuthSessionStore((state) => state.token);
+    const isLoading = useAuthSessionStore((state) => state.isLoading);
+    const sessionError = useAuthSessionStore((state) => state.sessionError);
+    const setUser = useAuthSessionStore((state) => state.setUser);
+    const setToken = useAuthSessionStore((state) => state.setToken);
+    const setIsLoading = useAuthSessionStore((state) => state.setLoading);
+    const setSessionError = useAuthSessionStore((state) => state.setSessionError);
+    const clearSession = useAuthSessionStore((state) => state.clearSession);
+
+    const clearPlanAccessQueries = useCallback(async () => {
+        await queryClient.cancelQueries({ queryKey: ['plan-access'] });
+        queryClient.removeQueries({ queryKey: ['plan-access'] });
+    }, [queryClient]);
 
     const withActiveSession = useCallback(async <T,>(request: Promise<T>): Promise<T> => {
         try {
             return await request;
         } catch (error) {
             if (error instanceof AuthApiError && error.status === 401) {
-                setUser(null);
-                setToken(null);
-                setSessionError(null);
+                clearSession();
                 await removeStoredAuthToken();
+                await clearCachedPlanAccess();
+                await clearPlanAccessQueries();
             }
             throw error;
         }
-    }, []);
+    }, [clearPlanAccessQueries, clearSession]);
 
     const refreshUser = useCallback(async () => {
         const savedToken = token ?? await getStoredAuthToken();
         if (!savedToken) {
-            setUser(null);
-            setToken(null);
+            clearSession();
             setSessionError(null);
             return;
         }
@@ -44,15 +58,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setToken(savedToken);
             setUser(currentUser);
             setSessionError(null);
+            await storeCachedAuthenticatedUser(currentUser, savedToken);
         } catch (error) {
-            if (error instanceof AuthApiError && error.status === 401) {
+            if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
                 await removeStoredAuthToken();
-                setToken(null);
-                setUser(null);
+                await clearCachedPlanAccess();
+                await clearPlanAccessQueries();
+                clearSession();
+                setSessionError(null);
+            } else {
+                if (isTemporaryApiFailure(error)) {
+                    const cachedUser = await getCachedAuthenticatedUser(savedToken);
+                    if (cachedUser) {
+                        setToken(savedToken);
+                        setUser(cachedUser);
+                    }
+                }
+                setSessionError(errorMessage(error));
             }
             throw error;
         }
-    }, [token]);
+    }, [clearPlanAccessQueries, clearSession, setSessionError, setToken, setUser, token]);
 
     useEffect(() => {
         let isMounted = true;
@@ -65,11 +91,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     if (isMounted) {
                         setToken(savedToken);
                         setUser(currentUser);
+                        setSessionError(null);
+                        await storeCachedAuthenticatedUser(currentUser, savedToken);
                     }
                 }
             } catch (error) {
-                if (error instanceof AuthApiError && error.status === 401) {
+                if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
                     await removeStoredAuthToken();
+                    await clearCachedPlanAccess();
+                    await clearPlanAccessQueries();
+                    clearSession();
+                    setSessionError(null);
+                } else if (isTemporaryApiFailure(error)) {
+                    const savedToken = await getStoredAuthToken();
+                    let cachedUser: AuthenticatedUser | null = null;
+                    try {
+                        cachedUser = savedToken ? await getCachedAuthenticatedUser(savedToken) : null;
+                    } catch (cacheError) {
+                        console.error('بازیابی هویت آفلاین از حافظهٔ امن ناموفق بود.', cacheError);
+                    }
+                    if (isMounted && savedToken && cachedUser) {
+                        setToken(savedToken);
+                        setUser(cachedUser);
+                    }
                 }
                 if (isMounted) {
                     setSessionError(errorMessage(error));
@@ -86,18 +130,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [clearPlanAccessQueries, clearSession, setIsLoading, setSessionError, setToken, setUser]);
 
     const signInWithOtp = useCallback<AuthContextType['signInWithOtp']>(async (input) => {
         const result = await verifyOtp(input);
         if (result.status === 'profile_required') {
             return 'profile_required';
         }
+        if (result.status === 'two_factor_required') {
+            return { status: result.status, challengeToken: result.challenge_token };
+        }
 
         const session = result;
 
         try {
-            await storeAuthToken(session.token);
+            await storeAuthToken(session.token, session.user);
         } catch (storageError) {
             try {
                 await revokeCurrentSession(session.token);
@@ -110,11 +157,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
             throw storageError;
         }
 
+        await clearPlanAccessQueries();
         setToken(session.token);
         setUser(session.user);
         setSessionError(null);
         return 'authenticated';
-    }, []);
+    }, [clearPlanAccessQueries, setSessionError, setToken, setUser]);
+
+    const verifyTwoFactorLogin = useCallback(async (challengeToken: string, code: string) => {
+        const session = await verifyTwoFactorLoginRequest(challengeToken, code);
+        try {
+            await storeAuthToken(session.token, session.user);
+        } catch (storageError) {
+            try {
+                await revokeCurrentSession(session.token);
+            } catch (revokeError) {
+                throw new AggregateError(
+                    [storageError, revokeError],
+                    'نشست ایجاد شد، اما ذخیرهٔ امن توکن و لغو نشست ناموفق بود.',
+                );
+            }
+            throw storageError;
+        }
+
+        await clearPlanAccessQueries();
+        setToken(session.token);
+        setUser(session.user);
+        setSessionError(null);
+    }, [clearPlanAccessQueries, setSessionError, setToken, setUser]);
 
     const uploadProfilePhoto = useCallback(async (uri: string) => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -125,9 +195,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const updatedUser = await withActiveSession(uploadProfilePhotoRequest(activeToken, uri));
         setToken(activeToken);
         setUser(updatedUser);
-    }, [token, withActiveSession]);
+    }, [setToken, setUser, token, withActiveSession]);
 
-    const updateProfile = useCallback(async (input: { name: string; email: string | null }) => {
+    const updateProfile = useCallback(async (input: { name: string }) => {
         const activeToken = token ?? await getStoredAuthToken();
         if (!activeToken) {
             throw new Error('برای ویرایش پروفایل ابتدا وارد حساب شوید.');
@@ -136,7 +206,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const updatedUser = await withActiveSession(updateProfileRequest(activeToken, input));
         setToken(activeToken);
         setUser(updatedUser);
-    }, [token, withActiveSession]);
+    }, [setToken, setUser, token, withActiveSession]);
 
     const updateInactivityDeletion = useCallback(async (periodMonths: 6 | 12 | 18 | null) => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -147,7 +217,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const updatedUser = await withActiveSession(updateInactivityDeletionRequest(activeToken, periodMonths));
         setToken(activeToken);
         setUser(updatedUser);
-    }, [token, withActiveSession]);
+    }, [setToken, setUser, token, withActiveSession]);
 
     const removeProfilePhoto = useCallback(async () => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -158,28 +228,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const updatedUser = await withActiveSession(deleteProfilePhotoRequest(activeToken));
         setToken(activeToken);
         setUser(updatedUser);
-    }, [token, withActiveSession]);
-
-    const sendEmailVerificationCode = useCallback(async () => {
-        const activeToken = token ?? await getStoredAuthToken();
-        if (!activeToken) {
-            throw new Error('برای تأیید ایمیل ابتدا وارد حساب شوید.');
-        }
-
-        const response = await withActiveSession(sendEmailVerificationCodeRequest(activeToken));
-        return { resend_after: response.resend_after };
-    }, [token, withActiveSession]);
-
-    const verifyEmail = useCallback(async (code: string) => {
-        const activeToken = token ?? await getStoredAuthToken();
-        if (!activeToken) {
-            throw new Error('برای تأیید ایمیل ابتدا وارد حساب شوید.');
-        }
-
-        const updatedUser = await withActiveSession(verifyEmailRequest(activeToken, code));
-        setToken(activeToken);
-        setUser(updatedUser);
-    }, [token, withActiveSession]);
+    }, [setToken, setUser, token, withActiveSession]);
 
     const changePhone = useCallback(async (phone: string, code: string) => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -190,7 +239,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const updatedUser = await withActiveSession(changePhoneRequest(activeToken, phone, code));
         setToken(activeToken);
         setUser(updatedUser);
-    }, [token, withActiveSession]);
+    }, [setToken, setUser, token, withActiveSession]);
 
     const deleteAccount = useCallback(async (code: string) => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -199,10 +248,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         await withActiveSession(deleteAccountRequest(activeToken, code));
-        setUser(null);
-        setToken(null);
+        clearSession();
         await removeStoredAuthToken();
-    }, [token, withActiveSession]);
+        await clearCachedPlanAccess();
+        await clearPlanAccessQueries();
+    }, [clearPlanAccessQueries, clearSession, token, withActiveSession]);
 
     const signOut = useCallback(async () => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -216,10 +266,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
         }
 
-        setUser(null);
-        setToken(null);
+        clearSession();
         await removeStoredAuthToken();
-    }, [token]);
+        await clearCachedPlanAccess();
+        await clearPlanAccessQueries();
+    }, [clearPlanAccessQueries, clearSession, token]);
 
     const signOutAll = useCallback(async () => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -233,10 +284,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
         }
 
-        setUser(null);
-        setToken(null);
+        clearSession();
         await removeStoredAuthToken();
-    }, [token]);
+        await clearCachedPlanAccess();
+        await clearPlanAccessQueries();
+    }, [clearPlanAccessQueries, clearSession, token]);
 
     const getDevices = useCallback(async (): Promise<AuthDevice[]> => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -259,12 +311,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const deviceToRevoke = activeDevices.find((device) => device.id === deviceId);
             await revokeDevice(activeToken, deviceId);
             if (deviceToRevoke?.device_id === currentDeviceId) {
-                setUser(null);
-                setToken(null);
+                clearSession();
                 await removeStoredAuthToken();
+                await clearCachedPlanAccess();
+                await clearPlanAccessQueries();
             }
         })());
-    }, [token, withActiveSession]);
+    }, [clearPlanAccessQueries, clearSession, token, withActiveSession]);
 
     const value = useMemo<AuthContextType>(() => ({
         user,
@@ -272,19 +325,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         sessionError,
         refreshUser,
         signInWithOtp,
+        verifyTwoFactorLogin,
         uploadProfilePhoto,
         removeProfilePhoto,
         updateProfile,
         updateInactivityDeletion,
-        sendEmailVerificationCode,
-        verifyEmail,
         changePhone,
         deleteAccount,
         signOut,
         signOutAll,
         getDevices,
         revokeUserDevice,
-    }), [changePhone, deleteAccount, getDevices, isLoading, refreshUser, removeProfilePhoto, revokeUserDevice, sendEmailVerificationCode, sessionError, signInWithOtp, signOut, signOutAll, updateInactivityDeletion, updateProfile, uploadProfilePhoto, user, verifyEmail]);
+    }), [changePhone, deleteAccount, getDevices, isLoading, refreshUser, removeProfilePhoto, revokeUserDevice, sessionError, signInWithOtp, signOut, signOutAll, updateInactivityDeletion, updateProfile, uploadProfilePhoto, user, verifyTwoFactorLogin]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

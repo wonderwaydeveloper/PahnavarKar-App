@@ -16,6 +16,9 @@ import { getLegalRouteHref } from '@/components/legal/legal-route-utils';
 import type { LegalSearchResult } from '@/database';
 import { searchLegalContent } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { usePlanAccess } from '@/hooks/use-plan-access';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
+import { hasPlanFeature } from '@/utils/plan-access';
 
 type SearchAction = ToolDefinition & {
     searchText: string;
@@ -64,6 +67,9 @@ export default function SearchTabScreen() {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const { planAccess, isLoading: planAccessLoading, error: planAccessError, refresh: refreshPlanAccess } = usePlanAccess();
+    const hasResolvedAccess = !planAccessLoading && !planAccessError && planAccess !== null;
+    const legalAccess = hasResolvedAccess && hasPlanFeature(planAccess, 'legal_library');
     const [query, setQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [scope, setScope] = useState<SearchScope>('all');
@@ -84,7 +90,7 @@ export default function SearchTabScreen() {
     }, [query]);
 
     const normalizedQuery = normalizeSearchText(debouncedQuery);
-    const hasLegalSearch = normalizedQuery.length > 0 && scope !== 'calculations';
+    const hasLegalSearch = legalAccess && normalizedQuery.length > 0 && scope !== 'calculations';
 
     useEffect(() => {
         let cancelled = false;
@@ -112,7 +118,7 @@ export default function SearchTabScreen() {
                         query: normalizedQuery,
                         retry: legalSearchRetry,
                         results: [],
-                        error: error instanceof Error ? error.message : 'جست‌وجو در قوانین با خطا روبه‌رو شد.',
+                        error: getUserFacingErrorMessage(error, 'جست‌وجو در قوانین با خطا روبه‌رو شد.'),
                     });
                 }
             });
@@ -134,7 +140,12 @@ export default function SearchTabScreen() {
     );
 
     const matchingActions = useMemo(() => {
+        if (!hasResolvedAccess) {
+            return [];
+        }
+
         const matchingActions = ACTION_DEFINITIONS
+            .filter((action) => hasPlanFeature(planAccess, action.key))
             .map((action, originalIndex) => {
                 if (!normalizedQuery) {
                     return { action, originalIndex, relevance: 0 };
@@ -162,10 +173,14 @@ export default function SearchTabScreen() {
             .map((entry) => entry.action);
 
         return matchingActions;
-    }, [normalizedQuery]);
+    }, [hasResolvedAccess, normalizedQuery, planAccess]);
 
     const sections = useMemo<SearchSection[]>(() => {
         const nextSections: SearchSection[] = [];
+        if (!hasResolvedAccess) {
+            return nextSections;
+        }
+
         const currentLegalResults = hasLegalSearch ? legalResults : [];
         if (scope !== 'laws' && normalizedQuery) {
             nextSections.push({
@@ -178,7 +193,7 @@ export default function SearchTabScreen() {
                 })),
             });
         }
-        if (scope !== 'calculations' && normalizedQuery && !legalSearchError) {
+        if (legalAccess && scope !== 'calculations' && normalizedQuery && !legalSearchError) {
             nextSections.push({
                 key: 'laws',
                 title: 'قوانین و مقررات',
@@ -190,7 +205,7 @@ export default function SearchTabScreen() {
             });
         }
         return nextSections;
-    }, [hasLegalSearch, legalResults, legalSearchError, matchingActions, normalizedQuery, scope]);
+    }, [hasLegalSearch, hasResolvedAccess, legalAccess, legalResults, legalSearchError, matchingActions, normalizedQuery, scope]);
 
     const handleClearQuery = useCallback(() => {
         setQuery('');
@@ -347,7 +362,31 @@ export default function SearchTabScreen() {
                         );
                     })}
                 </View>
-                {legalSearchLoading && hasLegalSearch ? (
+                {!planAccessLoading && planAccessError ? (
+                    <View style={styles.searchError}>
+                        <ThemedText type="small" themeColor="error" style={{ flex: 1 }}>{planAccessError}</ThemedText>
+                        <Pressable accessibilityRole="button" onPress={() => void refreshPlanAccess()}>
+                            <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
+                        </Pressable>
+                    </View>
+                ) : planAccessLoading ? (
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.searchStatus}>
+                        در حال بررسی دسترسی پلن…
+                    </ThemedText>
+                ) : !hasResolvedAccess ? (
+                    <View style={styles.searchError}>
+                        <ThemedText type="small" themeColor="error" style={{ flex: 1 }}>
+                            دسترسی پلن هنوز تأیید نشده است.
+                        </ThemedText>
+                        <Pressable accessibilityRole="button" onPress={() => void refreshPlanAccess()}>
+                            <ThemedText type="smallBold" themeColor="primaryText">بررسی دوباره</ThemedText>
+                        </Pressable>
+                    </View>
+                ) : scope !== 'calculations' && !legalAccess ? (
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.searchStatus}>
+                        دسترسی به جست‌وجوی قوانین و مقررات در پلن فعلی فعال نیست.
+                    </ThemedText>
+                ) : legalSearchLoading && hasLegalSearch ? (
                     <ThemedText type="small" themeColor="textSecondary" style={styles.searchStatus}>
                         در حال جست‌وجو در قوانین و مقررات…
                     </ThemedText>
@@ -364,13 +403,21 @@ export default function SearchTabScreen() {
                 ) : null}
             </View>
         );
-    }, [hasLegalSearch, legalSearchError, legalSearchLoading, scope, theme.border, theme.primary, theme.primaryContainer, theme.primaryText, theme.surface, theme.textSecondary]);
+    }, [hasLegalSearch, hasResolvedAccess, legalAccess, legalSearchError, legalSearchLoading, planAccessError, planAccessLoading, refreshPlanAccess, scope, theme.border, theme.primary, theme.primaryContainer, theme.primaryText, theme.surface, theme.textSecondary]);
 
     const emptyState = useMemo(() => (
         <View style={[styles.emptyState, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <MaterialCommunityIcons name="text-search" size={28} color={theme.textMuted} />
             <ThemedText type="smallBold">
-                {legalSearchLoading && scope === 'laws'
+                {planAccessLoading
+                    ? 'در حال بررسی دسترسی پلن…'
+                    : planAccessError
+                    ? 'برای نمایش نتایج، ابتدا دسترسی پلن را بررسی کنید'
+                    : !hasResolvedAccess
+                    ? 'دسترسی پلن هنوز تأیید نشده است'
+                    : scope === 'laws' && !legalAccess
+                    ? 'دسترسی به قوانین و مقررات در پلن فعلی فعال نیست'
+                    : legalSearchLoading && scope === 'laws'
                     ? 'در حال جست‌وجو در قوانین و مقررات…'
                     : !normalizedQuery
                         ? 'عبارتی برای جست‌وجو وارد کنید'
@@ -381,7 +428,13 @@ export default function SearchTabScreen() {
                             : 'نتیجه‌ای پیدا نشد'}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-                {!normalizedQuery
+                {planAccessLoading
+                    ? 'نتایج پس از بررسی دسترسی نمایش داده می‌شوند.'
+                    : planAccessError
+                        ? 'پس از برقراری ارتباط، دسترسی را دوباره بررسی کنید.'
+                        : !hasResolvedAccess
+                            ? 'برای نمایش نتایج، دسترسی پلن را دوباره بررسی کنید.'
+                        : !normalizedQuery
                     ? scope === 'laws'
                         ? 'نام قانون، ماده یا عبارت موردنظر را بنویسید.'
                         : scope === 'calculations'
@@ -390,7 +443,7 @@ export default function SearchTabScreen() {
                     : 'عبارت دیگری را جست‌وجو کنید.'}
             </ThemedText>
         </View>
-    ), [legalSearchLoading, normalizedQuery, scope, theme.border, theme.surface, theme.textMuted]);
+    ), [hasResolvedAccess, legalAccess, legalSearchLoading, normalizedQuery, planAccessError, planAccessLoading, scope, theme.border, theme.surface, theme.textMuted]);
 
     return (
         <ThemedView style={styles.container}>
@@ -403,8 +456,8 @@ export default function SearchTabScreen() {
                 renderItem={renderSearchRow}
                 renderSectionHeader={renderSectionHeader}
                 ListEmptyComponent={emptyState}
-                ListFooterComponent={scope === 'all' && normalizedQuery && !legalSearchLoading
-                    && !legalSearchError && legalResults.length === 0 ? (
+                ListFooterComponent={hasResolvedAccess && legalAccess && scope === 'all' && normalizedQuery
+                    && !legalSearchLoading && !legalSearchError && legalResults.length === 0 ? (
                     <View style={styles.loadingFooter}>
                         <ThemedText type="small" themeColor="textSecondary">در قوانین و مقررات نتیجه‌ای پیدا نشد.</ThemedText>
                     </View>

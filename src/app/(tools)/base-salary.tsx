@@ -20,7 +20,7 @@ import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, se
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
-import { getInclusiveDateCount, getMaximumAllowedWorkHours, normalizeWorkHoursInput } from '@/utils/work-hours-input';
+import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
     calculateOrdinaryWorkHoursFromPeriodData,
     calculateSalaryFromPeriodData,
@@ -181,9 +181,6 @@ export default function BaseSalaryScreen() {
     const isDateRangeValid = !!parsedStartDate
         && !!parsedEndDate
         && compareDates(startDate, endDate) <= 0;
-    const periodDayCount = isDateRangeValid && parsedStartDate && parsedEndDate
-        ? getInclusiveDateCount(parsedStartDate, parsedEndDate)
-        : 0;
     const requiredWorkHours = useMemo(() => {
         if (!isDateRangeValid || !parsedStartDate || !parsedEndDate) {
             return null;
@@ -206,8 +203,7 @@ export default function BaseSalaryScreen() {
 
         return calculation.breakdown.length > 0 ? calculation.totalHours : null;
     }, [isDateRangeValid, officialHolidayDates, parsedEndDate, parsedStartDate, periodBuckets]);
-    const overtimeHoursLimit = periodDayCount * 4;
-    const maximumAllowedWorkHours = getMaximumAllowedWorkHours(requiredWorkHours, periodDayCount);
+    const maximumAllowedWorkHours = requiredWorkHours;
     const actualWorkedHoursValue = actualWorkedHours ?? (requiredWorkHours?.toFixed(2) ?? '');
     const normalizedActualWorkedHours = Number(actualWorkedHoursValue);
     const isActualWorkedHoursValid = actualWorkedHoursValue.trim().length > 0
@@ -246,22 +242,6 @@ export default function BaseSalaryScreen() {
             : Math.min(nextValue, maximumAllowedWorkHours);
 
         handleActualWorkedHoursChange(cappedValue.toFixed(2));
-    };
-
-    const formatOvertimeDuration = (hours: number) => {
-        const totalMinutes = Math.round(hours * 60);
-        const overtimeHours = Math.floor(totalMinutes / 60);
-        const overtimeMinutes = totalMinutes % 60;
-
-        if (overtimeHours > 0 && overtimeMinutes > 0) {
-            return `${toPersianDigits(String(overtimeHours))} ساعت و ${toPersianDigits(String(overtimeMinutes))} دقیقه`;
-        }
-
-        if (overtimeHours > 0) {
-            return `${toPersianDigits(String(overtimeHours))} ساعت`;
-        }
-
-        return `${toPersianDigits(String(overtimeMinutes))} دقیقه`;
     };
 
     const handleWorkHoursMethodChange = (method: WorkHoursMethod) => {
@@ -369,14 +349,6 @@ export default function BaseSalaryScreen() {
         notifyCalculationCompleted();
         setShowDetailedBreakdown(false);
         setSnackbarVisible(false);
-
-        if (workHoursMethod === 'period' && normalizedActualWorkedHours > (requiredWorkHours ?? 0)) {
-            const overtimeHours = normalizedActualWorkedHours - (requiredWorkHours ?? 0);
-            showSnackbar(
-                `در این بازه ${formatOvertimeDuration(overtimeHours)} مشمول دریافت فوق العاده اضافه کاری می باشید.`,
-                'info',
-            );
-        }
     };
 
     const formattedResult = useMemo(() => {
@@ -579,7 +551,6 @@ export default function BaseSalaryScreen() {
                                         {maximumAllowedWorkHours !== null ? (
                                         <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
                                             • حداکثر ساعات قابل ورود: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
-                                            {' '}(شامل {toPersianDigits(String(overtimeHoursLimit))} ساعت سقف اضافه‌کاری)
                                         </ThemedText>
                                         ) : null}
                                         <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
@@ -850,7 +821,11 @@ export default function BaseSalaryScreen() {
             <Snackbar
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
-                duration={5000}
+                duration={Math.min(
+                    20000,
+                    Math.max(5000, Math.min(15000, snackbarMessage.trim().split(/\s+/).length * 350)) + 5000,
+                )}
+                wrapperStyle={{ top: insets.top + Spacing.two, bottom: undefined }}
                 style={{ backgroundColor: snackbarType === 'info' ? theme.infoFill : theme.errorFill, borderRadius: Radius.md }}
                 action={{
                     label: 'بستن',

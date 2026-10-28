@@ -1,0 +1,32 @@
+tool_key,route,local_data_dependency,local_operation,network_required_for_calculation,static_review_status
+yearly-info,/home/yearly-info,Years periods job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite records,no,Code reviewed; not device-tested
+base-salary,/home/base-salary,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+entitled-seniority,/home/entitled-seniority,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+housing-allowance,/home/housing-allowance,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+monthly-allowance,/home/monthly-allowance,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+spousal-allowance,/home/spousal-allowance,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+family-allowance,/home/family-allowance,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+unemployment-insurance-allowance,/home/unemployment-insurance-allowance,Years and wage periods from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+overtime-entitlement,/home/overtime-entitlement,Years wage periods job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+night-shift-entitlement,/home/night-shift-entitlement,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+monthly-shift-work,/home/monthly-shift-work,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+minimum-bonus,/home/minimum-bonus,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+maximum-bonus,/home/maximum-bonus,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+bonus-entitlement,/home/bonus-entitlement,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+end-of-service-years,/home/end-of-service-years,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+unused-leave-wage,/home/unused-leave-wage,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+official-holiday-work,/home/official-holiday-work,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+suspension-wage,/home/suspension-wage,Years wage periods official holidays job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+mission-allowance,/home/mission-allowance,Years wage periods job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+friday-work,/home/friday-work,Years wage periods job groups and seniority bases from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+unused-leave-entitlement,/home/unused-leave-entitlement,Years from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+insurance-days-entitlement,/home/insurance-days-entitlement,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+unemployment-insurance-entitlement,/home/unemployment-insurance-entitlement,User-entered values only,Calculates locally,no,Code reviewed; not device-tested
+ordinary-work-hours,/home/ordinary-work-hours,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+hazardous-work-hours,/home/hazardous-work-hours,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+young-worker-work-hours,/home/young-worker-work-hours,Years wage periods and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+official-holidays-in-range,/home/official-holidays-in-range,Years and official holidays from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+illegal-foreign-worker-penalty,/home/illegal-foreign-worker-penalty,Years and wage periods from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+article-87,/home/article-87,User-entered values only,Calculates locally,no,Code reviewed; not device-tested
+social-security-premium-ceiling,/home/social-security-premium-ceiling,Years and wage periods from bundled JSON into SQLite,Reads local SQLite and calculates locally,no,Code reviewed; not device-tested
+group-calculation,/group-calculation,Years wage periods official holidays job groups seniority bases and bundled PDF assets,Reads local SQLite and calculates locally; PDF export uses local assets and device file storage,no,Code reviewed; not device-tested

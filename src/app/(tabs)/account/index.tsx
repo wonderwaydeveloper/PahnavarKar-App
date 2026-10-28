@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,7 +15,9 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlanAccess } from '@/hooks/use-plan-access';
 import { getProfilePhotoUrl } from '@/services/auth-api';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 
 type ProfileAction = {
     key: string;
@@ -28,7 +30,8 @@ const profileGroups = [
     {
         title: 'حساب',
         actions: [
-            { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'نام، ایمیل و تصویر پروفایل', icon: 'account-edit' },
+            { key: 'plans', label: 'پلن‌ها و اشتراک', subtitle: 'مشاهده امکانات و ارتقای پلن', icon: 'crown-outline' },
+            { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'نام و تصویر پروفایل', icon: 'account-edit' },
             { key: 'privacy-security', label: 'حریم خصوصی و امنیت', subtitle: 'نشست‌ها، دستگاه‌ها و امنیت حساب', icon: 'shield-lock-outline' },
         ],
     },
@@ -61,13 +64,47 @@ export default function ProfileScreen() {
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('به زودی فعال می‌شود');
     const [signOutBusy, setSignOutBusy] = useState(false);
+    const [sessionRefreshBusy, setSessionRefreshBusy] = useState(false);
     const [signOutConfirmationVisible, setSignOutConfirmationVisible] = useState(false);
     const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
     const { user, isLoading: authLoading, sessionError, refreshUser, signOut } = useAuth();
+    const { planAccess } = usePlanAccess();
     const appVersion = appConfig.expo?.version ?? '1.0.0';
     const profilePhotoUrl = getProfilePhotoUrl(user?.profile_photo_path ?? null);
+    const subscriptionBadge: {
+        label: string;
+        icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+        color: string;
+    } | null = planAccess
+        ? {
+            label: planAccess.is_unlimited
+                ? 'دسترسی مدیریتی نامحدود'
+                : planAccess.key === 'free'
+                    ? 'اشتراک رایگان'
+                    : `اشتراک ${planAccess.name}`,
+            icon: planAccess.is_unlimited || planAccess.key === 'gold'
+                ? 'crown'
+                : planAccess.key === 'silver'
+                    ? 'medal-outline'
+                    : planAccess.key === 'bronze'
+                        ? 'medal'
+                        : 'gift-outline',
+            color: planAccess.is_unlimited || planAccess.key === 'gold'
+                ? '#956900'
+                : planAccess.key === 'silver'
+                    ? '#586575'
+                    : planAccess.key === 'bronze'
+                        ? '#A44E20'
+                        : theme.primaryText,
+        }
+        : null;
 
     const handleUnavailableAction = (key: string) => {
+        if (key === 'plans') {
+            runDebouncedAction(lastPressRef, () => router.push('/(tabs)/account/plans'));
+            return;
+        }
+
         if (key === 'edit-profile' || key === 'privacy-security') {
             if (!user) {
                 runDebouncedAction(lastPressRef, () => router.push('/auth'));
@@ -97,10 +134,23 @@ export default function ProfileScreen() {
             setSignOutConfirmationVisible(false);
         } catch (error) {
             setSignOutConfirmationVisible(false);
-            setSnackbarMessage(error instanceof Error ? error.message : 'خروج از حساب ناموفق بود.');
+            setSnackbarMessage(getUserFacingErrorMessage(error, 'خروج از حساب ناموفق بود.'));
             setSnackbarVisible(true);
         } finally {
             setSignOutBusy(false);
+        }
+    };
+
+    const handleRefreshSession = async () => {
+        if (sessionRefreshBusy) return;
+
+        setSessionRefreshBusy(true);
+        try {
+            await refreshUser();
+        } catch (error) {
+            console.error('تلاش دوباره برای همگام‌سازی نشست ناموفق بود.', error);
+        } finally {
+            setSessionRefreshBusy(false);
         }
     };
 
@@ -149,32 +199,40 @@ export default function ProfileScreen() {
                                 {user.phone}
                             </ThemedText>
                         </View>
-                        {user.email ? (
-                            <View style={styles.heroContact}>
-                                <MaterialCommunityIcons
-                                    accessibilityLabel={user.email_verified_at ? 'ایمیل تأییدشده' : 'ایمیل تأییدنشده'}
-                                    name={user.email_verified_at ? 'check-decagram' : 'email-alert-outline'}
-                                    size={16}
-                                    color={user.email_verified_at ? theme.success : theme.warning}
-                                />
-                                <ThemedText type="small" style={[styles.heroEmail, { color: theme.textSecondary }]}>
-                                    {user.email}
+                        {subscriptionBadge && (
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={`${subscriptionBadge.label}؛ مشاهدهٔ پلن‌ها و اشتراک`}
+                                onPress={() => runDebouncedAction(lastPressRef, () => router.push('/(tabs)/account/plans'))}
+                                style={({ pressed }) => [
+                                    styles.subscriptionBadge,
+                                    {
+                                        backgroundColor: theme.primaryContainer,
+                                        borderColor: theme.border,
+                                        opacity: pressed ? 0.8 : 1,
+                                    },
+                                ]}
+                            >
+                                <MaterialCommunityIcons name={subscriptionBadge.icon} size={18} color={subscriptionBadge.color} />
+                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                    {subscriptionBadge.label}
                                 </ThemedText>
-                            </View>
-                        ) : null}
+                            </Pressable>
+                        )}
                         {sessionError ? (
                             <View style={styles.syncError}>
-                                <ThemedText type="small" style={{ color: theme.error }}>
-                                    همگام‌سازی حساب ناموفق بود: {sessionError}
+                                <ThemedText type="small" style={{ color: theme.warning }}>
+                                    حساب شما در دسترس است، اما همگام‌سازی کامل نشده است. {sessionError}
                                 </ThemedText>
                                 <Pressable
                                     accessibilityRole="button"
-                                    onPress={() => void refreshUser().catch((error: unknown) => {
-                                        setSnackbarMessage(error instanceof Error ? error.message : 'همگام‌سازی حساب ناموفق بود.');
-                                        setSnackbarVisible(true);
-                                    })}
+                                    disabled={sessionRefreshBusy}
+                                    onPress={() => void handleRefreshSession()}
                                 >
-                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>تلاش دوباره</ThemedText>
+                                    {sessionRefreshBusy ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
+                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                        {sessionRefreshBusy ? 'در حال همگام‌سازی…' : 'همگام‌سازی دوباره'}
+                                    </ThemedText>
                                 </Pressable>
                             </View>
                         ) : null}
@@ -190,17 +248,18 @@ export default function ProfileScreen() {
                         </ThemedText>
                         {sessionError ? (
                             <View style={styles.syncError}>
-                                <ThemedText type="small" style={{ color: theme.error }}>
-                                    بازیابی نشست ناموفق بود: {sessionError}
+                                <ThemedText type="small" style={{ color: theme.warning }}>
+                                    بررسی ورود انجام نشد: {sessionError}
                                 </ThemedText>
                                 <Pressable
                                     accessibilityRole="button"
-                                    onPress={() => void refreshUser().catch((error: unknown) => {
-                                        setSnackbarMessage(error instanceof Error ? error.message : 'بازیابی نشست ناموفق بود.');
-                                        setSnackbarVisible(true);
-                                    })}
+                                    disabled={sessionRefreshBusy}
+                                    onPress={() => void handleRefreshSession()}
                                 >
-                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>تلاش دوباره</ThemedText>
+                                    {sessionRefreshBusy ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
+                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                        {sessionRefreshBusy ? 'در حال بررسی…' : 'بررسی دوباره'}
+                                    </ThemedText>
                                 </Pressable>
                             </View>
                         ) : null}
@@ -369,10 +428,17 @@ const styles = StyleSheet.create({
         writingDirection: 'ltr',
         textAlign: 'left',
     },
-    heroEmail: {
-        writingDirection: 'ltr',
-        textAlign: 'left',
-        flexShrink: 1,
+    subscriptionBadge: {
+        minHeight: 36,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.one,
+        borderWidth: 1,
+        borderRadius: 999,
+        paddingHorizontal: Spacing.three,
+        paddingVertical: Spacing.one,
+        marginTop: Spacing.one,
     },
     syncError: {
         alignItems: 'center',

@@ -25,11 +25,3 @@ export function getInclusiveDateCount(startDate: ParsedDateInput, endDate: Parse
 
     return Math.floor((endTimestamp - startTimestamp) / 86400000) + 1;
 }
-
-export function getMaximumAllowedWorkHours(requiredHours: number | null, dayCount: number) {
-    if (requiredHours === null || dayCount <= 0) {
-        return null;
-    }
-
-    return Math.floor((requiredHours + dayCount * 4) * 100) / 100;
-}

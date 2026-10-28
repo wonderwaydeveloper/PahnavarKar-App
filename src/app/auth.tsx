@@ -1,8 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     BackHandler,
@@ -18,6 +17,9 @@ import { ActivityIndicator, Appbar, Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text';
+import { IranianPhoneInput } from '@/components/iranian-phone-input';
+import { OtpCodeInput } from '@/components/otp-code-input';
+import { ProfilePhotoField } from '@/components/profile-photo-field';
 import { ProfilePhotoPreview } from '@/components/profile-photo-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -26,48 +28,25 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
 import { sendOtp } from '@/services/auth-api';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
+import { getIranianNationalNumber, normalizeIranianPhone } from '@/services/iranian-phone';
 
-type AuthStep = 'phone' | 'editPhone' | 'code' | 'profile';
-type AuthField = 'phone' | 'name' | 'email' | 'code';
+type AuthStep = 'phone' | 'editPhone' | 'code' | 'profile' | 'twoFactor';
+type AuthField = 'phone' | 'name' | 'code';
 type AuthError = { field: AuthField; message: string } | null;
 type AuthMessageKind = 'success' | 'error';
 
-const IRAN_DIAL_CODE = '+98';
-
-function toLatinDigits(value: string) {
-    return value.replace(/[۰-۹٠-٩]/g, (digit) =>
-        String.fromCharCode(
-            digit.charCodeAt(0) >= 0x06f0 && digit.charCodeAt(0) <= 0x06f9
-                ? digit.charCodeAt(0) - 0x06f0 + 48
-                : digit.charCodeAt(0) - 0x0660 + 48,
-        ),
-    );
-}
-
-function getIranianNationalNumber(value: string) {
-    let digits = toLatinDigits(value).replace(/\D/g, '');
-
-    if (digits.startsWith('0098')) {
-        digits = digits.slice(4);
-    } else if (digits.startsWith('98')) {
-        digits = digits.slice(2);
-    }
-    if (digits.startsWith('0') && digits.length > 1) {
-        digits = digits.slice(1);
-    }
-
-    return digits;
-}
-
 function getErrorMessage(error: unknown): string {
-    return error instanceof Error ? error.message : 'خطای نامشخص در ارتباط با سرور رخ داد.';
+    return getUserFacingErrorMessage(error, 'خطای نامشخص در ارتباط با سرور رخ داد.');
 }
 
 export default function AuthScreen() {
     const theme = useTheme();
     const { theme: appTheme } = useAppContext();
-    const { isLoading: authLoading, signInWithOtp, uploadProfilePhoto, user } = useAuth();
+    const { isLoading: authLoading, signInWithOtp, verifyTwoFactorLogin, uploadProfilePhoto, user } = useAuth();
     const router = useRouter();
+    const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
+    const returnPath = returnTo === 'plans' ? '/(tabs)/account/plans' : '/(tabs)/account';
     const insets = useSafeAreaInsets();
     const isLightTheme = appTheme === 'light';
     const headerBackgroundColor = isLightTheme ? theme.primary : theme.surface;
@@ -77,24 +56,26 @@ export default function AuthScreen() {
     const [returnStep, setReturnStep] = useState<'code' | 'profile'>('code');
     const [phone, setPhone] = useState('');
     const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
     const [profilePhoto, setProfilePhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
     const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
     const [code, setCode] = useState('');
+    const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
     const [resendSeconds, setResendSeconds] = useState(0);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<AuthError>(null);
     const [message, setMessage] = useState('');
     const [messageKind, setMessageKind] = useState<AuthMessageKind>('error');
     const [focusedField, setFocusedField] = useState<AuthField | null>(null);
+    const isVerifyingCode = useRef(false);
     const nationalNumber = getIranianNationalNumber(phone);
-    const normalizedPhone = `${IRAN_DIAL_CODE}${nationalNumber}`;
+    const normalizedPhone = normalizeIranianPhone(phone) ?? '';
 
     useEffect(() => {
         if (!authLoading && !busy && user) {
-            router.replace('/(tabs)/account');
+            router.replace(returnPath);
         }
-    }, [authLoading, busy, router, user]);
+    }, [authLoading, busy, returnPath, router, user]);
 
     useEffect(() => {
         if (resendSeconds <= 0) {
@@ -131,6 +112,7 @@ export default function AuthScreen() {
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.85,
+                preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
             });
 
             if (!result.canceled) {
@@ -170,13 +152,17 @@ export default function AuthScreen() {
         }
     };
 
-    const verifyCode = async () => {
-        if (!/^\d{6}$/.test(code)) {
+    const verifyCode = async (submittedCode = code) => {
+        if (busy || isVerifyingCode.current) {
+            return;
+        }
+        if (!/^\d{6}$/.test(submittedCode)) {
             setMessage('');
             setError({ field: 'code', message: 'کد تأیید باید ۶ رقم باشد.' });
             return;
         }
 
+        isVerifyingCode.current = true;
         setBusy(true);
         setError(null);
         setMessage('');
@@ -184,14 +170,43 @@ export default function AuthScreen() {
             const result = await signInWithOtp({
                 phone: normalizedPhone,
                 type: 'login',
-                code,
+                code: submittedCode,
             });
             if (result === 'profile_required') {
                 setStep('profile');
                 return;
             }
+            if (typeof result === 'object') {
+                setTwoFactorChallenge(result.challengeToken);
+                setTwoFactorCode('');
+                setStep('twoFactor');
+                return;
+            }
 
-            router.replace('/(tabs)/account');
+            router.replace(returnPath);
+        } catch (verificationError) {
+            showMessage(getErrorMessage(verificationError));
+        } finally {
+            isVerifyingCode.current = false;
+            setBusy(false);
+        }
+    };
+
+    const verifyTwoFactorCode = async () => {
+        if (!twoFactorChallenge || busy) return;
+        const normalizedCode = twoFactorCode.trim().toUpperCase();
+        if (!/^(?:[0-9]{6}|[A-F0-9]{10})$/.test(normalizedCode)) {
+            showMessage('کد شش‌رقمی برنامه یا کد بازیابی ۱۰حرفی را وارد کنید.');
+            return;
+        }
+
+        setBusy(true);
+        setError(null);
+        setMessage('');
+        try {
+            await verifyTwoFactorLogin(twoFactorChallenge, normalizedCode);
+            setTwoFactorChallenge(null);
+            router.replace(returnPath);
         } catch (verificationError) {
             showMessage(getErrorMessage(verificationError));
         } finally {
@@ -205,11 +220,6 @@ export default function AuthScreen() {
         if (!name.trim()) {
             setMessage('');
             setError({ field: 'name', message: 'نام و نام خانوادگی را وارد کنید.' });
-            return;
-        }
-        if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-            setMessage('');
-            setError({ field: 'email', message: 'نشانی ایمیل معتبر وارد کنید.' });
             return;
         }
         if (!/^\d{6}$/.test(code)) {
@@ -228,9 +238,14 @@ export default function AuthScreen() {
                 type: 'login',
                 code,
                 name: name.trim(),
-                ...(email.trim() ? { email: email.trim().toLowerCase() } : {}),
             });
             if (result !== 'authenticated') {
+                if (typeof result === 'object') {
+                    setTwoFactorChallenge(result.challengeToken);
+                    setTwoFactorCode('');
+                    setStep('twoFactor');
+                    return;
+                }
                 throw new Error('تکمیل حساب انجام نشد. دوباره تلاش کنید.');
             }
 
@@ -244,19 +259,24 @@ export default function AuthScreen() {
                     );
                 }
             }
-            router.replace('/(tabs)/account');
+            router.replace(returnPath);
         } catch (registrationError) {
-            if (registrationError instanceof Error && registrationError.message.includes('ایمیل')) {
-                setError({ field: 'email', message: getErrorMessage(registrationError) });
-            } else {
-                showMessage(getErrorMessage(registrationError));
-            }
+            showMessage(getErrorMessage(registrationError));
         } finally {
             setBusy(false);
         }
     };
 
     const goBack = () => {
+        if (step === 'twoFactor') {
+            setTwoFactorChallenge(null);
+            setTwoFactorCode('');
+            setCode('');
+            setStep('phone');
+            setError(null);
+            setMessage('');
+            return;
+        }
         if (step === 'code' || step === 'profile') {
             setReturnStep(step);
             setStep('editPhone');
@@ -289,6 +309,11 @@ export default function AuthScreen() {
             }
 
             setStep((currentStep) => {
+                if (currentStep === 'twoFactor') {
+                    setTwoFactorChallenge(null);
+                    setTwoFactorCode('');
+                    return 'phone';
+                }
                 if (currentStep === 'code' || currentStep === 'profile') {
                     setReturnStep(currentStep);
                     return 'editPhone';
@@ -307,7 +332,32 @@ export default function AuthScreen() {
     const appBarTitle = step === 'phone'
         ? 'ورود یا ثبت‌نام'
         : step === 'editPhone' ? 'ویرایش شماره تلفن'
-            : step === 'profile' ? 'تکمیل حساب' : 'تأیید شماره';
+            : step === 'profile' ? 'تکمیل حساب'
+                : step === 'twoFactor' ? 'تأیید دومرحله‌ای' : 'تأیید شماره';
+
+    if (authLoading) {
+        return (
+            <ThemedView style={styles.sessionRestore}>
+                <View style={[styles.sessionRestoreCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <View style={[styles.sessionRestoreIcon, { backgroundColor: theme.primaryContainer }]}>
+                        <MaterialCommunityIcons name="shield-account-outline" size={36} color={theme.primaryText} />
+                    </View>
+                    <ThemedText type="bodyBold" style={styles.sessionRestoreTitle}>
+                        در حال بررسی حساب شما
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary" style={styles.sessionRestoreDescription}>
+                        وضعیت ورود را بررسی می‌کنیم تا شما را به صفحهٔ مناسب هدایت کنیم.
+                    </ThemedText>
+                    <View style={[styles.sessionRestoreProgress, { backgroundColor: theme.surfaceVariant }]}>
+                        <ActivityIndicator size="small" color={theme.primaryText} />
+                        <ThemedText type="small" themeColor="textSecondary">
+                            لطفاً چند لحظه صبر کنید
+                        </ThemedText>
+                    </View>
+                </View>
+            </ThemedView>
+        );
+    }
 
     return (
         <ThemedView style={styles.container}>
@@ -358,7 +408,7 @@ export default function AuthScreen() {
                                     <>
                                         <View style={[styles.destinationCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                             <ThemedText type="smallBold" style={styles.destinationPhone}>
-                                                {`\u2066${IRAN_DIAL_CODE} ${nationalNumber}\u2069`}
+                                                {`\u2066+98 ${nationalNumber}\u2069`}
                                             </ThemedText>
                                             <Pressable
                                                 accessibilityRole="button"
@@ -377,56 +427,14 @@ export default function AuthScreen() {
                                         <View style={styles.fieldGroup}>
                                             <ThemedText type="smallBold" style={styles.fieldLabel}>تصویر پروفایل (اختیاری)</ThemedText>
                                             <View style={[styles.photoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <View style={styles.photoPickerColumn}>
-                                                    {profilePhoto ? (
-                                                        <Pressable
-                                                            accessibilityRole="button"
-                                                            accessibilityLabel="پیش‌نمایش تصویر پروفایل"
-                                                            disabled={busy}
-                                                            onPress={() => setPhotoPreviewVisible(true)}
-                                                        >
-                                                            <Image
-                                                                source={{ uri: profilePhoto.uri }}
-                                                                contentFit="cover"
-                                                                style={styles.photoPreview}
-                                                            />
-                                                        </Pressable>
-                                                    ) : (
-                                                        <Pressable
-                                                            accessibilityRole="button"
-                                                            accessibilityLabel="انتخاب تصویر پروفایل"
-                                                            disabled={busy}
-                                                            onPress={() => void chooseProfilePhoto()}
-                                                            style={[styles.photoPlaceholder, { backgroundColor: theme.primaryContainer }]}
-                                                        >
-                                                            <MaterialCommunityIcons
-                                                                name="account-outline"
-                                                                size={32}
-                                                                color={theme.primaryText}
-                                                            />
-                                                        </Pressable>
-                                                    )}
-                                                    <Pressable
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={profilePhoto ? 'تغییر تصویر پروفایل' : 'انتخاب تصویر پروفایل'}
-                                                        disabled={busy}
-                                                        onPress={() => void chooseProfilePhoto()}
-                                                        style={[styles.photoActionBadge, styles.photoEditBadge, { backgroundColor: theme.primary }]}
-                                                    >
-                                                        <MaterialCommunityIcons name="camera-outline" size={16} color={theme.onPrimary} />
-                                                    </Pressable>
-                                                    {profilePhoto ? (
-                                                        <Pressable
-                                                            accessibilityRole="button"
-                                                            accessibilityLabel="حذف تصویر انتخاب‌شده"
-                                                            disabled={busy}
-                                                            onPress={() => setProfilePhoto(null)}
-                                                            style={[styles.photoActionBadge, styles.photoRemoveBadge, { backgroundColor: theme.primary }]}
-                                                        >
-                                                            <MaterialCommunityIcons name="trash-can-outline" size={17} color={theme.onPrimary} />
-                                                        </Pressable>
-                                                    ) : null}
-                                                </View>
+                                                <ProfilePhotoField
+                                                    uri={profilePhoto?.uri ?? null}
+                                                    disabled={busy}
+                                                    onPreview={() => setPhotoPreviewVisible(true)}
+                                                    onSelect={() => void chooseProfilePhoto()}
+                                                    onRemove={() => setProfilePhoto(null)}
+                                                    removeAccessibilityLabel="حذف تصویر انتخاب‌شده"
+                                                />
                                             </View>
                                         </View>
 
@@ -464,100 +472,20 @@ export default function AuthScreen() {
                                             ) : null}
                                         </View>
 
-                                        <View style={styles.fieldGroup}>
-                                            <ThemedText type="smallBold" style={styles.fieldLabel}>ایمیل (اختیاری)</ThemedText>
-                                            <AppTextInput
-                                                accessibilityLabel="ایمیل"
-                                                autoCapitalize="none"
-                                                autoComplete="email"
-                                                keyboardType="email-address"
-                                                onBlur={() => setFocusedField(null)}
-                                                onChangeText={(value) => {
-                                                    setEmail(value);
-                                                    clearFieldError('email');
-                                                }}
-                                                onFocus={() => setFocusedField('email')}
-                                                placeholder="name@example.com"
-                                                placeholderTextColor={theme.textMuted}
-                                                underlineColorAndroid="transparent"
-                                                value={email}
-                                                style={[
-                                                    styles.profileInput,
-                                                    {
-                                                        backgroundColor: theme.surface,
-                                                        borderColor: error?.field === 'email'
-                                                            ? theme.error
-                                                            : focusedField === 'email' ? theme.primary : theme.border,
-                                                        color: theme.text,
-                                                        writingDirection: 'ltr',
-                                                        textAlign: 'left',
-                                                    },
-                                                ]}
-                                            />
-                                            {error?.field === 'email' ? (
-                                                <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
-                                                    {error.message}
-                                                </ThemedText>
-                                            ) : null}
-                                        </View>
-
                                     </>
                                 ) : null}
 
                                 {step === 'phone' ? (
-                                    <View style={styles.fieldGroup}>
-                                        <ThemedText type="smallBold" style={styles.fieldLabel}>شماره تلفن</ThemedText>
-                                <View
-                                    style={[
-                                        styles.phoneInputCard,
-                                        {
-                                            backgroundColor: theme.surface,
-                                            borderColor: error?.field === 'phone'
-                                                ? theme.error
-                                                : focusedField === 'phone' ? theme.primary : theme.border,
-                                        },
-                                    ]}
-                                >
-                                    <AppTextInput
+                                    <IranianPhoneInput
                                         accessibilityLabel="شماره تلفن"
-                                        autoComplete="tel-national"
-                                        autoCorrect={false}
-                                        keyboardType="phone-pad"
-                                        maxLength={15}
-                                        onBlur={() => setFocusedField(null)}
+                                        error={error?.field === 'phone' ? error.message : undefined}
+                                        label="شماره تلفن"
                                         onChangeText={(value) => {
                                             setPhone(value);
                                             clearFieldError('phone');
                                         }}
-                                        onFocus={() => setFocusedField('phone')}
-                                        placeholder="9123456789"
-                                        placeholderTextColor={theme.textMuted}
-                                        returnKeyType="done"
-                                        selection={phone.length === 0 ? { start: 0, end: 0 } : undefined}
-                                        underlineColorAndroid="transparent"
                                         value={phone}
-                                        style={[
-                                            styles.phoneInput,
-                                            {
-                                                color: theme.text,
-                                                direction: 'ltr',
-                                                writingDirection: 'ltr',
-                                                textAlign: 'left',
-                                            },
-                                        ]}
                                     />
-                                    <View style={[styles.phoneDialCode, { borderColor: theme.border }]}>
-                                        <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>
-                                            {IRAN_DIAL_CODE}
-                                        </ThemedText>
-                                    </View>
-                                </View>
-                                {error?.field === 'phone' ? (
-                                    <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
-                                        {error.message}
-                                    </ThemedText>
-                                ) : null}
-                                    </View>
                                 ) : null}
 
                                 <Pressable
@@ -586,59 +514,16 @@ export default function AuthScreen() {
                                 <ThemedText type="body" style={{ color: theme.textSecondary }}>
                                     شمارهٔ جدید را وارد کنید تا کد تأیید تازه‌ای برای آن ارسال شود.
                                 </ThemedText>
-                                <View style={styles.fieldGroup}>
-                                    <ThemedText type="smallBold" style={styles.fieldLabel}>شماره تلفن</ThemedText>
-                                    <View
-                                        style={[
-                                            styles.phoneInputCard,
-                                            {
-                                                backgroundColor: theme.surface,
-                                                borderColor: error?.field === 'phone'
-                                                    ? theme.error
-                                                    : focusedField === 'phone' ? theme.primary : theme.border,
-                                            },
-                                        ]}
-                                    >
-                                        <AppTextInput
-                                            accessibilityLabel="ویرایش شماره تلفن"
-                                            autoComplete="tel-national"
-                                            autoCorrect={false}
-                                            keyboardType="phone-pad"
-                                            maxLength={15}
-                                            onBlur={() => setFocusedField(null)}
-                                            onChangeText={(value) => {
-                                                setPhone(value);
-                                                clearFieldError('phone');
-                                            }}
-                                            onFocus={() => setFocusedField('phone')}
-                                            placeholder="9123456789"
-                                            placeholderTextColor={theme.textMuted}
-                                            returnKeyType="done"
-                                            selection={phone.length === 0 ? { start: 0, end: 0 } : undefined}
-                                            underlineColorAndroid="transparent"
-                                            value={phone}
-                                            style={[
-                                                styles.phoneInput,
-                                                {
-                                                    color: theme.text,
-                                                    direction: 'ltr',
-                                                    writingDirection: 'ltr',
-                                                    textAlign: 'left',
-                                                },
-                                            ]}
-                                        />
-                                        <View style={[styles.phoneDialCode, { borderColor: theme.border }]}>
-                                            <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>
-                                                {IRAN_DIAL_CODE}
-                                            </ThemedText>
-                                        </View>
-                                    </View>
-                                    {error?.field === 'phone' ? (
-                                        <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
-                                            {error.message}
-                                        </ThemedText>
-                                    ) : null}
-                                </View>
+                                <IranianPhoneInput
+                                    accessibilityLabel="ویرایش شماره تلفن"
+                                    error={error?.field === 'phone' ? error.message : undefined}
+                                    label="شماره تلفن"
+                                    onChangeText={(value) => {
+                                        setPhone(value);
+                                        clearFieldError('phone');
+                                    }}
+                                    value={phone}
+                                />
                                 <Pressable
                                     accessibilityRole="button"
                                     disabled={busy}
@@ -658,11 +543,57 @@ export default function AuthScreen() {
                                     {!busy ? <MaterialCommunityIcons name="arrow-left" size={20} color={theme.onPrimary} /> : null}
                                 </Pressable>
                             </View>
+                        ) : step === 'twoFactor' ? (
+                            <View style={styles.form}>
+                                <ThemedText type="body" style={{ color: theme.textSecondary }}>
+                                    کد برنامهٔ احراز هویت یا یکی از کدهای بازیابی را وارد کنید. تا تأیید این مرحله نشست ورود ساخته نمی‌شود.
+                                </ThemedText>
+                                <View style={styles.fieldGroup}>
+                                    <ThemedText type="smallBold" style={styles.fieldLabel}>کد تأیید یا بازیابی</ThemedText>
+                                    <AppTextInput
+                                        accessibilityLabel="کد تأیید دومرحله‌ای یا بازیابی"
+                                        autoComplete="one-time-code"
+                                        autoCapitalize="characters"
+                                        autoCorrect={false}
+                                        maxLength={10}
+                                        onChangeText={(value) => setTwoFactorCode(value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
+                                        placeholder="کد ۶ رقمی یا بازیابی"
+                                        placeholderTextColor={theme.textMuted}
+                                        returnKeyType="done"
+                                        onSubmitEditing={() => void verifyTwoFactorCode()}
+                                        value={twoFactorCode}
+                                        style={[
+                                            styles.profileInput,
+                                            {
+                                                backgroundColor: theme.surface,
+                                                borderColor: theme.border,
+                                                color: theme.text,
+                                                textAlign: 'center',
+                                                writingDirection: 'ltr',
+                                            },
+                                        ]}
+                                    />
+                                </View>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    disabled={busy}
+                                    onPress={() => void verifyTwoFactorCode()}
+                                    style={({ pressed }) => [
+                                        styles.primaryButton,
+                                        { backgroundColor: theme.primary, opacity: pressed || busy ? 0.72 : 1 },
+                                    ]}
+                                >
+                                    {busy ? <ActivityIndicator color={theme.onPrimary} size="small" /> : null}
+                                    <ThemedText type="smallBold" style={[styles.primaryButtonText, { color: theme.onPrimary }]}>
+                                        {busy ? 'در حال بررسی...' : 'تأیید و ورود'}
+                                    </ThemedText>
+                                </Pressable>
+                            </View>
                         ) : (
                             <View style={styles.form}>
                                 <View style={[styles.destinationCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                     <ThemedText type="smallBold" style={styles.destinationPhone}>
-                                        {`\u2066${IRAN_DIAL_CODE} ${nationalNumber}\u2069`}
+                                        {`\u2066+98 ${nationalNumber}\u2069`}
                                     </ThemedText>
                                     <Pressable
                                         accessibilityRole="button"
@@ -677,43 +608,18 @@ export default function AuthScreen() {
                                     </Pressable>
                                 </View>
 
-                                <View style={styles.fieldGroup}>
-                                    <ThemedText type="smallBold" style={styles.fieldLabel}>کد ۶ رقمی پیامک‌شده</ThemedText>
-                                    <AppTextInput
-                                        accessibilityLabel="کد شش رقمی تأیید"
-                                        autoComplete="one-time-code"
-                                        keyboardType="number-pad"
-                                        maxLength={6}
-                                        onBlur={() => setFocusedField(null)}
-                                        onChangeText={(value) => {
-                                            setCode(toLatinDigits(value).replace(/\D/g, '').slice(0, 6));
-                                            clearFieldError('code');
-                                        }}
-                                        onFocus={() => setFocusedField('code')}
-                                        placeholder="••••••"
-                                        placeholderTextColor={theme.textMuted}
-                                        textAlign="center"
-                                        underlineColorAndroid="transparent"
-                                        value={code}
-                                        style={[
-                                            styles.codeInput,
-                                            {
-                                                backgroundColor: theme.surface,
-                                                borderColor: error?.field === 'code'
-                                                    ? theme.error
-                                                    : focusedField === 'code' ? theme.primary : theme.border,
-                                                color: theme.text,
-                                                direction: 'ltr',
-                                                writingDirection: 'ltr',
-                                            },
-                                        ]}
-                                    />
-                                </View>
-                                {error?.field === 'code' ? (
-                                    <ThemedText type="small" accessibilityRole="alert" style={{ color: theme.error }}>
-                                        {error.message}
-                                    </ThemedText>
-                                ) : null}
+                                <OtpCodeInput
+                                    accessibilityLabel="کد شش رقمی تأیید"
+                                    disabled={busy}
+                                    error={error?.field === 'code' ? error.message : undefined}
+                                    label="کد ۶ رقمی پیامک‌شده"
+                                    onChangeText={(value) => {
+                                        setCode(value);
+                                        clearFieldError('code');
+                                    }}
+                                    onComplete={(value) => void verifyCode(value)}
+                                    value={code}
+                                />
                                 <Pressable
                                     accessibilityRole="button"
                                     disabled={busy}
@@ -788,6 +694,48 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     flex: { flex: 1 },
+    sessionRestore: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: Spacing.four,
+    },
+    sessionRestoreCard: {
+        width: '100%',
+        maxWidth: 440,
+        alignItems: 'center',
+        gap: Spacing.two,
+        borderWidth: 1,
+        borderRadius: Radius.lg,
+        paddingHorizontal: Spacing.four,
+        paddingVertical: Spacing.five,
+    },
+    sessionRestoreIcon: {
+        width: 76,
+        height: 76,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 38,
+        marginBottom: Spacing.one,
+    },
+    sessionRestoreTitle: {
+        textAlign: 'center',
+    },
+    sessionRestoreDescription: {
+        maxWidth: 320,
+        textAlign: 'center',
+        lineHeight: 24,
+    },
+    sessionRestoreProgress: {
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.two,
+        borderRadius: Radius.md,
+        paddingVertical: Spacing.two,
+        marginTop: Spacing.one,
+    },
     appBar: {
         elevation: 4,
         shadowRadius: 12,
@@ -850,28 +798,6 @@ const styles = StyleSheet.create({
         marginTop: Spacing.one,
     },
     primaryButtonText: { textAlign: 'center' },
-    phoneInputCard: {
-        minHeight: 64,
-        borderWidth: 1,
-        borderRadius: Radius.md,
-        paddingHorizontal: Spacing.three,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.two,
-    },
-    phoneDialCode: {
-        minHeight: 32,
-        borderStartWidth: 1,
-        paddingStart: Spacing.two,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    phoneInput: {
-        flex: 1,
-        minHeight: 52,
-        paddingVertical: 0,
-        fontSize: 17,
-    },
     profileInput: {
         minHeight: 54,
         borderWidth: 1,
@@ -886,35 +812,6 @@ const styles = StyleSheet.create({
         gap: Spacing.two,
         alignItems: 'center',
     },
-    photoPickerColumn: {
-        width: 96,
-        height: 96,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    photoPreview: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-    },
-    photoPlaceholder: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    photoActionBadge: {
-        position: 'absolute',
-        bottom: 0,
-        width: 30,
-        height: 30,
-        borderRadius: 15,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    photoEditBadge: { right: 0 },
-    photoRemoveBadge: { left: 0 },
     destinationCard: {
         minHeight: 52,
         borderWidth: 1,
@@ -925,15 +822,6 @@ const styles = StyleSheet.create({
         gap: Spacing.two,
     },
     destinationPhone: { flex: 1, writingDirection: 'ltr', textAlign: 'left' },
-    codeInput: {
-        minHeight: 58,
-        borderWidth: 1,
-        borderRadius: Radius.md,
-        fontSize: 24,
-        letterSpacing: 8,
-        paddingHorizontal: Spacing.three,
-        writingDirection: 'ltr',
-    },
     resendButton: { alignItems: 'center', paddingVertical: Spacing.two },
     helperText: { textAlign: 'center' },
 });

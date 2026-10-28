@@ -1,35 +1,22 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Constants, { AppOwnership } from 'expo-constants';
+import * as Device from 'expo-device';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Snackbar } from 'react-native-paper';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { AppTextInput } from '@/components/app-text';
 import { ConfirmationModal } from '@/components/confirmation-modal';
+import { AppTextInput } from '@/components/app-text';
+import { IranianPhoneInput } from '@/components/iranian-phone-input';
+import { OtpCodeInput } from '@/components/otp-code-input';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '@/hooks/use-theme';
-import { getDeviceId, sendOtp, type AuthDevice } from '@/services/auth-api';
-
-function toLatinDigits(value: string) {
-    return value.replace(/[۰-۹٠-٩]/g, (digit) =>
-        String.fromCharCode(
-            digit.charCodeAt(0) >= 0x06f0 && digit.charCodeAt(0) <= 0x06f9
-                ? digit.charCodeAt(0) - 0x06f0 + 48
-                : digit.charCodeAt(0) - 0x0660 + 48,
-        ),
-    );
-}
-
-function normalizeIranianPhone(value: string): string | null {
-    let digits = toLatinDigits(value).replace(/\D/g, '');
-    if (digits.startsWith('0098')) digits = digits.slice(4);
-    else if (digits.startsWith('98')) digits = digits.slice(2);
-    if (digits.startsWith('0')) digits = digits.slice(1);
-    return /^9\d{9}$/.test(digits) ? `+98${digits}` : null;
-}
+import { beginTwoFactorEnrollment, confirmTwoFactorEnrollment, disableTwoFactor, fetchPushSubscriptionStatus, fetchTwoFactorStatus, getDeviceId, getStoredAuthToken, removePushSubscription, savePushSubscription, sendOtp, type AuthDevice, type TwoFactorEnrollment, type TwoFactorStatus } from '@/services/auth-api';
+import { normalizeIranianPhone, normalizeOtpCode } from '@/services/iranian-phone';
 
 function platformLabel(platform: AuthDevice['platform']): string {
     switch (platform) {
@@ -66,6 +53,7 @@ type ConfirmationAction =
 type SnackbarKind = 'info' | 'success' | 'error';
 type BusyAction = 'phone' | 'delete-code' | 'inactivity' | null;
 type InactivityDeletionPeriod = 6 | 12 | 18 | null;
+const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
 
 export default function PrivacySecurityScreen() {
     const theme = useTheme();
@@ -84,17 +72,22 @@ export default function PrivacySecurityScreen() {
     const [phoneInput, setPhoneInput] = useState('');
     const [phoneCode, setPhoneCode] = useState('');
     const [phoneCodeSent, setPhoneCodeSent] = useState(false);
-    const [phoneInputFocused, setPhoneInputFocused] = useState(false);
-    const [phoneCodeFocused, setPhoneCodeFocused] = useState(false);
     const [deleteCode, setDeleteCode] = useState('');
-    const [deleteCodeFocused, setDeleteCodeFocused] = useState(false);
     const [deleteCodeSent, setDeleteCodeSent] = useState(false);
     const [busy, setBusy] = useState(false);
     const [busyAction, setBusyAction] = useState<BusyAction>(null);
     const [pendingInactivityPeriod, setPendingInactivityPeriod] = useState<InactivityDeletionPeriod>(null);
+    const [pushEnabled, setPushEnabled] = useState(false);
+    const [pushBusy, setPushBusy] = useState(false);
+    const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null);
+    const [twoFactorEnrollment, setTwoFactorEnrollment] = useState<TwoFactorEnrollment | null>(null);
+    const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState<string[]>([]);
+    const [twoFactorCode, setTwoFactorCode] = useState('');
+    const [twoFactorBusy, setTwoFactorBusy] = useState(false);
     const [snackbar, setSnackbar] = useState('');
     const [snackbarKind, setSnackbarKind] = useState<SnackbarKind>('info');
     const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction | null>(null);
+    const isVerifyingPhoneChange = useRef(false);
 
     const showMessage = (message: string, kind: SnackbarKind = 'info') => {
         setSnackbarKind(kind);
@@ -127,6 +120,182 @@ export default function PrivacySecurityScreen() {
         };
     }, [getDevices, user]);
 
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadPushStatus = async () => {
+            if (!user) {
+                setPushEnabled(false);
+                return;
+            }
+
+            try {
+                const token = await getStoredAuthToken();
+                if (!token) {
+                    setPushEnabled(false);
+                    return;
+                }
+                const enabled = await fetchPushSubscriptionStatus(token);
+                if (isExpoGo) {
+                    if (isMounted) setPushEnabled(enabled);
+                    return;
+                }
+
+                const Notifications = await import('expo-notifications');
+                const permission = await Notifications.getPermissionsAsync();
+                if (isMounted) setPushEnabled(enabled && permission.status === 'granted');
+            } catch (loadError) {
+                if (isMounted) {
+                    showMessage(loadError instanceof Error ? loadError.message : 'وضعیت اعلان‌ها دریافت نشد.', 'error');
+                }
+            }
+        };
+
+        void loadPushStatus();
+        return () => {
+            isMounted = false;
+        };
+    }, [user]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadTwoFactorStatus = async () => {
+            if (!user) {
+                setTwoFactorStatus(null);
+                return;
+            }
+
+            try {
+                const token = await getStoredAuthToken();
+                if (!token) throw new Error('نشست کاربری برای دریافت وضعیت امنیتی در دسترس نیست.');
+                const status = await fetchTwoFactorStatus(token);
+                if (isMounted) setTwoFactorStatus(status);
+            } catch (loadError) {
+                if (isMounted) {
+                    showMessage(loadError instanceof Error ? loadError.message : 'وضعیت تأیید دومرحله‌ای دریافت نشد.', 'error');
+                }
+            }
+        };
+
+        void loadTwoFactorStatus();
+        return () => {
+            isMounted = false;
+        };
+    }, [user]);
+
+    const togglePushNotifications = async () => {
+        if (pushBusy) return;
+        setPushBusy(true);
+        try {
+            const token = await getStoredAuthToken();
+            if (!token) throw new Error('برای مدیریت اعلان‌ها ابتدا دوباره وارد حساب شوید.');
+
+            if (pushEnabled) {
+                await removePushSubscription(token);
+                setPushEnabled(false);
+                showMessage('اعلان‌ها برای این دستگاه خاموش شدند.', 'success');
+                return;
+            }
+
+            if (isExpoGo) {
+                throw new Error('برای فعال‌سازی اعلان‌های راه‌دور، برنامه را با development build اجرا کنید؛ Expo Go در اندروید از این قابلیت پشتیبانی نمی‌کند.');
+            }
+
+            if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+                throw new Error('اعلان‌های موبایل در نسخهٔ وب در دسترس نیستند.');
+            }
+            if (!Device.isDevice) {
+                throw new Error('برای فعال‌سازی اعلان‌ها از دستگاه واقعی استفاده کنید.');
+            }
+
+            const Notifications = await import('expo-notifications');
+            let permission = await Notifications.getPermissionsAsync();
+            if (permission.status !== 'granted') {
+                permission = await Notifications.requestPermissionsAsync();
+            }
+            if (permission.status !== 'granted') {
+                throw new Error('مجوز اعلان داده نشد. می‌توانید آن را از تنظیمات دستگاه فعال کنید.');
+            }
+
+            if (Platform.OS === 'android') {
+                await Notifications.setNotificationChannelAsync('default', {
+                    name: 'اعلان‌های پهناورکار',
+                    importance: Notifications.AndroidImportance.DEFAULT,
+                });
+            }
+
+            const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+            if (!projectId) {
+                throw new Error('شناسهٔ پروژهٔ Expo تنظیم نشده است.');
+            }
+            const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+            await savePushSubscription(token, pushToken, Platform.OS);
+            setPushEnabled(true);
+            showMessage('اعلان‌ها برای این دستگاه فعال شدند.', 'success');
+        } catch (pushError) {
+            showMessage(pushError instanceof Error ? pushError.message : 'تغییر تنظیم اعلان‌ها ناموفق بود.', 'error');
+        } finally {
+            setPushBusy(false);
+        }
+    };
+
+    const beginTwoFactorSetup = async () => {
+        setTwoFactorBusy(true);
+        try {
+            const token = await getStoredAuthToken();
+            if (!token) throw new Error('برای تغییر امنیت حساب دوباره وارد شوید.');
+            setTwoFactorEnrollment(await beginTwoFactorEnrollment(token));
+            setTwoFactorCode('');
+            setTwoFactorRecoveryCodes([]);
+        } catch (setupError) {
+            showMessage(setupError instanceof Error ? setupError.message : 'شروع راه‌اندازی ناموفق بود.', 'error');
+        } finally {
+            setTwoFactorBusy(false);
+        }
+    };
+
+    const confirmTwoFactorSetup = async () => {
+        if (twoFactorBusy) return;
+        setTwoFactorBusy(true);
+        try {
+            const token = await getStoredAuthToken();
+            if (!token) throw new Error('برای تغییر امنیت حساب دوباره وارد شوید.');
+            const recoveryCodes = await confirmTwoFactorEnrollment(token, normalizeOtpCode(twoFactorCode));
+            setTwoFactorRecoveryCodes(recoveryCodes);
+            setTwoFactorStatus({
+                enabled: true,
+                enabled_at: new Date().toISOString(),
+                recovery_codes_remaining: recoveryCodes.length,
+            });
+            setTwoFactorEnrollment(null);
+            setTwoFactorCode('');
+            showMessage('تأیید دومرحله‌ای فعال شد. کدهای بازیابی را در جای امن نگه دارید.', 'success');
+        } catch (setupError) {
+            showMessage(setupError instanceof Error ? setupError.message : 'تأیید راه‌اندازی ناموفق بود.', 'error');
+        } finally {
+            setTwoFactorBusy(false);
+        }
+    };
+
+    const turnOffTwoFactor = async () => {
+        if (twoFactorBusy) return;
+        setTwoFactorBusy(true);
+        try {
+            const token = await getStoredAuthToken();
+            if (!token) throw new Error('برای تغییر امنیت حساب دوباره وارد شوید.');
+            await disableTwoFactor(token, twoFactorCode.trim().toUpperCase());
+            setTwoFactorStatus({ enabled: false, enabled_at: null, recovery_codes_remaining: 0 });
+            setTwoFactorCode('');
+            setTwoFactorRecoveryCodes([]);
+            showMessage('تأیید دومرحله‌ای خاموش شد.', 'success');
+        } catch (disableError) {
+            showMessage(disableError instanceof Error ? disableError.message : 'خاموش‌کردن تأیید دومرحله‌ای ناموفق بود.', 'error');
+        } finally {
+            setTwoFactorBusy(false);
+        }
+    };
+
     const requestPhoneCode = async () => {
         const normalizedPhone = normalizeIranianPhone(phoneInput);
         if (!normalizedPhone) {
@@ -154,14 +323,16 @@ export default function PrivacySecurityScreen() {
         }
     };
 
-    const verifyPhoneChange = async () => {
+    const verifyPhoneChange = async (submittedCode = phoneCode) => {
+        if (busy || isVerifyingPhoneChange.current) return;
         const normalizedPhone = normalizeIranianPhone(phoneInput);
-        const normalizedCode = toLatinDigits(phoneCode).replace(/\D/g, '');
+        const normalizedCode = normalizeOtpCode(submittedCode);
         if (!normalizedPhone || !/^\d{6}$/.test(normalizedCode)) {
             showMessage('شماره و کد شش‌رقمی را بررسی کنید.', 'error');
             return;
         }
 
+        isVerifyingPhoneChange.current = true;
         setBusy(true);
         setBusyAction('phone');
         try {
@@ -173,6 +344,7 @@ export default function PrivacySecurityScreen() {
         } catch (changeError) {
             showMessage(changeError instanceof Error ? changeError.message : 'تغییر شماره ناموفق بود.', 'error');
         } finally {
+            isVerifyingPhoneChange.current = false;
             setBusy(false);
             setBusyAction(null);
         }
@@ -223,7 +395,7 @@ export default function PrivacySecurityScreen() {
     };
 
     const confirmDeleteAccount = () => {
-        const normalizedCode = toLatinDigits(deleteCode).replace(/\D/g, '');
+        const normalizedCode = normalizeOtpCode(deleteCode);
         if (!/^\d{6}$/.test(normalizedCode)) {
             showMessage('کد شش‌رقمی را وارد کنید.', 'error');
             return;
@@ -356,6 +528,114 @@ export default function PrivacySecurityScreen() {
                     </ThemedText>
                 </View>
 
+                <Section title="اعلان‌ها" icon="bell-outline" theme={theme}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                        دریافت اعلان روی این دستگاه فقط پس از انتخاب شما فعال می‌شود.
+                    </ThemedText>
+                    {isExpoGo && !pushEnabled ? (
+                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                            برای فعال‌سازی اعلان‌های راه‌دور در Android، از development build استفاده کنید؛ Expo Go این قابلیت را ندارد.
+                        </ThemedText>
+                    ) : null}
+                    <Pressable
+                        accessibilityRole="button"
+                        disabled={pushBusy || (isExpoGo && !pushEnabled)}
+                        onPress={() => void togglePushNotifications()}
+                        style={({ pressed }) => [
+                            styles.notificationButton,
+                            {
+                                backgroundColor: pushEnabled ? theme.surfaceVariant : theme.primary,
+                                borderColor: theme.border,
+                                opacity: pressed || pushBusy ? 0.72 : 1,
+                            },
+                        ]}
+                    >
+                        {pushBusy ? <ActivityIndicator size="small" color={pushEnabled ? theme.text : theme.onPrimary} /> : null}
+                        <ThemedText type="smallBold" style={{ color: pushEnabled ? theme.text : theme.onPrimary }}>
+                            {pushEnabled ? 'خاموش‌کردن اعلان‌ها' : 'فعال‌کردن اعلان‌ها'}
+                        </ThemedText>
+                    </Pressable>
+                </Section>
+
+                <Section title="تأیید دومرحله‌ای" icon="shield-key-outline" theme={theme}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                        با برنامهٔ احراز هویت، ورود به حساب را ایمن‌تر کنید. این گزینه اختیاری و در حالت پیش‌فرض خاموش است.
+                    </ThemedText>
+                    {twoFactorStatus?.enabled ? (
+                        <>
+                            <ThemedText type="smallBold" style={{ color: theme.success }}>
+                                فعال است · {twoFactorStatus.recovery_codes_remaining} کد بازیابی باقی مانده
+                            </ThemedText>
+                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                برای خاموش‌کردن، کد جاری برنامه یا یک کد بازیابی مصرف‌نشده را وارد کنید.
+                            </ThemedText>
+                            <AppTextInput
+                                accessibilityLabel="کد برای خاموش‌کردن تأیید دومرحله‌ای"
+                                autoCapitalize="characters"
+                                autoCorrect={false}
+                                maxLength={64}
+                                onChangeText={setTwoFactorCode}
+                                placeholder="کد برنامه یا کد بازیابی"
+                                placeholderTextColor={theme.textMuted}
+                                value={twoFactorCode}
+                                style={[styles.profileInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
+                            />
+                            <ActionButton
+                                label="خاموش‌کردن تأیید دومرحله‌ای"
+                                icon="shield-off-outline"
+                                busy={twoFactorBusy}
+                                onPress={() => void turnOffTwoFactor()}
+                                theme={theme}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            {twoFactorEnrollment ? (
+                                <>
+                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                        این کلید را در برنامهٔ احراز هویت خود وارد کنید. راه‌اندازی تا ۱۰ دقیقه معتبر است.
+                                    </ThemedText>
+                                    <ThemedText selectable type="code" style={[styles.twoFactorSecret, { color: theme.text }]}>
+                                        {twoFactorEnrollment.secret}
+                                    </ThemedText>
+                                    <OtpCodeInput
+                                        accessibilityLabel="کد برنامه برای فعال‌سازی تأیید دومرحله‌ای"
+                                        disabled={twoFactorBusy}
+                                        label="کد ۶ رقمی برنامه"
+                                        onChangeText={setTwoFactorCode}
+                                        value={twoFactorCode}
+                                    />
+                                    <ActionButton
+                                        label="تأیید و فعال‌سازی"
+                                        icon="check"
+                                        busy={twoFactorBusy}
+                                        disabled={twoFactorCode.length !== 6}
+                                        onPress={() => void confirmTwoFactorSetup()}
+                                        theme={theme}
+                                    />
+                                </>
+                            ) : (
+                                <ActionButton
+                                    label="راه‌اندازی تأیید دومرحله‌ای"
+                                    icon="shield-key-outline"
+                                    busy={twoFactorBusy || twoFactorStatus === null}
+                                    disabled={twoFactorStatus === null}
+                                    onPress={() => void beginTwoFactorSetup()}
+                                    theme={theme}
+                                />
+                            )}
+                        </>
+                    )}
+                    {twoFactorRecoveryCodes.length > 0 ? (
+                        <View style={[styles.recoveryCodes, { backgroundColor: theme.surfaceVariant }]}>
+                            <ThemedText type="smallBold">کدهای بازیابی؛ هر کد فقط یک‌بار قابل استفاده است</ThemedText>
+                            <ThemedText selectable type="code" style={{ color: theme.text }}>
+                                {twoFactorRecoveryCodes.join('\n')}
+                            </ThemedText>
+                        </View>
+                    ) : null}
+                </Section>
+
                 <Section title="امنیت حساب" icon="cellphone-key" theme={theme}>
                     <View style={[styles.currentPhone, { backgroundColor: theme.surfaceVariant }]}>
                         <View style={[styles.currentPhoneIcon, { backgroundColor: theme.primaryContainer }]}>
@@ -372,68 +652,25 @@ export default function PrivacySecurityScreen() {
                         <ThemedText type="small" style={{ color: theme.textSecondary }}>
                             کد به شمارهٔ جدید فرستاده می‌شود؛ تغییر فقط پس از تأیید موفق اعمال خواهد شد.
                         </ThemedText>
-                        <View
-                            style={[
-                                styles.phoneInputCard,
-                                {
-                                    backgroundColor: theme.surface,
-                                    borderColor: phoneInputFocused ? theme.primary : theme.border,
-                                },
-                            ]}
-                        >
-                            <AppTextInput
-                                accessibilityLabel="شمارهٔ تلفن جدید"
-                                autoComplete="tel-national"
-                                autoCorrect={false}
-                                keyboardType="phone-pad"
-                                maxLength={10}
-                                onBlur={() => setPhoneInputFocused(false)}
-                                onChangeText={(value) => {
-                                    setPhoneInput(toLatinDigits(value).replace(/\D/g, '').slice(0, 10));
-                                    setPhoneCode('');
-                                    setPhoneCodeSent(false);
-                                }}
-                                onFocus={() => setPhoneInputFocused(true)}
-                                placeholder="9123456789"
-                                placeholderTextColor={theme.textMuted}
-                                returnKeyType="done"
-                                underlineColorAndroid="transparent"
-                                value={phoneInput}
-                                style={[styles.phoneInput, { color: theme.text }]}
-                            />
-                            <View style={[styles.phoneDialCode, { borderColor: theme.border }]}>
-                                <ThemedText type="smallBold" style={[styles.dialCodeText, { color: theme.textSecondary }]}>
-                                    +98
-                                </ThemedText>
-                            </View>
-                        </View>
+                        <IranianPhoneInput
+                            accessibilityLabel="شمارهٔ تلفن جدید"
+                            onChangeText={(value) => {
+                                setPhoneInput(value);
+                                setPhoneCode('');
+                                setPhoneCodeSent(false);
+                            }}
+                            value={phoneInput}
+                        />
                     </View>
                     {phoneCodeSent ? (
-                        <View style={styles.fieldGroup}>
-                            <ThemedText type="smallBold" style={styles.fieldLabel}>کد ۶ رقمی پیامک‌شده</ThemedText>
-                            <AppTextInput
-                                accessibilityLabel="کد تأیید شمارهٔ جدید"
-                                autoComplete="one-time-code"
-                                keyboardType="number-pad"
-                                maxLength={6}
-                                onBlur={() => setPhoneCodeFocused(false)}
-                                onChangeText={(value) => setPhoneCode(toLatinDigits(value).replace(/\D/g, '').slice(0, 6))}
-                                onFocus={() => setPhoneCodeFocused(true)}
-                                placeholder="••••••"
-                                placeholderTextColor={theme.textMuted}
-                                textAlign="center"
-                                underlineColorAndroid="transparent"
-                                value={phoneCode}
-                                style={[
-                                    styles.codeInput,
-                                    {
-                                        backgroundColor: theme.surface,
-                                        borderColor: phoneCodeFocused ? theme.primary : theme.border,
-                                        color: theme.text,
-                                    },
-                                ]}
-                            />
-                        </View>
+                        <OtpCodeInput
+                            accessibilityLabel="کد تأیید شمارهٔ جدید"
+                            disabled={busy}
+                            label="کد ۶ رقمی پیامک‌شده"
+                            onChangeText={setPhoneCode}
+                            onComplete={(value) => void verifyPhoneChange(value)}
+                            value={phoneCode}
+                        />
                     ) : null}
                     <ActionButton
                         label={phoneCodeSent ? 'تأیید و تغییر شماره' : 'ارسال کد به شمارهٔ جدید'}
@@ -592,13 +829,13 @@ export default function PrivacySecurityScreen() {
                         </View>
                     </View>
                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                        پس از دورهٔ انتخاب‌شدهٔ بی‌فعالیتی، در صورت ارسال موفق هشدار به ایمیل و شمارهٔ تلفن تأییدشده، حذف حساب برای ۳۰ روز بعد زمان‌بندی می‌شود. ورود دوباره یا خاموش‌کردن این گزینه، فرایند حذف را لغو می‌کند. فعال‌سازی این قابلیت به پیکربندی ایمیل و پیامک در سرور نیاز دارد.
+                        پس از دورهٔ انتخاب‌شدهٔ بی‌فعالیتی، در صورت ارسال موفق هشدار پیامکی به شمارهٔ تلفن تأییدشده، حذف حساب برای ۳۰ روز بعد زمان‌بندی می‌شود. ورود دوباره یا خاموش‌کردن این گزینه، فرایند حذف را لغو می‌کند. فعال‌سازی این قابلیت به پیکربندی پیامک در سرور نیاز دارد.
                     </ThemedText>
-                    {!user.phone_verified_at || !user.email || !user.email_verified_at ? (
+                    {!user.phone_verified_at ? (
                         <View style={[styles.noticeCard, { backgroundColor: theme.surfaceVariant }]}>
-                            <MaterialCommunityIcons name="email-lock-outline" size={19} color={theme.textSecondary} />
+                            <MaterialCommunityIcons name="cellphone-lock" size={19} color={theme.textSecondary} />
                             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                برای فعال‌سازی این قابلیت، شمارهٔ تلفن و یک ایمیل باید تأیید شده باشند.
+                                برای فعال‌سازی این قابلیت، شمارهٔ تلفن باید تأیید شده باشد.
                             </ThemedText>
                         </View>
                     ) : null}
@@ -619,10 +856,6 @@ export default function PrivacySecurityScreen() {
                         ] as const).map((option, index) => {
                             const selected = user.inactivity_deletion_period_months === option.value;
                             const optionDisabled = busy || (
-                                option.value !== null
-                                && (!user.email || !user.email_verified_at)
-                                && !selected
-                            ) || (
                                 option.value !== null
                                 && !user.phone_verified_at
                                 && !selected
@@ -669,27 +902,10 @@ export default function PrivacySecurityScreen() {
                         </ThemedText>
                     </View>
                     {deleteCodeSent ? (
-                        <AppTextInput
+                        <OtpCodeInput
                             accessibilityLabel="کد تأیید حذف حساب"
-                            autoComplete="one-time-code"
-                            keyboardType="number-pad"
-                            maxLength={6}
-                            onBlur={() => setDeleteCodeFocused(false)}
-                            onChangeText={(value) => setDeleteCode(toLatinDigits(value).replace(/\D/g, '').slice(0, 6))}
-                            onFocus={() => setDeleteCodeFocused(true)}
-                            placeholder="••••••"
-                            placeholderTextColor={theme.textMuted}
-                            textAlign="center"
-                            underlineColorAndroid="transparent"
+                            onChangeText={setDeleteCode}
                             value={deleteCode}
-                            style={[
-                                styles.codeInput,
-                                {
-                                    backgroundColor: theme.surface,
-                                    borderColor: deleteCodeFocused ? theme.primary : theme.border,
-                                    color: theme.text,
-                                },
-                            ]}
                         />
                     ) : null}
                     <ActionButton
@@ -848,50 +1064,16 @@ const styles = StyleSheet.create({
     sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginHorizontal: Spacing.one },
     sectionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
     sectionBody: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two },
+    notificationButton: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
+    twoFactorSecret: { borderRadius: Radius.md, padding: Spacing.three, backgroundColor: '#0000000D', textAlign: 'center', letterSpacing: 2 },
+    recoveryCodes: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two },
+    profileInput: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
     currentPhone: { minHeight: 64, borderRadius: Radius.md, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
     currentPhoneIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
     currentPhoneText: { flex: 1, gap: 2 },
     phoneValue: { writingDirection: 'ltr', textAlign: 'left' },
     fieldGroup: { gap: Spacing.one },
     fieldLabel: { paddingHorizontal: Spacing.one },
-    phoneInputCard: {
-        minHeight: 64,
-        borderWidth: 1,
-        borderRadius: Radius.md,
-        paddingHorizontal: Spacing.three,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.two,
-    },
-    phoneDialCode: {
-        minHeight: 32,
-        borderStartWidth: 1,
-        paddingStart: Spacing.two,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    phoneInput: {
-        flex: 1,
-        minHeight: 52,
-        paddingVertical: 0,
-        fontSize: 17,
-        direction: 'ltr',
-        writingDirection: 'ltr',
-        textAlign: 'left',
-    },
-    dialCodeText: { writingDirection: 'ltr' },
-    input: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
-    codeInput: {
-        minHeight: 58,
-        borderWidth: 1,
-        borderRadius: Radius.md,
-        paddingHorizontal: Spacing.three,
-        fontSize: 24,
-        letterSpacing: 8,
-        direction: 'ltr',
-        writingDirection: 'ltr',
-        textAlign: 'center',
-    },
     actionButton: { minHeight: 52, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.two },
     actionChevron: { marginLeft: 'auto' },
     divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },

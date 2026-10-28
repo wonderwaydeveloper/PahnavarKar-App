@@ -598,7 +598,7 @@ export default function NightShiftEntitlementScreen() {
                                         </ThemedText>
                                         {maximumAllowedWorkHours !== null ? (
                                             <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
-                                                • حداکثر ساعات کارکرد مجاز: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
+                                                • حداکثر ساعات قابل ورود: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
                                             </ThemedText>
                                         ) : null}
                                         <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
