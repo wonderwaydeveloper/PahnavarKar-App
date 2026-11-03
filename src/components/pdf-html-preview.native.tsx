@@ -119,10 +119,11 @@ function PdfHtmlPreviewContent({
             <StatusBar
                 hidden={false}
                 barStyle={isLightTheme ? 'dark-content' : 'light-content'}
-                backgroundColor={headerBackgroundColor}
             />
             <View style={[styles.container, { backgroundColor: colors.background }]}>
+                <View style={{ height: insets.top, backgroundColor: headerBackgroundColor }} />
                 <Appbar.Header
+                    statusBarHeight={0}
                     style={[
                         styles.appBar,
                         {

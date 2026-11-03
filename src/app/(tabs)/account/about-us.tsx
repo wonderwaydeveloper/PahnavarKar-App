@@ -3,24 +3,39 @@ import { Image } from 'expo-image';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-const aboutSections = [
+const aboutSections: {
+    title: string;
+    description: string;
+    icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+    label: string;
+}[] = [
     {
-        title: 'ماموریت ما',
-        description: 'ایجاد یک تجربه ساده، دقیق و قابل اعتماد برای محاسبه حقوق و مزایای کارکنان در مسیر مدیریت منابع انسانی و برنامه‌ریزی.',
-        icon: 'target',
+        title: 'ابزارهای محاسباتی حقوق و کار',
+        description: 'ابزارهایی برای برآورد حقوق پایه، مزایا، اضافه‌کاری، عیدی، سنوات، مرخصی، بیمه و برخی دیگر از موضوعات مرتبط با کار.',
+        icon: 'calculator-variant-outline',
+        label: 'محاسبه',
     },
     {
-        title: 'چرا ما',
-        description: 'با تمرکز بر دقت، رابط کاربری روان و سازگاری با نیازهای ایرانی، ابزارهایی طراحی کرده‌ایم که محاسبات را سریع‌تر و شفاف‌تر می‌کنند.',
-        icon: 'lightbulb-on-outline',
+        title: 'اطلاعات مزدی و مبانی محاسبه',
+        description: 'اطلاعات مصوبات مزدی از سال ۱۳۶۹ تاکنون در کنار ابزارهایی قرار گرفته که بر اساس داده‌های ورودی و مبانی مرتبط، نتیجهٔ محاسبه را نمایش می‌دهند.',
+        icon: 'book-open-page-variant-outline',
+        label: 'اطلاعات',
     },
     {
-        title: 'ارزش‌های ما',
-        description: 'شفافیت، دقت در داده‌ها، سادگی استفاده و پشتیبانی از تجربه‌ی فارسی برای کاربران ایرانی.',
-        icon: 'heart-outline',
+        title: 'قوانین و مقررات',
+        description: 'کتابخانهٔ قوانین و مقررات مرتبط با کار و تأمین اجتماعی، همراه با امکان مرور دسته‌بندی‌ها و جست‌وجوی متن قوانین؛ دسترسی به این بخش به قابلیت پلن وابسته است.',
+        icon: 'scale-balance',
+        label: 'کتابخانهٔ قوانین',
+    },
+    {
+        title: 'امکانات حساب کاربری',
+        description: 'در کنار ابزارها، برنامه امکان مدیریت اشتراک، مشاهدهٔ سوابق مالی و اعلان‌های حساب، و استفاده از کیف پول برای پرداخت‌های پشتیبانی‌شده را فراهم می‌کند.',
+        icon: 'account-cog-outline',
+        label: 'امکانات',
     },
 ];
 
@@ -28,94 +43,124 @@ export default function AboutUsScreen() {
     const theme = useTheme();
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.background }]}>
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <View style={[styles.heroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={styles.heroCardContent}>
+        <ThemedView style={styles.container}>
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+                <View style={[styles.introCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                    <View style={styles.brandRow}>
                         <Image
                             source={require('@/assets/images/logo-white.png')}
                             contentFit="contain"
                             allowDownscaling={false}
-                            style={[styles.avatar, { backgroundColor: theme.primary, width: 64, height: 64, borderRadius: 16 }]}
+                            style={[styles.logo, { backgroundColor: theme.primary }]}
                         />
-
-                        <View style={styles.brandBlock}>
-                            <ThemedText type="smallBold" style={[styles.titleText, { color: theme.text }]}>درباره پهناور کار</ThemedText>
+                        <View style={styles.brandCopy}>
+                            <ThemedText type="smallBold" style={{ color: theme.text }}>پهناور کار</ThemedText>
+                            <ThemedText type="small" style={{ color: theme.textSecondary }}>دربارهٔ ما</ThemedText>
                         </View>
-
-                        <ThemedText type="small" style={[styles.heroText, { color: theme.textSecondary }]}>
-                            ما با هدف ساده‌سازی محاسبات حقوق و دستمزد، ابزارهایی کاربردی و قابل اعتماد برای کاربران فراهم کرده‌ایم.
+                        <MaterialCommunityIcons name="briefcase-outline" size={21} color={theme.primaryText} />
+                    </View>
+                    <ThemedText type="largeTitle" style={[styles.introTitle, { color: theme.text }]}>
+                        ابزارهای محاسباتی حقوق و دستمزد، همراه با اطلاعات مزدی
+                    </ThemedText>
+                    <ThemedText type="body" style={[styles.introDescription, { color: theme.textSecondary }]}>
+                        پهناور کار مجموعه‌ای از ابزارهای محاسباتی مرتبط با حقوق و مزایا، اطلاعات مصوبات مزدی و امکانات حساب کاربری را در یک برنامه گرد هم آورده است.
+                    </ThemedText>
+                    <View style={[styles.introTag, { backgroundColor: theme.primaryContainer }]}>
+                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                            محاسبات و اطلاعات حوزهٔ کار
                         </ThemedText>
                     </View>
                 </View>
 
-                <View style={[styles.infoCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={[styles.infoCardContent, { padding: Spacing.three }]}>
-                        {aboutSections.map((section, index) => (
-                            <View key={section.title}>
-                                <View style={styles.sectionRow}>
-                                    <View style={[styles.iconWrap, { backgroundColor: theme.primaryContainer, borderRadius: 999, width: 42, height: 42, alignItems: 'center', justifyContent: 'center' }]}>
-                                        <MaterialCommunityIcons name={section.icon as any} size={20} color={theme.primaryText} />
+                <View style={styles.timeline}>
+                    {aboutSections.map((section, index) => {
+                        const isLast = index === aboutSections.length - 1;
+                        return (
+                            <View key={section.title} style={styles.timelineEntry}>
+                                <View style={styles.rail}>
+                                    <View style={[styles.marker, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                        <MaterialCommunityIcons name={section.icon} size={19} color={theme.primaryText} />
                                     </View>
-
-                                    <View style={styles.textBlock}>
-                                        <ThemedText type="smallBold" style={{ color: theme.text }}>{section.title}</ThemedText>
-                                        <ThemedText type="small" style={[styles.sectionDescription, { color: theme.textSecondary }]}>
-                                            {section.description}
-                                        </ThemedText>
-                                    </View>
+                                    {!isLast ? <View style={[styles.connector, { backgroundColor: theme.border }]} /> : null}
                                 </View>
-
-                                {index < aboutSections.length - 1 && (
-                                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                                )}
+                                <View style={[styles.sectionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                    <View style={styles.sectionHeading}>
+                                        <ThemedText type="small" style={{ color: theme.primaryText }}>{section.label}</ThemedText>
+                                        <ThemedText type="bodyBold" style={{ color: theme.text }}>{section.title}</ThemedText>
+                                    </View>
+                                    <ThemedText type="body" style={[styles.sectionDescription, { color: theme.textSecondary }]}>
+                                        {section.description}
+                                    </ThemedText>
+                                </View>
                             </View>
-                        ))}
-                    </View>
+                        );
+                    })}
                 </View>
             </ScrollView>
-        </View>
+        </ThemedView>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    scrollContent: { flexGrow: 1, padding: Spacing.four, gap: Spacing.three },
-    heroCardContent: { alignItems: 'center', gap: Spacing.two, padding: Spacing.three },
-    infoCardContent: { gap: Spacing.two, alignItems: 'stretch' },
-    heroCard: {
-        borderRadius: Radius.md,
+    content: { padding: Spacing.three, paddingBottom: Spacing.five, gap: Spacing.four },
+    introCard: {
         borderWidth: 1,
-        padding: 0,
-    },
-    infoCard: {
-        borderRadius: Radius.md,
-        borderWidth: 1,
-    },
-    avatar: {
-        marginTop: Spacing.one,
-    },
-    brandBlock: {
-        alignItems: 'center',
-        gap: Spacing.one,
-    },
-    titleText: {},
-    subtitleText: {},
-    heroText: { lineHeight: 20 },
-    sectionRow: {
-        width: '100%',
-        flexDirection: 'row',
-        alignItems: 'flex-start',
+        borderRadius: Radius.lg,
+        padding: Spacing.three,
         gap: Spacing.two,
-        paddingVertical: Spacing.one,
     },
-    iconWrap: {
+    brandRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.two,
+    },
+    logo: {
+        width: 48,
+        height: 48,
+        borderRadius: 16,
+    },
+    brandCopy: { flex: 1, gap: 2 },
+    introTitle: { marginTop: Spacing.one },
+    introDescription: { lineHeight: 25 },
+    introTag: {
+        alignSelf: 'flex-start',
+        borderRadius: 999,
+        paddingHorizontal: Spacing.two,
+        paddingVertical: Spacing.one,
         marginTop: Spacing.one,
     },
-    textBlock: { flex: 1, gap: Spacing.one, alignItems: 'flex-start' },
-    sectionDescription: { lineHeight: 20 },
-    divider: {
-        marginVertical: Spacing.one,
-        height: 1,
+    timeline: { gap: 0 },
+    timelineEntry: {
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        gap: Spacing.two,
     },
+    rail: {
+        width: 38,
+        alignItems: 'center',
+    },
+    marker: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    connector: {
+        width: 2,
+        flex: 1,
+        minHeight: Spacing.two,
+    },
+    sectionCard: {
+        flex: 1,
+        borderWidth: 1,
+        borderRadius: Radius.lg,
+        padding: Spacing.three,
+        marginBottom: Spacing.two,
+        gap: Spacing.two,
+    },
+    sectionHeading: { gap: Spacing.one },
+    sectionDescription: { lineHeight: 25 },
 });

@@ -239,7 +239,7 @@ function calculateOne(key: GroupCalculationKey, input: GroupCalculationInput): P
                 input.jobGroupNumber,
                 input.settledThrough1391,
             );
-            return { value: result.totalAmount, unit: 'ریال', breakdown: result.breakdown };
+            return { value: result.finalEntitlement, unit: 'ریال', breakdown: result.breakdown };
         }
         case 'overtime-entitlement': {
             const result = calculateOvertimeEntitlementFromPeriodData(

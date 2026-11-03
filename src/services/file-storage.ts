@@ -1,5 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import { uuid } from 'expo-modules-core';
+import { uuid } from 'expo';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { saveToDownloadsAsync } from 'pahnavar-file-storage';
 

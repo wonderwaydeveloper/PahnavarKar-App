@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
@@ -15,6 +15,9 @@ interface DateInputFieldProps {
     compact?: boolean;
     iconName?: ComponentProps<typeof MaterialCommunityIcons>['name'];
     helperText?: string;
+    accessibilityLabel?: string;
+    onClear?: () => void;
+    containerStyle?: StyleProp<ViewStyle>;
 }
 
 export function DateInputField({
@@ -26,6 +29,9 @@ export function DateInputField({
     compact = false,
     iconName = 'calendar-month-outline',
     helperText,
+    accessibilityLabel,
+    onClear,
+    containerStyle,
 }: DateInputFieldProps) {
     const theme = useTheme();
 
@@ -34,33 +40,50 @@ export function DateInputField({
         : placeholder;
 
     return (
-        <View style={[styles.metricBox, { backgroundColor: theme.surfaceVariant }]}>
+        <View style={[styles.metricBox, containerStyle, { backgroundColor: theme.surfaceVariant }]}>
             <ThemedText type="small" style={[styles.sectionLabel, { color: theme.textSecondary }]}>
                 {label}
             </ThemedText>
 
-            <Pressable onPress={onPress}>
-                <View
-                    style={[
-                        styles.dateInput,
-                        {
-                            backgroundColor: theme.surface,
-                            borderColor: theme.border,
-                            minHeight: compact ? 40 : 44,
-                        },
-                    ]}
+            <View style={styles.inputRow}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={accessibilityLabel ?? `${label}، ${displayValue}`}
+                    onPress={onPress}
+                    style={{ flex: 1 }}
                 >
-                    <ThemedText
-                        type={compact ? 'small' : 'smallBold'}
-                        style={[styles.fieldValue, { color: value ? theme.text : theme.textSecondary }]}
-                        numberOfLines={1}
+                    <View
+                        style={[
+                            styles.dateInput,
+                            {
+                                backgroundColor: theme.surface,
+                                borderColor: theme.border,
+                                minHeight: compact ? 40 : 44,
+                            },
+                        ]}
                     >
-                        {displayValue}
-                    </ThemedText>
+                        <ThemedText
+                            type={compact ? 'small' : 'smallBold'}
+                            style={[styles.fieldValue, { color: value ? theme.text : theme.textSecondary }]}
+                            numberOfLines={1}
+                        >
+                            {displayValue}
+                        </ThemedText>
 
-                    <MaterialCommunityIcons name={iconName} size={18} color={theme.primaryText} />
-                </View>
-            </Pressable>
+                        <MaterialCommunityIcons name={iconName} size={18} color={theme.primaryText} />
+                    </View>
+                </Pressable>
+                {onClear ? (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`پاک کردن ${label}`}
+                        onPress={onClear}
+                        style={[styles.clearButton, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                    >
+                        <MaterialCommunityIcons name="close" size={16} color={theme.textSecondary} />
+                    </Pressable>
+                ) : null}
+            </View>
 
             {helperText ? (
                 <ThemedText type="small" style={[styles.helperText, { color: theme.textSecondary }]}>
@@ -91,6 +114,19 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.two,
         borderRadius: 8,
         borderWidth: 1,
+    },
+    inputRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.one,
+    },
+    clearButton: {
+        width: 36,
+        height: 36,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 10,
+        borderWidth: StyleSheet.hairlineWidth,
     },
     fieldValue: {
         flexShrink: 1,

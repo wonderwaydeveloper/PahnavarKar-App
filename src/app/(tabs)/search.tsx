@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppHeader } from '@/components/app-header';
 import { AppTextInput } from '@/components/app-text';
+import { ErrorNoticeCard } from '@/components/error-notice-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ToolListItem } from '@/components/tool-list-item';
@@ -363,25 +364,17 @@ export default function SearchTabScreen() {
                     })}
                 </View>
                 {!planAccessLoading && planAccessError ? (
-                    <View style={styles.searchError}>
-                        <ThemedText type="small" themeColor="error" style={{ flex: 1 }}>{planAccessError}</ThemedText>
-                        <Pressable accessibilityRole="button" onPress={() => void refreshPlanAccess()}>
-                            <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
-                        </Pressable>
-                    </View>
+                    <ErrorNoticeCard message={planAccessError} onRetry={() => void refreshPlanAccess()} />
                 ) : planAccessLoading ? (
                     <ThemedText type="small" themeColor="textSecondary" style={styles.searchStatus}>
                         در حال بررسی دسترسی پلن…
                     </ThemedText>
                 ) : !hasResolvedAccess ? (
-                    <View style={styles.searchError}>
-                        <ThemedText type="small" themeColor="error" style={{ flex: 1 }}>
-                            دسترسی پلن هنوز تأیید نشده است.
-                        </ThemedText>
-                        <Pressable accessibilityRole="button" onPress={() => void refreshPlanAccess()}>
-                            <ThemedText type="smallBold" themeColor="primaryText">بررسی دوباره</ThemedText>
-                        </Pressable>
-                    </View>
+                    <ErrorNoticeCard
+                        message="دسترسی پلن هنوز تأیید نشده است."
+                        onRetry={() => void refreshPlanAccess()}
+                        retryLabel="بررسی دوباره"
+                    />
                 ) : scope !== 'calculations' && !legalAccess ? (
                     <ThemedText type="small" themeColor="textSecondary" style={styles.searchStatus}>
                         دسترسی به جست‌وجوی قوانین و مقررات در پلن فعلی فعال نیست.
@@ -391,15 +384,10 @@ export default function SearchTabScreen() {
                         در حال جست‌وجو در قوانین و مقررات…
                     </ThemedText>
                 ) : legalSearchError ? (
-                    <View style={styles.searchError}>
-                        <ThemedText type="small" themeColor="error" style={{ flex: 1 }}>{legalSearchError}</ThemedText>
-                        <Pressable
-                            accessibilityRole="button"
-                            onPress={() => setLegalSearchRetry((retry) => retry + 1)}
-                        >
-                            <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
-                        </Pressable>
-                    </View>
+                    <ErrorNoticeCard
+                        message={legalSearchError}
+                        onRetry={() => setLegalSearchRetry((retry) => retry + 1)}
+                    />
                 ) : null}
             </View>
         );
@@ -461,7 +449,7 @@ export default function SearchTabScreen() {
                     <View style={styles.loadingFooter}>
                         <ThemedText type="small" themeColor="textSecondary">در قوانین و مقررات نتیجه‌ای پیدا نشد.</ThemedText>
                     </View>
-                ) : null}
+                ) : undefined}
                 contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.four }]}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
@@ -485,7 +473,6 @@ const styles = StyleSheet.create({
     filterBar: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingTop: Spacing.three, paddingBottom: Spacing.two },
     filterChip: { minHeight: 38, justifyContent: 'center', paddingHorizontal: Spacing.three, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth },
     searchStatus: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.one },
-    searchError: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingBottom: Spacing.one },
     sectionHeader: { paddingHorizontal: Spacing.three, paddingTop: Spacing.three, paddingBottom: Spacing.two },
     legalResult: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
     legalResultIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

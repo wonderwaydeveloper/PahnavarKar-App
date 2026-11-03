@@ -19,6 +19,7 @@ import { WorkshopTypeSelector } from '@/components/workshop-type-selector';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
@@ -43,6 +44,7 @@ const CHILDREN_OPTIONS = Array.from({ length: 13 }, (_, index) => index);
 
 export default function UnusedLeaveWageScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -132,18 +134,15 @@ export default function UnusedLeaveWageScreen() {
                     setSelectedGroup(groups[0]?.group_number ?? null);
                     setAvailableYears(sortedYears);
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های محاسبهٔ دستمزد مرخصی استفاده‌نشده ناموفق بود.');
             } finally {
                 if (isMounted) setIsLoadingData(false);
             }
         };
         void loadData();
         return () => { isMounted = false; };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
     const toPersianDigits = (value: string | number) => String(value).replace(/\d/g, (digit) => persianDigits[Number(digit)]);

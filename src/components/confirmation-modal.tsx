@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
@@ -9,6 +9,7 @@ interface ConfirmationModalProps {
     visible: boolean;
     title: string;
     message: string;
+    messageItems?: string[];
     confirmLabel: string;
     icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
     busy?: boolean;
@@ -20,6 +21,7 @@ export function ConfirmationModal({
     visible,
     title,
     message,
+    messageItems,
     confirmLabel,
     icon,
     busy = false,
@@ -27,6 +29,7 @@ export function ConfirmationModal({
     onConfirm,
 }: ConfirmationModalProps) {
     const theme = useTheme();
+    const { height } = useWindowDimensions();
     const actionColor = theme.primary;
     const actionTextColor = theme.onPrimary;
 
@@ -50,15 +53,42 @@ export function ConfirmationModal({
                 />
                 <View
                     accessibilityViewIsModal
-                    style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+                    style={[
+                        styles.card,
+                        {
+                            backgroundColor: theme.surface,
+                            borderColor: theme.border,
+                            maxHeight: height * 0.85,
+                        },
+                    ]}
                 >
-                    <View style={[styles.iconWrap, { backgroundColor: theme.primaryContainer }]}>
-                        <MaterialCommunityIcons name={icon} size={24} color={actionColor} />
+                    <View style={styles.header}>
+                        <View style={[styles.iconWrap, { backgroundColor: theme.primaryContainer }]}>
+                            <MaterialCommunityIcons name={icon} size={24} color={actionColor} />
+                        </View>
+                        <ThemedText type="largeTitle" style={styles.title}>{title}</ThemedText>
                     </View>
-                    <ThemedText type="largeTitle" style={styles.title}>{title}</ThemedText>
-                    <ThemedText type="body" style={[styles.message, { color: theme.textSecondary }]}>
-                        {message}
-                    </ThemedText>
+                    <ScrollView
+                        style={styles.content}
+                        contentContainerStyle={styles.contentContainer}
+                        showsVerticalScrollIndicator
+                    >
+                        <ThemedText type="body" style={[styles.message, { color: theme.textSecondary }]}>
+                            {message}
+                        </ThemedText>
+                        {messageItems?.length ? (
+                            <View style={styles.messageItems}>
+                                {messageItems.map((item) => (
+                                    <View key={item} style={styles.messageItem}>
+                                        <View style={[styles.messageItemBullet, { backgroundColor: theme.textSecondary }]} />
+                                        <ThemedText type="body" style={[styles.messageItemText, { color: theme.textSecondary }]}>
+                                            {item}
+                                        </ThemedText>
+                                    </View>
+                                ))}
+                            </View>
+                        ) : null}
+                    </ScrollView>
                     <View style={styles.actions}>
                         <Pressable
                             accessibilityRole="button"
@@ -109,12 +139,28 @@ const styles = StyleSheet.create({
     card: {
         width: '100%',
         maxWidth: 420,
+        maxHeight: '85%',
         borderWidth: 1,
         borderRadius: Radius.lg,
         padding: Spacing.four,
         alignItems: 'center',
         gap: Spacing.two,
         elevation: 8,
+    },
+    header: {
+        width: '100%',
+        flexShrink: 0,
+        alignItems: 'center',
+        gap: Spacing.two,
+    },
+    content: {
+        width: '100%',
+        minHeight: 0,
+        flexShrink: 1,
+    },
+    contentContainer: {
+        alignItems: 'center',
+        gap: Spacing.two,
     },
     iconWrap: {
         width: 52,
@@ -125,6 +171,10 @@ const styles = StyleSheet.create({
     },
     title: { textAlign: 'center' },
     message: { textAlign: 'center', lineHeight: 24 },
+    messageItems: { width: '100%', gap: Spacing.two },
+    messageItem: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
+    messageItemBullet: { width: 6, height: 6, borderRadius: 3, marginTop: 9 },
+    messageItemText: { flex: 1, lineHeight: 24, textAlign: 'auto' },
     actions: { width: '100%', flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.two },
     button: {
         flex: 1,

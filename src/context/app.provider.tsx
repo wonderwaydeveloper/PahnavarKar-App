@@ -167,9 +167,9 @@ export function AppProvider({ children }: AppProviderProps) {
         return colorScheme === 'dark' ? 'dark' : 'light';
     }, [colorScheme, themePreference]);
 
-    const handleSetTheme = useCallback((nextTheme: ThemePreference) => {
+    const handleSetTheme = useCallback(async (nextTheme: ThemePreference) => {
+        await AsyncStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, nextTheme);
         setThemePreference(nextTheme);
-        void AsyncStorage.setItem(THEME_PREFERENCE_STORAGE_KEY, nextTheme).catch(() => undefined);
     }, []);
 
     const handleSetColorPalette = useCallback(async (nextPalette: ThemePalette) => {

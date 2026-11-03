@@ -2,9 +2,10 @@ import { isRunningInExpoGo } from 'expo';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { OFFLINE_ACCESS_GRACE_PERIOD_MS, type PlanAccess } from '@/services/auth-api';
+import type { PlanAccess } from '@/services/auth-api';
+import { CACHE_POLICY } from '@/services/cache-policy';
 
-const PLAN_ACCESS_CACHE_KEY = 'pahnavarkar.plan-access.cache';
+const PLAN_ACCESS_CACHE_KEY = CACHE_POLICY.storage.authenticatedPlanAccess.key;
 const EXPIRY_NOTIFICATION_KEY = 'pahnavarkar.plan-access.expiry-notification';
 
 export interface CachedPlanAccess {
@@ -13,6 +14,20 @@ export interface CachedPlanAccess {
     plan: PlanAccess;
     verifiedAt: number;
     validUntil: number;
+}
+
+export function getPlanAccessValidUntil(subscriptionEndsAt: string | null, verifiedAt = Date.now()): number {
+    let validUntil = verifiedAt + CACHE_POLICY.access.gracePeriodMs;
+
+    if (subscriptionEndsAt !== null) {
+        const subscriptionEnd = Date.parse(subscriptionEndsAt);
+        if (!Number.isFinite(subscriptionEnd)) {
+            throw new Error('زمان پایان اشتراک از سرور معتبر نیست؛ دسترسی آفلاین ذخیره نشد.');
+        }
+        validUntil = Math.min(validUntil, subscriptionEnd);
+    }
+
+    return validUntil;
 }
 
 function isPlanAccess(value: unknown): value is PlanAccess {
@@ -67,7 +82,7 @@ export async function getCachedPlanAccess(userId: number, token: string): Promis
         || !Number.isFinite(value.validUntil)
         || value.verifiedAt > now
         || value.validUntil <= value.verifiedAt
-        || value.validUntil > value.verifiedAt + OFFLINE_ACCESS_GRACE_PERIOD_MS
+        || value.validUntil > value.verifiedAt + CACHE_POLICY.access.gracePeriodMs
     ) {
         return null;
     }
@@ -89,16 +104,7 @@ export async function saveCachedPlanAccess(
     subscriptionEndsAt: string | null,
 ): Promise<CachedPlanAccess> {
     const verifiedAt = Date.now();
-    let validUntil = verifiedAt + OFFLINE_ACCESS_GRACE_PERIOD_MS;
-
-    if (subscriptionEndsAt !== null) {
-        const subscriptionEnd = Date.parse(subscriptionEndsAt);
-        if (!Number.isFinite(subscriptionEnd)) {
-            throw new Error('زمان پایان اشتراک از سرور معتبر نیست؛ دسترسی آفلاین ذخیره نشد.');
-        }
-        validUntil = Math.min(validUntil, subscriptionEnd);
-    }
-
+    const validUntil = getPlanAccessValidUntil(subscriptionEndsAt, verifiedAt);
     const tokenHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, token);
     const cached: CachedPlanAccess = { userId, tokenHash, plan, verifiedAt, validUntil };
     if (Platform.OS !== 'web') {

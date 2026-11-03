@@ -29,9 +29,11 @@ import { Radius, Spacing } from '@/constants/theme';
 import { TOOL_DEFINITIONS } from '@/constants/tool-definitions';
 import { fetchJobGroups, fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useAppContext } from '@/hooks/use-app-context';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { saveFileToDefaultLocation } from '@/services/file-storage';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 import {
     buildGroupCalculationPdfHtml,
     type GroupCalculationPdfAssets,
@@ -870,8 +872,7 @@ async function getPdfAssetDataUri(moduleId: number, mimeType: string, label: str
         const base64 = await new File(localUri).base64();
         return `data:${mimeType};base64,${base64}`;
     } catch (error) {
-        const reason = error instanceof Error && error.message ? `: ${error.message}` : '';
-        throw new Error(`Unable to read ${label} from local storage${reason}`);
+        throw new Error(getUserFacingErrorMessage(error, 'خواندن فایل برای فیش PDF ناموفق بود.'));
     }
 }
 
@@ -914,6 +915,7 @@ async function getGroupCalculationPdfAssets(fontPreference: FontPreference): Pro
 
 export default function GroupCalculationScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { fontPreference, currencyPreference, notifyCalculationCompleted } = useAppContext();
     const { formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
@@ -1025,8 +1027,10 @@ export default function GroupCalculationScreen() {
                     setJobGroups(groups);
                     setSelectedGroup(groups[0]?.group_number ?? null);
                 }
-            } catch {
-                if (isMounted) setErrorMessage('بارگذاری اطلاعات محاسبات انجام نشد.');
+            } catch (error) {
+                if (isMounted) {
+                    setErrorMessage(getUserFacingErrorMessage(error, 'بارگذاری اطلاعات محاسبات انجام نشد.'));
+                }
             } finally {
                 if (isMounted) setLoading(false);
             }
@@ -1034,7 +1038,7 @@ export default function GroupCalculationScreen() {
 
         void loadData();
         return () => { isMounted = false; };
-    }, [currentYear]);
+    }, [currentYear, showError]);
 
     const hasFamilyAllowance = selectedKeys.includes('family-allowance');
     const allCompatibleCalculationsSelected = GROUP_CALCULATION_KEYS.every((key) => (
@@ -1987,14 +1991,10 @@ export default function GroupCalculationScreen() {
                 action === 'save' ? 'Unable to save group calculation PDF:' : 'Unable to export group calculation PDF:',
                 error,
             );
-            const reason = error instanceof Error && error.message ? ` (${error.message})` : '';
-            setPdfSnackbarMessage(
-                action === 'save'
-                    ? `ذخیرهٔ فیش PDF انجام نشد${reason}`
-                    : `ساخت یا اشتراک PDF انجام نشد${reason}`,
+            showError(
+                error,
+                action === 'save' ? 'ذخیرهٔ فیش PDF انجام نشد.' : 'ساخت یا اشتراک PDF انجام نشد.',
             );
-            setPdfSnackbarIsError(true);
-            setPdfSnackbarVisible(true);
         } finally {
             setPdfAction(null);
         }

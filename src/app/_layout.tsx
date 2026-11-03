@@ -1,22 +1,28 @@
-import { Stack, type ErrorBoundaryProps } from 'expo-router';
+import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router';
+import type { NotificationResponse } from 'expo-notifications';
 import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
 import { onlineManager, QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { AppState, I18nManager, Pressable, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { AppState, I18nManager, Platform, Pressable, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
-import { NetworkStatusBanner } from '@/components/network-status-banner';
-import { AppProvider, AuthProvider, PlanAccessProvider } from '@/context';
+import { AccountAccessBanner, AccountSuspensionOverlay } from '@/components/account-access-feedback';
+import { AppFeedbackProvider, AppProvider, AuthProvider, PlanAccessProvider } from '@/context';
 import { useAppContext } from '@/hooks/use-app-context';
+import { useAuth } from '@/hooks/use-auth';
 import { registerPlanAccessBackgroundTask } from '@/services/plan-access-background';
+import { DEFAULT_QUERY_CACHE_OPTIONS } from '@/services/cache-policy';
+import { AuthApiError, isTemporaryApiFailure } from '@/services/auth-api';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
-SplashScreen.preventAutoHideAsync().catch(() => undefined);
+SplashScreen.preventAutoHideAsync().catch((error: unknown) => {
+  console.error('جلوگیری از بسته‌شدن زودهنگام صفحهٔ آغاز ناموفق بود.', error);
+});
 
 function AppContent() {
   const { themeReady } = useAppContext();
@@ -28,8 +34,54 @@ function AppContent() {
   return <FontLoadedApp />;
 }
 
+function NotificationResponseHandler() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const lastResponseIdentifier = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    let active = true;
+    let subscription: { remove: () => void } | undefined;
+
+    const openInbox = (response: NotificationResponse) => {
+      if (!active || lastResponseIdentifier.current === response.notification.request.identifier) return;
+      lastResponseIdentifier.current = response.notification.request.identifier;
+      if (typeof response.notification.request.content.data?.event !== 'string') return;
+
+      router.push(user ? '/(tabs)/account/notifications' as never : '/auth?returnTo=notifications' as never);
+    };
+
+    void import('expo-notifications')
+      .then(async (Notifications) => {
+        if (!active) return;
+        const handleResponse = (response: NotificationResponse) => {
+          openInbox(response);
+          void Notifications.clearLastNotificationResponseAsync().catch((error: unknown) => {
+            console.error('پاک‌کردن پاسخ اعلان بازشده ناموفق بود.', error);
+          });
+        };
+        subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
+        const lastResponse = await Notifications.getLastNotificationResponseAsync();
+        if (lastResponse) handleResponse(lastResponse);
+      })
+      .catch((error: unknown) => {
+        console.error('راه‌اندازی مسیر بازشدن اعلان ناموفق بود.', error);
+      });
+
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, [router, user]);
+
+  return null;
+}
+
 function FontLoadedApp() {
   const { theme, colors } = useAppContext();
+  const insets = useSafeAreaInsets();
   const isLightTheme = theme === 'light';
   const headerBackgroundColor = isLightTheme ? colors.primary : colors.surface;
   const splashHiddenRef = useRef(false);
@@ -50,10 +102,15 @@ function FontLoadedApp() {
           await SplashScreen.hideAsync();
           splashHiddenRef.current = true;
         }
-      } catch {
+      } catch (error) {
+        console.error('به‌روزرسانی رابط سیستم ناموفق بود.', error);
         if (!splashHiddenRef.current && !cancelled) {
-          await SplashScreen.hideAsync();
-          splashHiddenRef.current = true;
+          try {
+            await SplashScreen.hideAsync();
+            splashHiddenRef.current = true;
+          } catch (hideError) {
+            console.error('بستن صفحهٔ آغاز ناموفق بود.', hideError);
+          }
         }
       }
     };
@@ -67,16 +124,22 @@ function FontLoadedApp() {
 
   return (
     <>
-      <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} backgroundColor={headerBackgroundColor} />
+      <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} />
+      <View
+        pointerEvents="none"
+        style={[styles.statusBarBackground, { height: insets.top, backgroundColor: headerBackgroundColor }]}
+      />
       <NavigationBar style={theme === 'dark' ? 'light' : 'dark'} />
       <View style={styles.appContent}>
-        <NetworkStatusBanner />
+        <NotificationResponseHandler />
+        <AccountAccessBanner />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="payment-return" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(tools)" options={{ headerShown: false }} />
         </Stack>
+        <AccountSuspensionOverlay />
       </View>
     </>
   );
@@ -86,9 +149,14 @@ export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        gcTime: 10 * 60 * 1000,
-        staleTime: 30 * 1000,
+        ...DEFAULT_QUERY_CACHE_OPTIONS,
         refetchOnReconnect: true,
+        retry: (failureCount, error) => (
+          failureCount < 1
+          && !(error instanceof AuthApiError)
+          && isTemporaryApiFailure(error)
+        ),
+        retryDelay: 1000,
       },
     },
   }));
@@ -138,11 +206,13 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AppProvider>
-            <AuthProvider>
-              <PlanAccessProvider>
-                <AppContent />
-              </PlanAccessProvider>
-            </AuthProvider>
+            <AppFeedbackProvider>
+              <AuthProvider>
+                <PlanAccessProvider>
+                  <AppContent />
+                </PlanAccessProvider>
+              </AuthProvider>
+            </AppFeedbackProvider>
           </AppProvider>
         </QueryClientProvider>
       </SafeAreaProvider>
@@ -189,5 +259,12 @@ const errorStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  statusBarBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1,
+  },
   appContent: { flex: 1 },
 });

@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
@@ -35,6 +36,7 @@ const SPOUSAL_ALLOWANCE_START_WARNING = 'توجه : حق تاهل از سال 14
 
 export default function SpousalAllowanceScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -109,10 +111,7 @@ export default function SpousalAllowanceScreen() {
                 }
             } catch (error) {
                 console.error('Failed to load spousal allowance calculation data:', error);
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+                if (isMounted) showError(error, 'بارگذاری داده‌های حق تأهل ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoadingData(false);
@@ -125,7 +124,7 @@ export default function SpousalAllowanceScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

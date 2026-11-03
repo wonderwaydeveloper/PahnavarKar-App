@@ -1,23 +1,27 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import appConfig from '@/../app.json';
 
 import { ConfirmationModal } from '@/components/confirmation-modal';
+import { ErrorNoticeCard } from '@/components/error-notice-card';
 import { ProfilePhotoPreview } from '@/components/profile-photo-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppContext } from '@/hooks/use-app-context';
 import { useAuth } from '@/hooks/use-auth';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { usePlanAccess } from '@/hooks/use-plan-access';
-import { getProfilePhotoUrl } from '@/services/auth-api';
-import { getUserFacingErrorMessage } from '@/services/user-facing-error';
+import { fetchNotificationUnreadCount, getProfilePhotoUrl, getStoredAuthToken } from '@/services/auth-api';
+import { getPlanTierIcon, getPlanTierLogoBackground, getPlanTierLogoForeground } from '@/utils/plan-tier-visual';
 
 type ProfileAction = {
     key: string;
@@ -30,9 +34,17 @@ const profileGroups = [
     {
         title: 'حساب',
         actions: [
-            { key: 'plans', label: 'پلن‌ها و اشتراک', subtitle: 'مشاهده امکانات و ارتقای پلن', icon: 'crown-outline' },
-            { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'نام و تصویر پروفایل', icon: 'account-edit' },
-            { key: 'privacy-security', label: 'حریم خصوصی و امنیت', subtitle: 'نشست‌ها، دستگاه‌ها و امنیت حساب', icon: 'shield-lock-outline' },
+            { key: 'edit-profile', label: 'ویرایش پروفایل', subtitle: 'نام، تصویر و شماره تلفن', icon: 'account-edit' },
+            { key: 'privacy-security', label: 'حریم خصوصی و امنیت', subtitle: 'نشست‌ها، دستگاه‌ها و تأیید دومرحله‌ای', icon: 'shield-lock-outline' },
+            { key: 'notifications', label: 'اعلان‌ها', subtitle: 'پیام‌های حساب، امنیت و خدمات برنامه', icon: 'bell-outline' },
+        ],
+    },
+    {
+        title: 'اشتراک و امور مالی',
+        actions: [
+            { key: 'plans', label: 'پلن‌ها و اشتراک', subtitle: 'مشاهدهٔ پلن‌ها و مدیریت اشتراک', icon: 'crown-outline' },
+            { key: 'wallet', label: 'کیف پول', subtitle: 'موجودی، شارژ و برداشت', icon: 'wallet-outline' },
+            { key: 'financial-history', label: 'تاریخچه مالی', subtitle: 'تراکنش‌ها، پرداخت‌ها و برداشت‌ها', icon: 'receipt-text-outline' },
         ],
     },
     {
@@ -65,16 +77,19 @@ export default function ProfileScreen() {
     const [snackbarMessage, setSnackbarMessage] = useState('به زودی فعال می‌شود');
     const [signOutBusy, setSignOutBusy] = useState(false);
     const [sessionRefreshBusy, setSessionRefreshBusy] = useState(false);
+    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
     const [signOutConfirmationVisible, setSignOutConfirmationVisible] = useState(false);
     const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
     const { user, isLoading: authLoading, sessionError, refreshUser, signOut } = useAuth();
+    const { showError } = useAppFeedback();
     const { planAccess } = usePlanAccess();
+    const { theme: appTheme } = useAppContext();
     const appVersion = appConfig.expo?.version ?? '1.0.0';
     const profilePhotoUrl = getProfilePhotoUrl(user?.profile_photo_path ?? null);
     const subscriptionBadge: {
         label: string;
         icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-        color: string;
+        tier: string;
     } | null = planAccess
         ? {
             label: planAccess.is_unlimited
@@ -82,30 +97,50 @@ export default function ProfileScreen() {
                 : planAccess.key === 'free'
                     ? 'اشتراک رایگان'
                     : `اشتراک ${planAccess.name}`,
-            icon: planAccess.is_unlimited || planAccess.key === 'gold'
-                ? 'crown'
-                : planAccess.key === 'silver'
-                    ? 'medal-outline'
-                    : planAccess.key === 'bronze'
-                        ? 'medal'
-                        : 'gift-outline',
-            color: planAccess.is_unlimited || planAccess.key === 'gold'
-                ? '#956900'
-                : planAccess.key === 'silver'
-                    ? '#586575'
-                    : planAccess.key === 'bronze'
-                        ? '#A44E20'
-                        : theme.primaryText,
+            icon: planAccess.is_unlimited ? 'crown' : getPlanTierIcon(planAccess.key),
+            tier: planAccess.is_unlimited ? 'gold' : planAccess.key,
         }
         : null;
 
+    useFocusEffect(useCallback(() => {
+        let active = true;
+
+        const loadUnreadCount = async () => {
+            if (!user) {
+                setUnreadNotificationCount(0);
+                return;
+            }
+
+            try {
+                const token = await getStoredAuthToken();
+                if (!token) throw new Error('نشست کاربر پیدا نشد.');
+                const count = await fetchNotificationUnreadCount(token);
+                if (active) setUnreadNotificationCount(count);
+            } catch (error) {
+                if (active) showError(error, 'دریافت تعداد اعلان‌های خوانده‌نشده ناموفق بود.');
+            }
+        };
+
+        void loadUnreadCount();
+        return () => {
+            active = false;
+        };
+    }, [showError, user]));
+
     const handleUnavailableAction = (key: string) => {
+        if (key === 'notifications') {
+            runDebouncedAction(lastPressRef, () => router.push(
+                user ? '/(tabs)/account/notifications' : '/auth?returnTo=notifications',
+            ));
+            return;
+        }
+
         if (key === 'plans') {
             runDebouncedAction(lastPressRef, () => router.push('/(tabs)/account/plans'));
             return;
         }
 
-        if (key === 'edit-profile' || key === 'privacy-security') {
+        if (key === 'wallet' || key === 'financial-history' || key === 'edit-profile' || key === 'privacy-security') {
             if (!user) {
                 runDebouncedAction(lastPressRef, () => router.push('/auth'));
                 return;
@@ -134,10 +169,20 @@ export default function ProfileScreen() {
             setSignOutConfirmationVisible(false);
         } catch (error) {
             setSignOutConfirmationVisible(false);
-            setSnackbarMessage(getUserFacingErrorMessage(error, 'خروج از حساب ناموفق بود.'));
-            setSnackbarVisible(true);
+            showError(error, 'خروج از حساب ناموفق بود.');
         } finally {
             setSignOutBusy(false);
+        }
+    };
+
+    const handleCopyPhone = async () => {
+        if (!user?.phone) return;
+        try {
+            await Clipboard.setStringAsync(user.phone);
+            setSnackbarMessage('شمارهٔ تلفن کپی شد.');
+            setSnackbarVisible(true);
+        } catch (error) {
+            showError(error, 'کپی شمارهٔ تلفن ناموفق بود.');
         }
     };
 
@@ -188,9 +233,13 @@ export default function ProfileScreen() {
                             </View>
                         )}
                         <ThemedText type="largeTitle" style={styles.heroName}>{user.name}</ThemedText>
-                        <View style={styles.heroContact}>
+                        <Pressable
+                            accessibilityLabel={`کپی شمارهٔ تلفن ${user.phone}`}
+                            accessibilityRole="button"
+                            onPress={() => void handleCopyPhone()}
+                            style={({ pressed }) => [styles.heroContact, { opacity: pressed ? 0.7 : 1 }]}
+                        >
                             <MaterialCommunityIcons
-                                accessibilityLabel="شمارهٔ تلفن"
                                 name="cellphone"
                                 size={18}
                                 color={theme.textSecondary}
@@ -198,7 +247,12 @@ export default function ProfileScreen() {
                             <ThemedText type="body" style={[styles.heroPhone, { color: theme.textSecondary }]}>
                                 {user.phone}
                             </ThemedText>
-                        </View>
+                            <MaterialCommunityIcons
+                                name="content-copy"
+                                size={16}
+                                color={theme.textSecondary}
+                            />
+                        </Pressable>
                         {subscriptionBadge && (
                             <Pressable
                                 accessibilityRole="button"
@@ -213,28 +267,29 @@ export default function ProfileScreen() {
                                     },
                                 ]}
                             >
-                                <MaterialCommunityIcons name={subscriptionBadge.icon} size={18} color={subscriptionBadge.color} />
+                                <View style={[styles.subscriptionBadgeIcon, { backgroundColor: getPlanTierLogoBackground(subscriptionBadge.tier, appTheme) }]}>
+                                    <MaterialCommunityIcons
+                                        name={subscriptionBadge.icon}
+                                        size={16}
+                                        color={getPlanTierLogoForeground(subscriptionBadge.tier, appTheme)}
+                                    />
+                                </View>
                                 <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
                                     {subscriptionBadge.label}
                                 </ThemedText>
                             </Pressable>
                         )}
                         {sessionError ? (
-                            <View style={styles.syncError}>
-                                <ThemedText type="small" style={{ color: theme.warning }}>
-                                    حساب شما در دسترس است، اما همگام‌سازی کامل نشده است. {sessionError}
-                                </ThemedText>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    disabled={sessionRefreshBusy}
-                                    onPress={() => void handleRefreshSession()}
-                                >
-                                    {sessionRefreshBusy ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
-                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
-                                        {sessionRefreshBusy ? 'در حال همگام‌سازی…' : 'همگام‌سازی دوباره'}
-                                    </ThemedText>
-                                </Pressable>
-                            </View>
+                            <ErrorNoticeCard
+                                title="همگام‌سازی حساب کامل نشد"
+                                message={sessionError}
+                                onRetry={() => void handleRefreshSession()}
+                                retryLabel="همگام‌سازی دوباره"
+                                busy={sessionRefreshBusy}
+                                busyLabel="در حال همگام‌سازی…"
+                                tone="warning"
+                                style={{ marginTop: Spacing.one }}
+                            />
                         ) : null}
                     </View>
                 ) : (
@@ -247,21 +302,16 @@ export default function ProfileScreen() {
                             برای ورود یا ساخت حساب، شمارهٔ موبایل خود را تأیید کنید.
                         </ThemedText>
                         {sessionError ? (
-                            <View style={styles.syncError}>
-                                <ThemedText type="small" style={{ color: theme.warning }}>
-                                    بررسی ورود انجام نشد: {sessionError}
-                                </ThemedText>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    disabled={sessionRefreshBusy}
-                                    onPress={() => void handleRefreshSession()}
-                                >
-                                    {sessionRefreshBusy ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
-                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
-                                        {sessionRefreshBusy ? 'در حال بررسی…' : 'بررسی دوباره'}
-                                    </ThemedText>
-                                </Pressable>
-                            </View>
+                            <ErrorNoticeCard
+                                title="بررسی ورود انجام نشد"
+                                message={sessionError}
+                                onRetry={() => void handleRefreshSession()}
+                                retryLabel="بررسی دوباره"
+                                busy={sessionRefreshBusy}
+                                busyLabel="در حال بررسی…"
+                                tone="warning"
+                                style={{ marginTop: Spacing.one }}
+                            />
                         ) : null}
                         <Pressable
                             accessibilityRole="button"
@@ -314,6 +364,13 @@ export default function ProfileScreen() {
                                         <View style={[styles.valuePill, { backgroundColor: theme.primaryContainer }]}>
                                             <ThemedText type="smallBold" style={[styles.valueText, { color: theme.primaryText }]}>
                                                 {appVersion}
+                                            </ThemedText>
+                                        </View>
+                                    ) : null}
+                                    {action.key === 'notifications' && unreadNotificationCount > 0 ? (
+                                        <View style={[styles.valuePill, { backgroundColor: theme.primary }]}>
+                                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.onPrimary }]}>
+                                                {unreadNotificationCount > 99 ? '۹۹+' : unreadNotificationCount.toLocaleString('fa-IR')}
                                             </ThemedText>
                                         </View>
                                     ) : null}
@@ -440,11 +497,6 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
         marginTop: Spacing.one,
     },
-    syncError: {
-        alignItems: 'center',
-        gap: Spacing.one,
-        marginTop: Spacing.one,
-    },
     guestDescription: {
         textAlign: 'center',
     },
@@ -474,6 +526,13 @@ const styles = StyleSheet.create({
     },
     sectionWrap: {
         gap: Spacing.one,
+    },
+    subscriptionBadgeIcon: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     sectionTitle: {
         marginHorizontal: Spacing.one,

@@ -16,6 +16,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import type { PeriodRecord } from '@/database/types';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, rialToDisplayCurrency } from '@/utils/currency';
 import {
@@ -92,6 +93,7 @@ function ResultDetail({ label, value, emphasized = false }: { label: string; val
 
 export default function UnemploymentInsuranceAllowanceScreen() {
     const theme = useTheme();
+    const { showError: reportError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -134,11 +136,8 @@ export default function UnemploymentInsuranceAllowanceScreen() {
                 }
 
                 if (isMounted) setYearPeriods(loadedYearPeriods);
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری مبلغ حداقل مزد روزانه مصوب شورای عالی کار از پایگاه داده.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) reportError(error, 'بارگذاری اطلاعات مزد از پایگاه داده ناموفق بود.');
             } finally {
                 if (isMounted) setIsLoadingData(false);
             }
@@ -149,7 +148,7 @@ export default function UnemploymentInsuranceAllowanceScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [reportError]);
 
     const openPicker = (target: DateTarget) => setPickerTarget(target);
     const selectedDate = unemploymentDate;

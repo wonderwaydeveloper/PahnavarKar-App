@@ -1,11 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import {
-  ActivityIndicator,
-  Card,
-  Snackbar
-} from 'react-native-paper';
+import { ActivityIndicator, Card } from 'react-native-paper';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -15,6 +11,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import type { PeriodRecord, YearRecord } from '@/database/types';
 import { jobGroupUiLabels, periodUiLabels } from '@/database/ui/labels';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useTheme } from '@/hooks/use-theme';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { calculatePeriodDateRange } from '@/utils/period-date-calculator';
@@ -423,6 +420,7 @@ export default function YearlyInfoScreen() {
   const { width } = useWindowDimensions();
   const isWide = width >= 960;
   const theme = useTheme();
+  const { showError } = useAppFeedback();
 
   // State management
   const [years, setYears] = useState<YearRecord[]>([]);
@@ -432,8 +430,6 @@ export default function YearlyInfoScreen() {
   const [seniorityBaseByPeriod, setSeniorityBaseByPeriod] = useState<Record<number, Record<number, number>>>({});
   const [loading, setLoading] = useState(true);
   const [loadingPeriods, setLoadingPeriods] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showError, setShowError] = useState(false);
   const [expandedPeriods, setExpandedPeriods] = useState<Record<string, boolean>>({});
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
 
@@ -445,7 +441,11 @@ export default function YearlyInfoScreen() {
     return years.find((year) => year.id === selectedYearId) ?? [...years].sort((a, b) => b.year - a.year)[0] ?? null;
   }, [selectedYearId, years]);
 
-  const loadPeriodsForYear = async (year: YearRecord | null, showLoading = true) => {
+  const loadPeriodsForYear = useCallback(async (
+    year: YearRecord | null,
+    showLoading: boolean,
+    groups: { id: number; group_number: number; sort_order: number }[],
+  ) => {
     if (showLoading) {
       setLoadingPeriods(true);
     }
@@ -465,7 +465,7 @@ export default function YearlyInfoScreen() {
         const groupMap: Record<number, number> = {};
 
         for (const row of rows) {
-          const matchedGroup = jobGroups.find((group) => group.id === row.job_group_id);
+          const matchedGroup = groups.find((group) => group.id === row.job_group_id);
           const groupNumber = matchedGroup?.group_number ?? row.job_group_id;
           groupMap[groupNumber] = Number(row.base_value);
         }
@@ -475,11 +475,8 @@ export default function YearlyInfoScreen() {
 
       setPeriods(yearPeriods);
       setSeniorityBaseByPeriod(seniorityByPeriod);
-      setError(null);
     } catch (err) {
-      const errorMsg = String(err);
-      setError(errorMsg);
-      setShowError(true);
+      showError(err, 'بارگذاری اطلاعات دوره ناموفق بود.');
       setPeriods([]);
       setSeniorityBaseByPeriod({});
     } finally {
@@ -487,7 +484,7 @@ export default function YearlyInfoScreen() {
         setLoadingPeriods(false);
       }
     }
-  };
+  }, [showError]);
 
   // Load database on mount
   useEffect(() => {
@@ -503,25 +500,22 @@ export default function YearlyInfoScreen() {
         setJobGroups(groupRows);
         const latestYear = sortedYearRows[0] ?? null;
         setSelectedYearId(latestYear?.id ?? null);
-        setError(null);
-        await loadPeriodsForYear(latestYear ?? null, false);
+        await loadPeriodsForYear(latestYear ?? null, false, groupRows);
       } catch (err) {
-        const errorMsg = String(err);
-        setError(errorMsg);
-        setShowError(true);
+        showError(err, 'بارگذاری اطلاعات محاسبه ناموفق بود.');
       } finally {
         setLoading(false);
       }
     }
 
     void loadDatabase();
-  }, []);
+  }, [loadPeriodsForYear, showError]);
 
   const sortedYears = [...years].sort((a, b) => a.year - b.year);
 
   const handleYearSelection = (year: YearRecord | null) => {
     setSelectedYearId(year?.id ?? null);
-    void loadPeriodsForYear(year, true);
+    void loadPeriodsForYear(year, true, jobGroups);
   };
 
   const contentPlatformStyle = Platform.select({
@@ -650,22 +644,6 @@ export default function YearlyInfoScreen() {
       </ThemedView>
 
       {/* Error Snackbar */}
-      <Snackbar
-        visible={showError}
-        onDismiss={() => setShowError(false)}
-        duration={5000}
-        style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }}
-        action={{
-          label: 'بستن',
-          onPress: () => setShowError(false),
-          labelStyle: { color: theme.onStatus },
-        }}
-      >
-        <ThemedText type="small" style={{ color: theme.onStatus }}>
-          {error ?? 'خطایی رخ داده است.'}
-        </ThemedText>
-      </Snackbar>
-
     </>
   );
 }

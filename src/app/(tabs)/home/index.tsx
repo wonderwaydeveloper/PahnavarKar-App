@@ -1,13 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabView, type NavigationState, type SceneRendererProps } from 'react-native-tab-view';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ErrorNoticeCard } from '@/components/error-notice-card';
 import { ToolListItem } from '@/components/tool-list-item';
 import { WebBadge } from '@/components/web-badge';
 import { LegalCategoryList } from '@/components/legal/legal-category-list';
@@ -16,14 +17,8 @@ import { TOOL_DEFINITIONS, type ToolDefinition } from '@/constants/tool-definiti
 import { getToolRoute } from '@/constants/tool-routes';
 import { useTheme } from '@/hooks/use-theme';
 import { usePlanAccess } from '@/hooks/use-plan-access';
+import { HOME_ROUTES, filterHomeActions, type HomeRoute, type HomeTab } from '@/utils/home-tabs';
 import { hasPlanFeature } from '@/utils/plan-access';
-
-type HomeTab = 'all' | 'wageContinuous' | 'wageNonContinuous' | 'nonWage' | 'yearlyInfo' | 'rules';
-
-type HomeRoute = {
-    key: HomeTab;
-    label: string;
-};
 
 type HomeAction = ToolDefinition & { onPress: () => void };
 
@@ -32,29 +27,11 @@ type HomeTabBarProps = SceneRendererProps & {
     theme: ReturnType<typeof useTheme>;
 };
 
-const HOME_ROUTES: HomeRoute[] = [
-    { key: 'all', label: 'همه' },
-    { key: 'wageContinuous', label: 'اقلام مزدی مستمر' },
-    { key: 'wageNonContinuous', label: 'اقلام مزدی غیرمستمر' },
-    { key: 'nonWage', label: 'اقلام غیر مزدی' },
-    { key: 'yearlyInfo', label: 'اطلاعات سال کارکرد' },
-    { key: 'rules', label: 'قوانین و مقررات' },
-];
-
 function createHomeActions(router: ReturnType<typeof useRouter>): HomeAction[] {
     return TOOL_DEFINITIONS.map((tool) => ({
         ...tool,
         onPress: () => router.push(getToolRoute(tool.route) as never),
     }));
-}
-
-function filterActions(actions: HomeAction[], tab: HomeTab) {
-    if (tab === 'all') return actions;
-    if (tab === 'wageContinuous') return actions.filter((action) => action.category === 'wageContinuous');
-    if (tab === 'wageNonContinuous') return actions.filter((action) => action.category === 'wageNonContinuous');
-    if (tab === 'nonWage') return actions.filter((action) => action.category === 'nonWage');
-    if (tab === 'yearlyInfo') return actions.filter((action) => action.category === 'yearlyInfo');
-    return [];
 }
 
 type HomeTabItemProps = {
@@ -112,7 +89,7 @@ function HomeTabItem({ route, isActive, onPress, theme, onLayout }: HomeTabItemP
 }
 
 function HomeTabBar({ navigationState, jumpTo, theme }: HomeTabBarProps) {
-    const scrollViewRef = useRef<ScrollView>(null);
+    const scrollViewRef = useRef<ScrollViewInstance>(null);
     const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
     const [viewportWidth, setViewportWidth] = useState(0);
 
@@ -129,7 +106,10 @@ function HomeTabBar({ navigationState, jumpTo, theme }: HomeTabBarProps) {
     }, [navigationState.index, navigationState.routes, viewportWidth]);
 
     return (
-        <View style={[styles.tabBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+        <View
+            accessibilityRole="tablist"
+            style={[styles.tabBar, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}
+        >
             <ScrollView
                 ref={scrollViewRef}
                 horizontal
@@ -168,7 +148,7 @@ type SceneProps = {
 };
 
 const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset, accessLoading, accessError, accessResolved, refreshAccess, legalAccess }: SceneProps) {
-    const tabActions = filterActions(actions, tab);
+    const tabActions = filterHomeActions(actions, tab);
     const continuousWageActions = tabActions.filter((action) => action.category === 'wageContinuous');
     const nonContinuousWageActions = tabActions.filter((action) => action.category === 'wageNonContinuous');
     const nonWageActions = tabActions.filter((action) => action.category === 'nonWage');
@@ -204,12 +184,13 @@ const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset, ac
                         <ThemedText type="small" style={{ color: theme.textSecondary }}>در حال بررسی دسترسی پلن…</ThemedText>
                     </View>
                 ) : accessError ? (
-                    <View style={styles.emptyState}>
-                        <ThemedText type="small" themeColor="error" style={{ textAlign: 'center' }}>{accessError}</ThemedText>
-                        <Pressable onPress={() => void refreshAccess()} accessibilityRole="button">
-                            <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
-                        </Pressable>
-                    </View>
+                    <ErrorNoticeCard
+                        title="دسترسی ابزارها بررسی نشد"
+                        message={accessError}
+                        onRetry={() => void refreshAccess()}
+                        retryLabel="بررسی دوباره"
+                        style={{ margin: Spacing.three }}
+                    />
                 ) : !accessResolved ? (
                     <View style={styles.emptyState}>
                         <ThemedText type="small" themeColor="textSecondary" style={{ textAlign: 'center' }}>
@@ -291,6 +272,9 @@ export default function HomeTabScreen() {
                 renderScene={renderScene}
                 renderTabBar={renderTabBar}
                 direction="rtl"
+                swipeEnabled
+                lazy
+                lazyPreloadDistance={1}
                 commonOptions={{
                     label: ({ route, color }) => (
                         <ThemedText type="smallBold" style={[styles.tabLabel, { color }]}>{route.label}</ThemedText>

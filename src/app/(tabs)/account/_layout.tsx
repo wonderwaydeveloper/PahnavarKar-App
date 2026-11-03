@@ -11,7 +11,12 @@ export default function AccountLayout() {
             })}
         >
             <Stack.Screen name="index" options={{ title: 'پروفایل' }} />
+            <Stack.Screen name="notifications" options={{ title: 'اعلان‌ها' }} />
             <Stack.Screen name="plans" options={{ title: 'پلن‌ها و اشتراک' }} />
+            <Stack.Screen name="plan-catalog" options={{ title: 'خرید اشتراک | ارتقاء پلن' }} />
+            <Stack.Screen name="purchased-plans" options={{ title: 'پلن‌های من' }} />
+            <Stack.Screen name="wallet" options={{ title: 'کیف پول' }} />
+            <Stack.Screen name="financial-history" options={{ title: 'تاریخچه مالی' }} />
             <Stack.Screen name="edit-profile" options={{ title: 'ویرایش پروفایل' }} />
             <Stack.Screen name="privacy-security" options={{ title: 'حریم خصوصی و امنیت' }} />
             <Stack.Screen name="settings" options={{ title: 'تنظیمات' }} />

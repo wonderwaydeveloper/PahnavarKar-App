@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import {
     calculateIllegalForeignWorkerPenaltyFromPeriodData,
@@ -28,6 +29,7 @@ type PickerTarget = 'start' | 'end';
 
 export default function IllegalForeignWorkerPenaltyScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -82,11 +84,8 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                     setPeriodBuckets(buckets);
                     setAvailableYears(years.map((year) => year.year));
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های محاسبهٔ جریمه ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoadingData(false);
@@ -99,7 +98,7 @@ export default function IllegalForeignWorkerPenaltyScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
     const latinDigits = '0123456789';

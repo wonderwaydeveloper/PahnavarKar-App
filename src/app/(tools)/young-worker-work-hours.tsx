@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import {
     calculateYoungWorkerWorkHoursFromPeriodData,
     parseDateInput,
@@ -27,6 +28,7 @@ type PickerTarget = 'start' | 'end';
 
 export default function YoungWorkerWorkHoursScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const insets = useSafeAreaInsets();
     const currentDate = useMemo(() => {
         const today = new Date();
@@ -75,11 +77,8 @@ export default function YoungWorkerWorkHoursScreen() {
                     setHolidayDates(holidays.map((holiday) => holiday.holiday_date));
                     setAvailableYears(years.map((year) => year.year));
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های ساعات کار نوجوانان ناموفق بود.');
             } finally {
                 if (isMounted) setIsLoadingData(false);
             }
@@ -87,7 +86,7 @@ export default function YoungWorkerWorkHoursScreen() {
 
         void loadData();
         return () => { isMounted = false; };
-    }, []);
+    }, [showError]);
 
     const digits = '۰۱۲۳۴۵۶۷۸۹';
     const toPersianDigits = (value: string | number) => String(value).replace(/\d/g, (digit) => digits[Number(digit)]);

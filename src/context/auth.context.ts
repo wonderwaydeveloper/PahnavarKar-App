@@ -1,10 +1,12 @@
 import { createContext } from 'react';
 import type { AuthDevice, AuthenticatedUser } from '@/services/auth-api';
+import type { AccountSuspensionNotice } from '@/stores/auth-session.store';
 
 export interface AuthContextType {
     user: AuthenticatedUser | null;
     isLoading: boolean;
     sessionError: string | null;
+    accountSuspension: AccountSuspensionNotice | null;
     refreshUser: () => Promise<void>;
     signInWithOtp: (input: {
         phone: string;

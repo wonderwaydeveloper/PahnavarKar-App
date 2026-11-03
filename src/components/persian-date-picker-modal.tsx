@@ -17,6 +17,7 @@ interface PersianDatePickerModalProps {
   onClose: () => void;
   onSelect: (value: string) => void;
   availableYears?: number[];
+  showTodayButton?: boolean;
 }
 
 const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
@@ -98,6 +99,7 @@ export function PersianDatePickerModal({
   onClose,
   onSelect,
   availableYears = [],
+  showTodayButton = false,
 }: PersianDatePickerModalProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -164,6 +166,12 @@ export function PersianDatePickerModal({
 
   const handleDaySelect = (nextDay: number) => {
     setDay(nextDay);
+  };
+
+  const handleTodaySelect = () => {
+    setYear(currentJalaliDate.jy);
+    setMonth(currentJalaliDate.jm);
+    setDay(currentJalaliDate.jd);
   };
 
   const handleConfirm = () => {
@@ -318,27 +326,48 @@ export function PersianDatePickerModal({
           </View>
 
           <View style={styles.actionsRow}>
-            <Button
-              mode="outlined"
-              compact
-              onPress={onClose}
-              style={styles.actionButton}
-              labelStyle={styles.actionLabel}
-              textColor={theme.textSecondary}
-            >
-              لغو
-            </Button>
-            <Button
-              mode="contained"
-              compact
-              onPress={handleConfirm}
-              buttonColor={theme.primary}
-              textColor={theme.onPrimary}
-              style={styles.actionButton}
-              labelStyle={styles.actionLabel}
-            >
-              تأیید
-            </Button>
+            <View style={styles.todayButtonSlot}>
+              {showTodayButton ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="انتخاب تاریخ امروز"
+                  onPress={handleTodaySelect}
+                  style={({ pressed }) => [
+                    styles.todayButton,
+                    {
+                      backgroundColor: pressed ? theme.surfaceVariant : theme.surface,
+                      borderColor: theme.border,
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons name="calendar-today" size={16} color={theme.primaryText} />
+                  <ThemedText type="smallBold" style={{ color: theme.primaryText }}>امروز</ThemedText>
+                </Pressable>
+              ) : null}
+            </View>
+            <View style={styles.confirmationActions}>
+              <Button
+                mode="outlined"
+                compact
+                onPress={onClose}
+                style={styles.actionButton}
+                labelStyle={styles.actionLabel}
+                textColor={theme.textSecondary}
+              >
+                لغو
+              </Button>
+              <Button
+                mode="contained"
+                compact
+                onPress={handleConfirm}
+                buttonColor={theme.primary}
+                textColor={theme.onPrimary}
+                style={styles.actionButton}
+                labelStyle={styles.actionLabel}
+              >
+                تأیید
+              </Button>
+            </View>
           </View>
         </Pressable>
       </Pressable>
@@ -428,10 +457,30 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.one,
     marginTop: Spacing.three,
+  },
+  confirmationActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  todayButtonSlot: {
+    width: 76,
+    minHeight: 40,
+  },
+  todayButton: {
+    width: '100%',
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.one,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.two,
   },
   actionButton: {
     minWidth: 56,

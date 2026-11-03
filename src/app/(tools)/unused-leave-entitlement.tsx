@@ -15,11 +15,13 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { calculateUnusedLeaveEntitlement, calculateUnusedLeaveMonths, parseDateInput, type UnusedLeaveEntitlementCalculationResult } from '@/utils/salary-calculation';
 import { useAppContext } from '@/hooks/use-app-context';
 
 export default function UnusedLeaveEntitlementScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -56,11 +58,8 @@ export default function UnusedLeaveEntitlementScreen() {
                 if (isMounted) {
                     setAvailableYears(years.map((year) => year.year));
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های مرخصی استفاده‌نشده ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoadingData(false);
@@ -73,7 +72,7 @@ export default function UnusedLeaveEntitlementScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

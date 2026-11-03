@@ -19,13 +19,14 @@ import { WorkshopTypeSelector } from '@/components/workshop-type-selector';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
 import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
     calculateOrdinaryWorkHoursFromPeriodData,
-    calculateEntitledSeniorityFromPeriodData,
+    calculateEntitledSeniorityForDateRangeFromPeriodData,
     parseDateInput,
     type EntitledSeniorityCalculationResult,
     type EntitledSeniorityWorkshopType,
@@ -37,6 +38,7 @@ type WorkHoursMethod = 'daily' | 'period';
 
 export default function EntitledSeniorityScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentDate = useMemo(() => {
@@ -47,8 +49,9 @@ export default function EntitledSeniorityScreen() {
     const defaultEndDate = `${currentDate.jy}/12/${jalaaliMonthLength(currentDate.jy, 12)}`;
 
     const [employmentDate, setEmploymentDate] = useState(defaultEmploymentDate);
+    const [startDate, setStartDate] = useState(defaultEmploymentDate);
     const [endDate, setEndDate] = useState(defaultEndDate);
-    const [pickerTarget, setPickerTarget] = useState<'employment' | 'end' | null>(null);
+    const [pickerTarget, setPickerTarget] = useState<'employment' | 'start' | 'end' | null>(null);
     const [workHoursMethod, setWorkHoursMethod] = useState<WorkHoursMethod>('daily');
     const [workshopType, setWorkshopType] = useState<EntitledSeniorityWorkshopType>('unclassified');
     const [settledThrough1391, setSettledThrough1391] = useState(false);
@@ -120,11 +123,8 @@ export default function EntitledSeniorityScreen() {
                     setSelectedGroup(groups[0]?.group_number ?? null);
                     setAvailableYears(sortedYears);
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های پایه سنوات ناموفق بود.');
             } finally {
                 if (isMounted) setIsLoading(false);
             }
@@ -132,7 +132,7 @@ export default function EntitledSeniorityScreen() {
 
         void loadData();
         return () => { isMounted = false; };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
     const toPersianDigits = (value: string | number) => String(value).replace(/\d/g, (digit) => persianDigits[Number(digit)]);
@@ -152,32 +152,35 @@ export default function EntitledSeniorityScreen() {
     };
 
     const parsedEmploymentDate = useMemo(() => parseDateInput(employmentDate), [employmentDate]);
+    const parsedStartDate = useMemo(() => parseDateInput(startDate), [startDate]);
     const parsedEndDate = useMemo(() => parseDateInput(endDate), [endDate]);
     const isDateRangeValid = !!parsedEmploymentDate
+        && !!parsedStartDate
         && !!parsedEndDate
-        && compareDates(employmentDate, endDate) <= 0;
+        && compareDates(employmentDate, startDate) <= 0
+        && compareDates(startDate, endDate) <= 0;
     const requiredWorkHours = useMemo(() => {
-        if (!isDateRangeValid || !parsedEmploymentDate || !parsedEndDate) {
+        if (!isDateRangeValid || !parsedStartDate || !parsedEndDate) {
             return null;
         }
 
         const yearsInRange = Array.from(
-            { length: parsedEndDate.year - parsedEmploymentDate.year + 1 },
-            (_, index) => parsedEmploymentDate.year + index,
+            { length: parsedEndDate.year - parsedStartDate.year + 1 },
+            (_, index) => parsedStartDate.year + index,
         );
         if (yearsInRange.some((year) => !periodBuckets.some((bucket) => bucket.year === year))) {
             return null;
         }
 
         const calculation = calculateOrdinaryWorkHoursFromPeriodData(
-            parsedEmploymentDate,
+            parsedStartDate,
             parsedEndDate,
             periodBuckets,
             officialHolidayDates,
         );
 
         return calculation.breakdown.length > 0 ? calculation.totalHours : null;
-    }, [isDateRangeValid, officialHolidayDates, parsedEndDate, parsedEmploymentDate, periodBuckets]);
+    }, [isDateRangeValid, officialHolidayDates, parsedEndDate, parsedStartDate, periodBuckets]);
     const maximumAllowedWorkHours = requiredWorkHours;
     const actualWorkedHoursValue = actualWorkedHours ?? (requiredWorkHours?.toFixed(2) ?? '');
     const normalizedActualWorkedHours = Number(actualWorkedHoursValue);
@@ -239,9 +242,21 @@ export default function EntitledSeniorityScreen() {
             }
             if (compareDates(value, endDate) > 0) setEndDate(value);
             resetWorkHoursForDateChange();
+        } else if (pickerTarget === 'start') {
+            if (compareDates(value, endDate) > 0) {
+                setSnackbarMessage('تاریخ شروع بازه نمی‌تواند پس از تاریخ پایان باشد.');
+                setSnackbarVisible(true);
+            } else {
+                setStartDate(value);
+                setEmploymentDate(value);
+                if ((parseDateInput(value)?.year ?? 0) > 1391) {
+                    setSettledThrough1391(false);
+                }
+                resetWorkHoursForDateChange();
+            }
         } else if (pickerTarget === 'end') {
-            if (compareDates(value, employmentDate) < 0) {
-                setSnackbarMessage('تاریخ پایان باید برابر یا بزرگ‌تر از تاریخ استخدام باشد.');
+            if (compareDates(value, startDate) < 0) {
+                setSnackbarMessage('تاریخ پایان باید برابر یا بزرگ‌تر از تاریخ شروع باشد.');
                 setSnackbarVisible(true);
             } else {
                 setEndDate(value);
@@ -253,7 +268,7 @@ export default function EntitledSeniorityScreen() {
 
     const { notifyCalculationCompleted } = useAppContext();
     const handleCalculate = () => {
-        if (!parsedEmploymentDate || !parsedEndDate || !isDateRangeValid) {
+        if (!parsedEmploymentDate || !parsedStartDate || !parsedEndDate || !isDateRangeValid) {
             setSnackbarMessage('تاریخ‌های واردشده معتبر نیستند.');
             setSnackbarVisible(true);
             setResult(null);
@@ -292,8 +307,9 @@ export default function EntitledSeniorityScreen() {
         }
 
         setWorkedHoursError('');
-        const calculation = calculateEntitledSeniorityFromPeriodData(
+        const calculation = calculateEntitledSeniorityForDateRangeFromPeriodData(
             parsedEmploymentDate,
+            parsedStartDate,
             parsedEndDate,
             periodBuckets,
             workshopType,
@@ -362,9 +378,17 @@ export default function EntitledSeniorityScreen() {
                             </View>
 
                             <View style={styles.metricsRow}>
-                                <DateInputField label="تاریخ استخدام" value={employmentDate} onPress={() => setPickerTarget('employment')} formatValue={formatDate} iconName="calendar-account-outline" />
+                                <DateInputField label="از تاریخ" value={startDate} onPress={() => setPickerTarget('start')} formatValue={formatDate} />
                                 <DateInputField label="تا تاریخ" value={endDate} onPress={() => setPickerTarget('end')} formatValue={formatDate} />
                             </View>
+                            <DateInputField
+                                label="تاریخ استخدام"
+                                value={employmentDate}
+                                onPress={() => setPickerTarget('employment')}
+                                formatValue={formatDate}
+                                iconName="calendar-account-outline"
+                                helperText="مبنای سابقه و سالگرد پایه سنوات است. انتخاب «از تاریخ» آن را همسان می‌کند؛ تاریخ استخدام را هم می‌توانید مستقل انتخاب کنید."
+                            />
 
                             <WorkshopTypeSelector value={workshopType} onValueChange={setWorkshopType} />
 
@@ -741,7 +765,16 @@ export default function EntitledSeniorityScreen() {
                     </Card>
                 </SafeAreaView>
             </ScrollView>
-            <PersianDatePickerModal visible={pickerTarget !== null} value={pickerTarget === 'employment' ? employmentDate : endDate} title={pickerTarget === 'employment' ? 'انتخاب تاریخ استخدام' : 'انتخاب تاریخ پایان'} onClose={() => setPickerTarget(null)} onSelect={selectDate} availableYears={availableYears} />
+            <PersianDatePickerModal
+                visible={pickerTarget !== null}
+                value={pickerTarget === 'employment' ? employmentDate : pickerTarget === 'start' ? startDate : endDate}
+                title={pickerTarget === 'employment'
+                    ? 'انتخاب تاریخ استخدام'
+                    : pickerTarget === 'start' ? 'انتخاب تاریخ شروع' : 'انتخاب تاریخ پایان'}
+                onClose={() => setPickerTarget(null)}
+                onSelect={selectDate}
+                availableYears={availableYears}
+            />
             <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
         </ThemedView>
     );

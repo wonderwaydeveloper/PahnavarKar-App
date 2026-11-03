@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AppState } from 'react-native';
 import { useAuth } from '@/hooks/use-auth';
-import { AuthApiError, fetchCurrentPlan, fetchPlanCatalog, getStoredAuthToken, isTemporaryApiFailure, shouldRetryApiQuery, type PlanAccess } from '@/services/auth-api';
-import { clearCachedPlanAccess, getCachedPlanAccess, saveCachedPlanAccess } from '@/services/plan-access-cache';
+import { AuthApiError, fetchCurrentPlan, getStoredAuthToken, isTemporaryApiFailure, type PlanAccess } from '@/services/auth-api';
+import { loadGuestPlanAccess } from '@/services/guest-plan-access';
+import { clearCachedPlanAccess, getCachedPlanAccess, getPlanAccessValidUntil, saveCachedPlanAccess } from '@/services/plan-access-cache';
+import { CACHE_KEYS, CACHE_POLICY } from '@/services/cache-policy';
 import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 import { PlanAccessContext } from './plan-access.context';
 
@@ -25,10 +27,9 @@ async function loadPlanAccess(user: ReturnType<typeof useAuth>['user']): Promise
     }
 
     if (user && token) {
+        let response: Awaited<ReturnType<typeof fetchCurrentPlan>>;
         try {
-            const response = await fetchCurrentPlan(token);
-            const cached = await saveCachedPlanAccess(user.id, token, response.plan, response.subscription?.ends_at ?? null);
-            return { plan: response.plan, validUntil: cached.validUntil };
+            response = await fetchCurrentPlan(token);
         } catch (error) {
             if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
                 await clearCachedPlanAccess();
@@ -46,27 +47,30 @@ async function loadPlanAccess(user: ReturnType<typeof useAuth>['user']): Promise
 
             throw new Error('برای بررسی دسترسی پلن به اینترنت متصل شوید و دوباره تلاش کنید.');
         }
+
+        const subscriptionEndsAt = response.subscription?.ends_at ?? null;
+        const validUntil = getPlanAccessValidUntil(subscriptionEndsAt);
+        try {
+            const cached = await saveCachedPlanAccess(user.id, token, response.plan, subscriptionEndsAt);
+            return { plan: response.plan, validUntil: cached.validUntil };
+        } catch (error) {
+            console.warn('ذخیرهٔ دسترسی تأییدشدهٔ پلن برای حالت آفلاین ناموفق بود.', error);
+            return { plan: response.plan, validUntil };
+        }
     }
 
-    const catalog = await fetchPlanCatalog();
-    const freeTier = catalog.tiers.find((tier) => tier.key === 'free');
-    if (!freeTier) {
-        throw new Error('اطلاعات پلن رایگان از سرور دریافت نشد.');
-    }
-
-    return { plan: freeTier, validUntil: null };
+    return loadGuestPlanAccess();
 }
 
 export function PlanAccessProvider({ children }: PlanAccessProviderProps) {
     const { user, isLoading: authLoading } = useAuth();
     const [now, setNow] = useState(Date.now);
     const { refetch, ...query } = useQuery({
-        queryKey: ['plan-access', user?.id ?? 'guest'],
+        queryKey: CACHE_KEYS.planAccess(user?.id ?? 'guest'),
         queryFn: () => loadPlanAccess(user),
         enabled: !authLoading,
         networkMode: 'always',
-        staleTime: 0,
-        retry: (failureCount, error) => failureCount < 1 && shouldRetryApiQuery(error),
+        staleTime: CACHE_POLICY.query.resources.planAccess.staleTimeMs,
         retryOnMount: false,
         refetchOnMount: (query) => !(query.state.error instanceof AuthApiError && query.state.error.status === 429),
         refetchOnReconnect: (query) => !(query.state.error instanceof AuthApiError && query.state.error.status === 429),
@@ -74,9 +78,13 @@ export function PlanAccessProvider({ children }: PlanAccessProviderProps) {
     });
 
     const validUntil = query.data?.validUntil ?? null;
-    const accessExpired = user !== null
-        && validUntil !== null
-        && validUntil <= now;
+    const accessExpired = validUntil !== null && validUntil <= now;
+    const canUseVerifiedMemoryCache = user !== null
+        && query.error !== null
+        && isTemporaryApiFailure(query.error)
+        && query.data !== undefined
+        && query.data.validUntil !== null
+        && query.data.validUntil > now;
 
     useEffect(() => {
         const updateNow = () => setNow(Date.now());
@@ -110,9 +118,9 @@ export function PlanAccessProvider({ children }: PlanAccessProviderProps) {
 
     return (
         <PlanAccessContext.Provider value={{
-            planAccess: !authLoading && !query.error && !accessExpired ? query.data?.plan ?? null : null,
+            planAccess: !authLoading && (!query.error || canUseVerifiedMemoryCache) && !accessExpired ? query.data?.plan ?? null : null,
             isLoading: authLoading || query.isPending || (accessExpired && query.isFetching),
-            error: query.error
+            error: query.error && !canUseVerifiedMemoryCache
                 ? getUserFacingErrorMessage(query.error, 'دریافت دسترسی پلن ناموفق بود.')
                 : accessExpired
                     ? ACCESS_EXPIRED_MESSAGE

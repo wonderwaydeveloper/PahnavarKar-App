@@ -13,22 +13,24 @@ import {
     StyleSheet,
     View,
 } from 'react-native';
-import { ActivityIndicator, Appbar, Snackbar } from 'react-native-paper';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Appbar } from 'react-native-paper';
 
 import { AppTextInput } from '@/components/app-text';
 import { IranianPhoneInput } from '@/components/iranian-phone-input';
 import { OtpCodeInput } from '@/components/otp-code-input';
+import { OtpResendControl } from '@/components/otp-resend-control';
 import { ProfilePhotoField } from '@/components/profile-photo-field';
 import { ProfilePhotoPreview } from '@/components/profile-photo-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAppContext } from '@/hooks/use-app-context';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useAuth } from '@/hooks/use-auth';
+import { useOtpResendCountdown } from '@/hooks/use-otp-resend-countdown';
 import { useTheme } from '@/hooks/use-theme';
 import { sendOtp } from '@/services/auth-api';
-import { getUserFacingErrorMessage } from '@/services/user-facing-error';
+import { getUserFacingErrorMessage, getUserFacingFieldError } from '@/services/user-facing-error';
 import { getIranianNationalNumber, normalizeIranianPhone } from '@/services/iranian-phone';
 
 type AuthStep = 'phone' | 'editPhone' | 'code' | 'profile' | 'twoFactor';
@@ -44,10 +46,14 @@ export default function AuthScreen() {
     const theme = useTheme();
     const { theme: appTheme } = useAppContext();
     const { isLoading: authLoading, signInWithOtp, verifyTwoFactorLogin, uploadProfilePhoto, user } = useAuth();
+    const { dismissFeedback, showFeedback } = useAppFeedback();
     const router = useRouter();
     const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
-    const returnPath = returnTo === 'plans' ? '/(tabs)/account/plans' : '/(tabs)/account';
-    const insets = useSafeAreaInsets();
+    const returnPath = returnTo === 'plans'
+        ? '/(tabs)/account/plans'
+        : returnTo === 'notifications'
+            ? '/(tabs)/account/notifications'
+            : '/(tabs)/account';
     const isLightTheme = appTheme === 'light';
     const headerBackgroundColor = isLightTheme ? theme.primary : theme.surface;
     const headerTitleColor = isLightTheme ? theme.surface : theme.text;
@@ -61,11 +67,9 @@ export default function AuthScreen() {
     const [code, setCode] = useState('');
     const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
     const [twoFactorCode, setTwoFactorCode] = useState('');
-    const [resendSeconds, setResendSeconds] = useState(0);
+    const { secondsRemaining: resendSeconds, start: startResendCountdown } = useOtpResendCountdown();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<AuthError>(null);
-    const [message, setMessage] = useState('');
-    const [messageKind, setMessageKind] = useState<AuthMessageKind>('error');
     const [focusedField, setFocusedField] = useState<AuthField | null>(null);
     const isVerifyingCode = useRef(false);
     const nationalNumber = getIranianNationalNumber(phone);
@@ -77,26 +81,13 @@ export default function AuthScreen() {
         }
     }, [authLoading, busy, returnPath, router, user]);
 
-    useEffect(() => {
-        if (resendSeconds <= 0) {
-            return;
-        }
-
-        const timer = setTimeout(() => {
-            setResendSeconds((seconds) => Math.max(0, seconds - 1));
-        }, 1000);
-
-        return () => clearTimeout(timer);
-    }, [resendSeconds]);
-
     const clearFieldError = (field: AuthField) => {
         setError((currentError) => currentError?.field === field ? null : currentError);
-        setMessage('');
+        dismissFeedback();
     };
 
     const showMessage = (text: string, kind: AuthMessageKind = 'error') => {
-        setMessageKind(kind);
-        setMessage(text);
+        showFeedback({ message: text, variant: kind });
     };
 
     const chooseProfilePhoto = async () => {
@@ -118,7 +109,7 @@ export default function AuthScreen() {
             if (!result.canceled) {
                 setProfilePhoto(result.assets[0] ?? null);
                 setError(null);
-                setMessage('');
+                dismissFeedback();
             }
         } catch (pickerError) {
             showMessage(getErrorMessage(pickerError));
@@ -129,24 +120,33 @@ export default function AuthScreen() {
         Keyboard.dismiss();
 
         if (!/^9\d{9}$/.test(nationalNumber)) {
-            setMessage('');
+            dismissFeedback();
             setError({ field: 'phone', message: 'شماره تلفن معتبر وارد کنید.' });
             return;
         }
         setBusy(true);
         setError(null);
-        setMessage('');
+        dismissFeedback();
         try {
-            await sendOtp({
+            const response = await sendOtp({
                 phone: normalizedPhone,
                 type: 'login',
             });
             setCode('');
-            setResendSeconds(30);
+            startResendCountdown(response.resend_after);
             setStep('code');
-            showMessage('اگر امکان استفاده از این درخواست وجود داشته باشد، کد تأیید ارسال می‌شود.', 'success');
+            showMessage('کد تأیید از طریق پیامک ارسال شد.', 'success');
         } catch (requestError) {
-            showMessage(getErrorMessage(requestError));
+            const fieldError = getUserFacingFieldError(
+                requestError,
+                ['phone', 'mobile'],
+                'شمارهٔ تلفن واردشده معتبر نیست.',
+            );
+            if (fieldError) {
+                setError({ field: 'phone', message: fieldError });
+            } else {
+                showMessage(getErrorMessage(requestError));
+            }
         } finally {
             setBusy(false);
         }
@@ -157,7 +157,7 @@ export default function AuthScreen() {
             return;
         }
         if (!/^\d{6}$/.test(submittedCode)) {
-            setMessage('');
+            dismissFeedback();
             setError({ field: 'code', message: 'کد تأیید باید ۶ رقم باشد.' });
             return;
         }
@@ -165,7 +165,7 @@ export default function AuthScreen() {
         isVerifyingCode.current = true;
         setBusy(true);
         setError(null);
-        setMessage('');
+        dismissFeedback();
         try {
             const result = await signInWithOtp({
                 phone: normalizedPhone,
@@ -185,7 +185,16 @@ export default function AuthScreen() {
 
             router.replace(returnPath);
         } catch (verificationError) {
-            showMessage(getErrorMessage(verificationError));
+            const fieldError = getUserFacingFieldError(
+                verificationError,
+                ['code', 'otp', 'verification_code'],
+                'کد تأیید واردشده معتبر نیست.',
+            );
+            if (fieldError) {
+                setError({ field: 'code', message: fieldError });
+            } else {
+                showMessage(getErrorMessage(verificationError));
+            }
         } finally {
             isVerifyingCode.current = false;
             setBusy(false);
@@ -202,7 +211,7 @@ export default function AuthScreen() {
 
         setBusy(true);
         setError(null);
-        setMessage('');
+        dismissFeedback();
         try {
             await verifyTwoFactorLogin(twoFactorChallenge, normalizedCode);
             setTwoFactorChallenge(null);
@@ -218,12 +227,12 @@ export default function AuthScreen() {
         Keyboard.dismiss();
 
         if (!name.trim()) {
-            setMessage('');
+            dismissFeedback();
             setError({ field: 'name', message: 'نام و نام خانوادگی را وارد کنید.' });
             return;
         }
         if (!/^\d{6}$/.test(code)) {
-            setMessage('');
+            dismissFeedback();
             setError({ field: 'code', message: 'کد تأیید باید ۶ رقم باشد. دوباره شماره را تأیید کنید.' });
             setStep('code');
             return;
@@ -231,7 +240,8 @@ export default function AuthScreen() {
 
         setBusy(true);
         setError(null);
-        setMessage('');
+        dismissFeedback();
+        let navigatingAfterRegistration = false;
         try {
             const result = await signInWithOtp({
                 phone: normalizedPhone,
@@ -260,10 +270,26 @@ export default function AuthScreen() {
                 }
             }
             router.replace(returnPath);
+            navigatingAfterRegistration = true;
         } catch (registrationError) {
-            showMessage(getErrorMessage(registrationError));
+            const nameError = getUserFacingFieldError(registrationError, ['name'], 'نام واردشده معتبر نیست.');
+            const codeError = getUserFacingFieldError(
+                registrationError,
+                ['code', 'otp', 'verification_code'],
+                'کد تأیید واردشده معتبر نیست.',
+            );
+            if (nameError) {
+                setError({ field: 'name', message: nameError });
+            } else if (codeError) {
+                setError({ field: 'code', message: codeError });
+                setStep('code');
+            } else {
+                showMessage(getErrorMessage(registrationError));
+            }
         } finally {
-            setBusy(false);
+            if (!navigatingAfterRegistration) {
+                setBusy(false);
+            }
         }
     };
 
@@ -274,20 +300,20 @@ export default function AuthScreen() {
             setCode('');
             setStep('phone');
             setError(null);
-            setMessage('');
+            dismissFeedback();
             return;
         }
         if (step === 'code' || step === 'profile') {
             setReturnStep(step);
             setStep('editPhone');
             setError(null);
-            setMessage('');
+            dismissFeedback();
             return;
         }
         if (step === 'editPhone') {
             setStep(returnStep);
             setError(null);
-            setMessage('');
+            dismissFeedback();
             return;
         }
 
@@ -322,12 +348,12 @@ export default function AuthScreen() {
                 return returnStep;
             });
             setError(null);
-            setMessage('');
+            dismissFeedback();
             return true;
         });
 
         return () => subscription.remove();
-    }, [busy, returnStep, step]);
+    }, [busy, dismissFeedback, returnStep, step]);
 
     const appBarTitle = step === 'phone'
         ? 'ورود یا ثبت‌نام'
@@ -416,7 +442,7 @@ export default function AuthScreen() {
                                                 onPress={() => {
                                                     setReturnStep('profile');
                                                     setError(null);
-                                                    setMessage('');
+                                                    dismissFeedback();
                                                     setStep('editPhone');
                                                 }}
                                             >
@@ -600,7 +626,7 @@ export default function AuthScreen() {
                                         disabled={busy}
                                         onPress={() => {
                                             setError(null);
-                                            setMessage('');
+                                            dismissFeedback();
                                             setStep('editPhone');
                                         }}
                                     >
@@ -620,6 +646,11 @@ export default function AuthScreen() {
                                     onComplete={(value) => void verifyCode(value)}
                                     value={code}
                                 />
+                                <OtpResendControl
+                                    disabled={busy}
+                                    onPress={() => void requestCode()}
+                                    secondsRemaining={resendSeconds}
+                                />
                                 <Pressable
                                     accessibilityRole="button"
                                     disabled={busy}
@@ -636,21 +667,6 @@ export default function AuthScreen() {
                                     {!busy ? <MaterialCommunityIcons name="arrow-left" size={20} color={theme.onPrimary} /> : null}
                                 </Pressable>
 
-                                <Pressable
-                                    accessibilityRole="button"
-                                    disabled={resendSeconds > 0 || busy}
-                                    onPress={() => void requestCode()}
-                                    style={styles.resendButton}
-                                >
-                                    <ThemedText
-                                        type="smallBold"
-                                        style={{ color: resendSeconds > 0 || busy ? theme.textMuted : theme.primaryText }}
-                                    >
-                                        {resendSeconds > 0
-                                            ? `ارسال دوبارهٔ کد تا ${resendSeconds} ثانیه`
-                                            : 'ارسال دوبارهٔ کد'}
-                                    </ThemedText>
-                                </Pressable>
                                 <ThemedText type="small" style={[styles.helperText, { color: theme.textMuted }]}>
                                     کد برای مدت محدود معتبر است. هرگز آن را با دیگران به اشتراک نگذارید.
                                 </ThemedText>
@@ -664,29 +680,6 @@ export default function AuthScreen() {
                 visible={photoPreviewVisible}
                 onClose={() => setPhotoPreviewVisible(false)}
             />
-            <Snackbar
-                visible={Boolean(message)}
-                onDismiss={() => setMessage('')}
-                duration={4500}
-                style={{
-                    backgroundColor: messageKind === 'error' ? theme.errorFill : theme.successFill,
-                    borderRadius: Radius.md,
-                    marginBottom: insets.bottom,
-                }}
-                action={{
-                    label: 'بستن',
-                    onPress: () => setMessage(''),
-                    labelStyle: { color: theme.onStatus },
-                }}
-            >
-                <ThemedText
-                    type="small"
-                    accessibilityRole={messageKind === 'error' ? 'alert' : undefined}
-                    style={{ color: theme.onStatus }}
-                >
-                    {message}
-                </ThemedText>
-            </Snackbar>
         </ThemedView>
     );
 }
@@ -822,6 +815,5 @@ const styles = StyleSheet.create({
         gap: Spacing.two,
     },
     destinationPhone: { flex: 1, writingDirection: 'ltr', textAlign: 'left' },
-    resendButton: { alignItems: 'center', paddingVertical: Spacing.two },
     helperText: { textAlign: 'center' },
 });

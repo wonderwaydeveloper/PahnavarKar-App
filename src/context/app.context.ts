@@ -21,7 +21,7 @@ export interface AppContextType {
     themeReady: boolean;
     colors: AppColorPalette;
     isRTL: boolean;
-    setTheme: (theme: ThemePreference) => void;
+    setTheme: (theme: ThemePreference) => Promise<void>;
     setColorPalette: (palette: ThemePalette) => Promise<void>;
     setFontPreference: (font: FontPreference) => Promise<void>;
     setCurrencyPreference: (currency: CurrencyPreference) => Promise<void>;

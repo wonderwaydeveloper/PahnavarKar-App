@@ -1,19 +1,26 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator, Snackbar } from 'react-native-paper';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppTextInput } from '@/components/app-text';
+import { IranianPhoneInput } from '@/components/iranian-phone-input';
+import { OtpCodeInput } from '@/components/otp-code-input';
+import { OtpResendControl } from '@/components/otp-resend-control';
 import { ProfilePhotoField } from '@/components/profile-photo-field';
 import { ProfilePhotoPreview } from '@/components/profile-photo-preview';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
+import { useOtpResendCountdown } from '@/hooks/use-otp-resend-countdown';
 import { useTheme } from '@/hooks/use-theme';
-import { getProfilePhotoUrl } from '@/services/auth-api';
+import { getProfilePhotoUrl, sendOtp } from '@/services/auth-api';
+import { normalizeIranianPhone, normalizeOtpCode } from '@/services/iranian-phone';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 
 export default function EditProfileScreen() {
     const theme = useTheme();
@@ -23,15 +30,25 @@ export default function EditProfileScreen() {
         updateProfile,
         uploadProfilePhoto,
         removeProfilePhoto,
+        changePhone,
     } = useAuth();
+    const { showError, showFeedback } = useAppFeedback();
+    const profileRestricted = user?.restricted_capabilities?.includes('profile') ?? false;
+    const securityRestricted = user?.restricted_capabilities?.includes('security') ?? false;
     const [name, setName] = useState(user?.name ?? '');
     const [photoUri, setPhotoUri] = useState<string | null>(null);
     const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
     const [photoRemoved, setPhotoRemoved] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [phoneInput, setPhoneInput] = useState('');
+    const [phoneCode, setPhoneCode] = useState('');
+    const [phoneCodeSent, setPhoneCodeSent] = useState(false);
+    const [phoneBusy, setPhoneBusy] = useState(false);
+    const { secondsRemaining: resendSeconds, start: startResendCountdown, reset: resetResendCountdown } = useOtpResendCountdown();
     const [snackbar, setSnackbar] = useState('');
     const [snackbarKind, setSnackbarKind] = useState<'success' | 'error'>('success');
-    const busy = saving;
+    const phoneVerificationInProgress = useRef(false);
+    const busy = saving || phoneBusy;
 
     const showMessage = (message: string, kind: 'success' | 'error' = 'success') => {
         setSnackbarKind(kind);
@@ -68,7 +85,7 @@ export default function EditProfileScreen() {
                 setPhotoRemoved(false);
             }
         } catch (pickerError) {
-            showMessage(pickerError instanceof Error ? pickerError.message : 'انتخاب تصویر پروفایل ناموفق بود.', 'error');
+            showError(pickerError, 'انتخاب تصویر پروفایل ناموفق بود.');
         }
     };
 
@@ -88,10 +105,10 @@ export default function EditProfileScreen() {
                 try {
                     await uploadProfilePhoto(photoUri);
                 } catch (photoError) {
-                    showMessage(
-                        `اطلاعات متنی ذخیره شد، اما تصویر بارگذاری نشد: ${photoError instanceof Error ? photoError.message : 'خطای نامشخص'}`,
-                        'error',
-                    );
+                    showFeedback({
+                        message: `اطلاعات متنی ذخیره شد، اما تصویر بارگذاری نشد: ${getUserFacingErrorMessage(photoError, 'خطای نامشخص')}`,
+                        variant: 'error',
+                    });
                     return;
                 }
             } else if (photoRemoved) {
@@ -99,9 +116,63 @@ export default function EditProfileScreen() {
             }
             router.back();
         } catch (saveError) {
-            showMessage(saveError instanceof Error ? saveError.message : 'ذخیرهٔ اطلاعات پروفایل ناموفق بود.', 'error');
+            showError(saveError, 'ذخیرهٔ اطلاعات پروفایل ناموفق بود.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const requestPhoneCode = async () => {
+        const normalizedPhone = normalizeIranianPhone(phoneInput);
+        if (!normalizedPhone) {
+            showMessage('شمارهٔ موبایل معتبر وارد کنید.', 'error');
+            return;
+        }
+        if (normalizedPhone === user?.phone) {
+            showMessage('این شماره هم‌اکنون به حساب شما متصل است.', 'error');
+            return;
+        }
+
+        setPhoneBusy(true);
+        setSnackbar('');
+        try {
+            const response = await sendOtp({ phone: normalizedPhone, type: 'login' });
+            setPhoneInput(normalizedPhone.slice(3));
+            setPhoneCode('');
+            setPhoneCodeSent(true);
+            startResendCountdown(response.resend_after);
+            showMessage('کد تأیید از طریق پیامک ارسال شد.');
+        } catch (requestError) {
+            showError(requestError, 'ارسال کد ناموفق بود.');
+        } finally {
+            setPhoneBusy(false);
+        }
+    };
+
+    const verifyPhoneChange = async (submittedCode = phoneCode) => {
+        if (phoneBusy || phoneVerificationInProgress.current) return;
+        const normalizedPhone = normalizeIranianPhone(phoneInput);
+        const normalizedCode = normalizeOtpCode(submittedCode);
+        if (!normalizedPhone || !/^\d{6}$/.test(normalizedCode)) {
+            showMessage('شماره و کد شش‌رقمی را بررسی کنید.', 'error');
+            return;
+        }
+
+        phoneVerificationInProgress.current = true;
+        setPhoneBusy(true);
+        setSnackbar('');
+        try {
+            await changePhone(normalizedPhone, normalizedCode);
+            setPhoneInput('');
+            setPhoneCode('');
+            setPhoneCodeSent(false);
+            resetResendCountdown();
+            showMessage('شمارهٔ حساب با موفقیت تغییر کرد.', 'success');
+        } catch (changeError) {
+            showError(changeError, 'تغییر شماره ناموفق بود.');
+        } finally {
+            phoneVerificationInProgress.current = false;
+            setPhoneBusy(false);
         }
     };
 
@@ -118,34 +189,29 @@ export default function EditProfileScreen() {
     return (
         <ThemedView style={styles.container}>
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-                <View style={[styles.profileHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={styles.photoField}>
-                        <ProfilePhotoField
-                            uri={photoPreviewUri}
-                            disabled={busy}
-                            onPreview={() => setPhotoPreviewVisible(true)}
-                            onSelect={() => void choosePhoto()}
-                            onRemove={() => {
-                                setPhotoUri(null);
-                                setPhotoRemoved(true);
-                            }}
-                        />
+                <View style={styles.section}>
+                    <View style={styles.sectionHeading}>
+                        <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>تصویر پروفایل</ThemedText>
                     </View>
-                    <ThemedText type="largeTitle" style={styles.heroName}>{user.name}</ThemedText>
-                    <View style={styles.heroContact}>
-                        <MaterialCommunityIcons name="cellphone" size={17} color={theme.textSecondary} />
-                        <ThemedText type="body" style={[styles.heroPhone, { color: theme.textSecondary }]}>
-                            {user.phone}
-                        </ThemedText>
+                    <View style={[styles.profileHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <View style={styles.photoField}>
+                            <ProfilePhotoField
+                                uri={photoPreviewUri}
+                                disabled={busy || profileRestricted}
+                                onPreview={() => setPhotoPreviewVisible(true)}
+                                onSelect={() => void choosePhoto()}
+                                onRemove={() => {
+                                    setPhotoUri(null);
+                                    setPhotoRemoved(true);
+                                }}
+                            />
+                        </View>
                     </View>
                 </View>
 
                 <View style={styles.section}>
                     <View style={styles.sectionHeading}>
                         <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>اطلاعات حساب</ThemedText>
-                        <ThemedText type="small" style={{ color: theme.textMuted }}>
-                            نام و شمارهٔ تلفن حساب شما
-                        </ThemedText>
                     </View>
                     <View style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                         <View style={styles.field}>
@@ -153,6 +219,7 @@ export default function EditProfileScreen() {
                             <AppTextInput
                                 accessibilityLabel="نام و نام خانوادگی"
                                 autoComplete="name"
+                                editable={!profileRestricted}
                                 onChangeText={setName}
                                 placeholder="نام و نام خانوادگی"
                                 placeholderTextColor={theme.textMuted}
@@ -164,24 +231,83 @@ export default function EditProfileScreen() {
                             />
                         </View>
 
-                        <View style={[styles.field, styles.fieldSeparated, { borderColor: theme.border }]}>
-                            <ThemedText type="smallBold">شمارهٔ تأییدشده</ThemedText>
-                            <View style={[styles.readOnlyField, { backgroundColor: theme.surfaceVariant }]}>
-                                <ThemedText type="body" style={[styles.phoneValue, { color: theme.textSecondary }]}>
-                                    {user.phone}
-                                </ThemedText>
-                                <MaterialCommunityIcons name="check-decagram-outline" size={20} color={theme.success} />
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <View style={styles.sectionHeading}>
+                        <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>شمارهٔ تلفن حساب</ThemedText>
+                    </View>
+                    <View style={[styles.securityCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <View style={[styles.currentPhone, { backgroundColor: theme.surfaceVariant }]}>
+                            <View style={[styles.currentPhoneIcon, { backgroundColor: theme.primaryContainer }]}>
+                                <MaterialCommunityIcons name="cellphone" size={19} color={theme.primaryText} />
                             </View>
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                تغییر شماره از بخش «حریم خصوصی و امنیت» و پس از تأیید OTP انجام می‌شود.
-                            </ThemedText>
+                            <View style={styles.currentPhoneText}>
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>شمارهٔ فعلی</ThemedText>
+                                <ThemedText type="body" style={[styles.phoneValue, { color: theme.text }]}>{user.phone}</ThemedText>
+                            </View>
+                            <MaterialCommunityIcons name="check-decagram-outline" size={20} color={theme.success} />
+                        </View>
+                        <View style={styles.phoneChangeFields}>
+                            <ThemedText type="smallBold">شمارهٔ تلفن جدید</ThemedText>
+                            <IranianPhoneInput
+                                accessibilityLabel="شمارهٔ تلفن جدید"
+                                disabled={busy || securityRestricted}
+                                onChangeText={(value) => {
+                                    setPhoneInput(value);
+                                    setPhoneCode('');
+                                    setPhoneCodeSent(false);
+                                    resetResendCountdown();
+                                }}
+                                value={phoneInput}
+                            />
+                            {phoneCodeSent ? (
+                                <>
+                                    <OtpCodeInput
+                                        accessibilityLabel="کد تأیید شمارهٔ جدید"
+                                        disabled={busy || securityRestricted}
+                                        label="کد ۶ رقمی پیامک‌شده"
+                                        onChangeText={setPhoneCode}
+                                        onComplete={(value) => void verifyPhoneChange(value)}
+                                        value={phoneCode}
+                                    />
+                                    <OtpResendControl
+                                        disabled={phoneBusy || securityRestricted}
+                                        onPress={() => void requestPhoneCode()}
+                                        secondsRemaining={resendSeconds}
+                                    />
+                                </>
+                            ) : null}
+                            <Pressable
+                                accessibilityRole="button"
+                                disabled={busy || securityRestricted}
+                                onPress={() => void (phoneCodeSent ? verifyPhoneChange() : requestPhoneCode())}
+                                style={({ pressed }) => [
+                                    styles.phoneAction,
+                                    {
+                                        backgroundColor: theme.primary,
+                                        opacity: busy || securityRestricted || pressed ? 0.65 : 1,
+                                    },
+                                ]}
+                            >
+                                {phoneBusy ? <ActivityIndicator size="small" color={theme.onPrimary} /> : null}
+                                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
+                                    {phoneCodeSent ? 'تأیید و تغییر شماره' : 'ارسال کد به شمارهٔ جدید'}
+                                </ThemedText>
+                            </Pressable>
+                            {securityRestricted ? (
+                                <ThemedText type="small" style={{ color: theme.warning }}>
+                                    تغییر شمارهٔ تلفن به‌دلیل محدودیت امنیت حساب موقتاً غیرفعال است.
+                                </ThemedText>
+                            ) : null}
                         </View>
                     </View>
                 </View>
 
                 <Pressable
                     accessibilityRole="button"
-                    disabled={busy || !hasUnsavedChanges}
+                    disabled={busy || profileRestricted || !hasUnsavedChanges}
                     onPress={() => void save()}
                     style={({ pressed }) => [
                         styles.saveButton,
@@ -198,7 +324,7 @@ export default function EditProfileScreen() {
                         type="smallBold"
                         style={{ color: hasUnsavedChanges ? theme.onPrimary : theme.textMuted }}
                     >
-                        {saving ? 'در حال ذخیره...' : 'ذخیرهٔ تغییرات'}
+                        {saving ? 'در حال ذخیره...' : profileRestricted ? 'ویرایش به‌دلیل محدودیت غیرفعال است' : 'ذخیرهٔ تغییرات'}
                     </ThemedText>
                 </Pressable>
             </ScrollView>
@@ -245,16 +371,17 @@ const styles = StyleSheet.create({
         gap: Spacing.two,
     },
     photoField: { marginBottom: Spacing.one },
-    heroName: { textAlign: 'center' },
-    heroContact: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
-    heroPhone: { writingDirection: 'ltr', textAlign: 'left' },
     section: { gap: Spacing.one },
     sectionHeading: { marginHorizontal: Spacing.one, gap: 2 },
     formCard: { borderWidth: 1, borderRadius: Radius.lg, overflow: 'hidden' },
     field: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.three, gap: Spacing.one },
-    fieldSeparated: { borderTopWidth: 1 },
     input: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
-    readOnlyField: { minHeight: 48, borderRadius: Radius.md, paddingHorizontal: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     phoneValue: { writingDirection: 'ltr', textAlign: 'left' },
+    securityCard: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.three },
+    currentPhone: { minHeight: 64, borderRadius: Radius.md, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+    currentPhoneIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+    currentPhoneText: { flex: 1, gap: 2 },
+    phoneChangeFields: { gap: Spacing.two },
+    phoneAction: { minHeight: 48, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
     saveButton: { minHeight: 50, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
 });

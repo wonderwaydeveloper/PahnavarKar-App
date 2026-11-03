@@ -20,6 +20,7 @@ import { WorkshopTypeSelector } from '@/components/workshop-type-selector';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
@@ -45,6 +46,7 @@ const shiftTypeOptions: { value: MonthlyShiftWorkType; label: string; percentage
 
 export default function MonthlyShiftWorkScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -136,11 +138,8 @@ export default function MonthlyShiftWorkScreen() {
                     setJobGroups(groups);
                     setSelectedGroup(groups[0]?.group_number ?? null);
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های محاسبهٔ نوبت‌کاری ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoadingData(false);
@@ -153,7 +152,7 @@ export default function MonthlyShiftWorkScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

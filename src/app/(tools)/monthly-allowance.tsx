@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
@@ -35,6 +36,7 @@ type WorkHoursMethod = 'daily' | 'period';
 
 export default function MonthlyAllowanceScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -111,10 +113,7 @@ export default function MonthlyAllowanceScreen() {
                 }
             } catch (error) {
                 console.error('Failed to load monthly allowance calculation data:', error);
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+                if (isMounted) showError(error, 'بارگذاری داده‌های محاسبهٔ مزایای ماهانه ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoadingData(false);
@@ -127,7 +126,7 @@ export default function MonthlyAllowanceScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

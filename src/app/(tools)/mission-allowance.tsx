@@ -19,6 +19,7 @@ import { WorkshopTypeSelector } from '@/components/workshop-type-selector';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import {
@@ -68,6 +69,7 @@ function formatParsedDate(value: { year: number; month: number; day: number }) {
 
 export default function MissionAllowanceScreen() {
     const theme = useTheme();
+    const { showError: reportError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -136,11 +138,8 @@ export default function MissionAllowanceScreen() {
                     setJobGroups(groups);
                     setSelectedGroup(groups[0]?.group_number ?? null);
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌های مزد و سنوات. دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) reportError(error, 'بارگذاری داده‌های مزد و سنوات ناموفق بود.');
             } finally {
                 if (isMounted) setIsLoadingData(false);
             }
@@ -148,7 +147,7 @@ export default function MissionAllowanceScreen() {
 
         void loadData();
         return () => { isMounted = false; };
-    }, []);
+    }, [reportError]);
 
     const canUseSettlementPath = (parseDateInput(employmentDate)?.year ?? 0) <= 1391;
     const normalizedAmountPaid = amountPaidToWorker

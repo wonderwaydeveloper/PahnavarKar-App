@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { calculateOrdinaryWorkHoursFromPeriodData, parseDateInput, type OrdinaryWorkHoursCalculationResult, type SalaryPeriodBucket } from '@/utils/salary-calculation';
 import { useAppContext } from '@/hooks/use-app-context';
 
@@ -22,6 +23,7 @@ type PickerTarget = 'start' | 'end';
 
 export default function HazardousWorkHoursScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const insets = useSafeAreaInsets();
     const currentDate = useMemo(() => {
         const today = new Date();
@@ -61,18 +63,15 @@ export default function HazardousWorkHoursScreen() {
                     setHolidayDates(holidays.map((holiday) => holiday.holiday_date));
                     setAvailableYears(years.map((year) => year.year));
                 }
-            } catch {
-                if (mounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (mounted) showError(error, 'بارگذاری داده‌های محاسبهٔ ساعات کار در شرایط سخت ناموفق بود.');
             } finally {
                 if (mounted) setLoading(false);
             }
         };
         void load();
         return () => { mounted = false; };
-    }, []);
+    }, [showError]);
 
     const digits = '۰۱۲۳۴۵۶۷۸۹';
     const toPersianDigits = (value: string | number) => String(value).replace(/\d/g, (digit) => digits[Number(digit)]);

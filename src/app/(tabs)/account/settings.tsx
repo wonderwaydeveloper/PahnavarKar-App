@@ -9,8 +9,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ColorPalettes, Radius, Spacing } from '@/constants/theme';
 import { useAppContext } from '@/hooks/use-app-context';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useTheme } from '@/hooks/use-theme';
 import { getAppFontFamily, loadAppFonts } from '@/services/font-service';
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 
 type SettingRowProps = {
     icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -189,7 +191,9 @@ export default function SettingsScreen() {
     const [currencyActionError, setCurrencyActionError] = useState('');
     const [paletteActionError, setPaletteActionError] = useState('');
     const [calculationSoundActionError, setCalculationSoundActionError] = useState('');
+    const [themeChangePending, setThemeChangePending] = useState(false);
     const [expandedSection, setExpandedSection] = useState<SettingsSectionKey | null>(null);
+    const { showError } = useAppFeedback();
 
     useEffect(() => {
         let isMounted = true;
@@ -201,7 +205,7 @@ export default function SettingsScreen() {
         ]).catch((error: unknown) => {
             console.error('Unable to load font previews', error);
             if (isMounted) {
-                const reason = error instanceof Error && error.message ? ` (${error.message})` : '';
+                const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
                 setFontActionError(`بارگذاری نمونهٔ فونت‌ها انجام نشد${reason}`);
             }
         });
@@ -219,7 +223,7 @@ export default function SettingsScreen() {
         try {
             await setFontPreference(value);
         } catch (error) {
-            const reason = error instanceof Error && error.message ? ` (${error.message})` : '';
+            const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
             setFontActionError(`بارگذاری یا ذخیرهٔ فونت انتخاب‌شده انجام نشد${reason}`);
         } finally {
             setFontChangePending(false);
@@ -234,7 +238,7 @@ export default function SettingsScreen() {
             await setCalculationSound(value);
         } catch (error) {
             console.error('Unable to update calculation completion sound', error);
-            const reason = error instanceof Error && error.message ? ` (${error.message})` : '';
+            const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
             setCalculationSoundActionError(`ذخیره یا فعال‌سازی صدای پایان محاسبه انجام نشد${reason}`);
         }
     };
@@ -252,7 +256,7 @@ export default function SettingsScreen() {
             await setCurrencyPreference(value);
         } catch (error) {
             console.error('Unable to save currency preference', error);
-            const reason = error instanceof Error && error.message ? ` (${error.message})` : '';
+            const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
             setCurrencyActionError(`ذخیرهٔ واحد پول انجام نشد${reason}`);
         }
     };
@@ -270,8 +274,20 @@ export default function SettingsScreen() {
             await setColorPalette(value);
         } catch (error) {
             console.error('Unable to save color palette preference', error);
-            const reason = error instanceof Error && error.message ? ` (${error.message})` : '';
+            const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
             setPaletteActionError(`ذخیرهٔ طیف رنگ انتخاب‌شده انجام نشد${reason}`);
+        }
+    };
+
+    const handleThemeChange = async (value: 'light' | 'dark' | 'system') => {
+        if (themeChangePending) return;
+        setThemeChangePending(true);
+        try {
+            await setTheme(value);
+        } catch (error) {
+            showError(error, 'ذخیرهٔ حالت نمایش برنامه ناموفق بود.');
+        } finally {
+            setThemeChangePending(false);
         }
     };
 
@@ -406,20 +422,23 @@ export default function SettingsScreen() {
                             icon="white-balance-sunny"
                             title="روشن"
                             selected={themePreference === 'light'}
-                            onPress={() => setTheme('light')}
+                            disabled={themeChangePending}
+                            onPress={() => void handleThemeChange('light')}
                         />
                         <SettingRow
                             icon="moon-waning-crescent"
                             title="تاریک"
                             selected={themePreference === 'dark'}
-                            onPress={() => setTheme('dark')}
+                            disabled={themeChangePending}
+                            onPress={() => void handleThemeChange('dark')}
                         />
                         <SettingRow
                             icon="cellphone-cog"
                             title="سیستم"
                             selected={themePreference === 'system'}
+                            disabled={themeChangePending}
                             showDivider={false}
-                            onPress={() => setTheme('system')}
+                            onPress={() => void handleThemeChange('system')}
                         />
                     </View>
                 </SettingsSection>

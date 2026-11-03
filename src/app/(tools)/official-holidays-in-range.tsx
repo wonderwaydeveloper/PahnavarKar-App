@@ -14,6 +14,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { calculateOfficialHolidaysInDateRange, parseDateInput, type OfficialHolidaysInDateRangeResult } from '@/utils/salary-calculation';
 import { useAppContext } from '@/hooks/use-app-context';
 
@@ -21,6 +22,7 @@ type PickerTarget = 'start' | 'end';
 
 export default function OfficialHolidaysInRangeScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -59,11 +61,8 @@ export default function OfficialHolidaysInRangeScreen() {
                     setAvailableYears(years.map((year) => year.year));
                     setHolidayDates(holidays.map((holiday) => holiday.holiday_date));
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری تقویم رسمی کشور. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری تقویم رسمی کشور ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoading(false);
@@ -73,7 +72,7 @@ export default function OfficialHolidaysInRangeScreen() {
 
         void loadData();
         return () => { isMounted = false; };
-    }, [currentYear]);
+    }, [currentYear, showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
     const toPersianDigits = (value: string | number) => String(value).replace(/\d/g, (digit) => persianDigits[Number(digit)]);

@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
     calculateOrdinaryWorkHoursFromPeriodData,
@@ -31,6 +32,7 @@ type WorkHoursMethod = 'daily' | 'period';
 
 export default function InsuranceDaysEntitlementScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
         const today = new Date();
@@ -98,11 +100,8 @@ export default function InsuranceDaysEntitlementScreen() {
                     setOfficialHolidayDates(holidays.map((holiday) => holiday.holiday_date));
                     setAvailableYears(sortedYears);
                 }
-            } catch {
-                if (isMounted) {
-                    setSnackbarMessage('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
-                    setSnackbarVisible(true);
-                }
+            } catch (error) {
+                if (isMounted) showError(error, 'بارگذاری داده‌های سابقهٔ بیمه ناموفق بود.');
             } finally {
                 if (isMounted) {
                     setIsLoadingData(false);
@@ -115,7 +114,7 @@ export default function InsuranceDaysEntitlementScreen() {
         return () => {
             isMounted = false;
         };
-    }, []);
+    }, [showError]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

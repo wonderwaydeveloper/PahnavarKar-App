@@ -18,6 +18,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
@@ -35,6 +36,7 @@ type WorkHoursMethod = 'daily' | 'period';
 
 export default function BaseSalaryScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -113,7 +115,7 @@ export default function BaseSalaryScreen() {
             } catch (error) {
                 console.error('Failed to load base salary calculation data:', error);
                 if (isMounted) {
-                    showSnackbar('بارگذاری اطلاعات محاسبه انجام نشد. دوباره تلاش کنید.');
+                    showError(error, 'بارگذاری اطلاعات محاسبهٔ حقوق پایه ناموفق بود.');
                 }
             } finally {
                 if (isMounted) {
@@ -127,7 +129,7 @@ export default function BaseSalaryScreen() {
         return () => {
             isMounted = false;
         };
-    }, [showSnackbar]);
+    }, [showError, showSnackbar]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

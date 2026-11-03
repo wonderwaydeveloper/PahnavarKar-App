@@ -17,6 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
@@ -35,6 +36,7 @@ type WorkHoursMethod = 'daily' | 'period';
 
 export default function HousingAllowanceScreen() {
     const theme = useTheme();
+    const { showError } = useAppFeedback();
     const { currencyPreference, formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -116,7 +118,7 @@ export default function HousingAllowanceScreen() {
             } catch (error) {
                 console.error('Failed to load housing allowance calculation data:', error);
                 if (isMounted) {
-                    showSnackbar('خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.');
+                    showError(error, 'بارگذاری داده‌های حق مسکن ناموفق بود.');
                 }
             } finally {
                 if (isMounted) {
@@ -130,7 +132,7 @@ export default function HousingAllowanceScreen() {
         return () => {
             isMounted = false;
         };
-    }, [showSnackbar]);
+    }, [showError, showSnackbar]);
 
     const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
 

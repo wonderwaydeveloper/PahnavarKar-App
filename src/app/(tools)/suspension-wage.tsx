@@ -19,6 +19,7 @@ import { WorkshopTypeSelector } from '@/components/workshop-type-selector';
 import { Radius, Spacing } from '@/constants/theme';
 import { fetchJobGroups, fetchOfficialHolidaysBetweenDates, fetchPeriodsByYearId, fetchSeniorityBaseByGroup, fetchYears, seedFromJsonAsset } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useCurrencyFormatter } from '@/hooks/use-currency-formatter';
 import { displayCurrencyToRial, getCurrencyLabel } from '@/utils/currency';
 import { getDailyWorkRatio, scaleWageCalculationResult } from '@/utils/daily-work-ratio';
@@ -39,6 +40,7 @@ type WorkHoursMethod = 'daily' | 'period';
 
 export default function SuspensionWageScreen() {
   const theme = useTheme();
+  const { showError } = useAppFeedback();
   const { currencyPreference, formatCurrency } = useCurrencyFormatter();
   const insets = useSafeAreaInsets();
   const currentJalaliDate = useMemo(() => {
@@ -148,13 +150,8 @@ export default function SuspensionWageScreen() {
           setSelectedGroup(groups[0]?.group_number ?? null);
           setAvailableYears(sortedYears);
         }
-      } catch {
-        if (isMounted) {
-          setSnackbarMessage(
-            "خطا در بارگذاری داده‌ها. لطفاً دوباره تلاش کنید.",
-          );
-          setSnackbarVisible(true);
-        }
+      } catch (error) {
+        if (isMounted) showError(error, 'بارگذاری داده‌های محاسبهٔ مزد تعلیق ناموفق بود.');
       } finally {
         if (isMounted) setIsLoadingData(false);
       }
@@ -164,7 +161,7 @@ export default function SuspensionWageScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [showError]);
 
   const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
   const toPersianDigits = (value: string | number) =>

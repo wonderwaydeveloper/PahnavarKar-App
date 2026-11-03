@@ -6,6 +6,7 @@ import { Animated, useWindowDimensions, View, type TextStyle } from 'react-nativ
 import { Appbar } from 'react-native-paper';
 
 import { ThemedText } from '@/components/themed-text';
+import { NetworkStatusBanner } from '@/components/network-status-banner';
 import { TOOL_DEFINITIONS } from '@/constants/tool-definitions';
 
 interface AppHeaderProps {
@@ -111,8 +112,18 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
     switch (normalized) {
       case 'account':
         return { title: 'پروفایل' };
+      case 'notifications':
+        return { title: 'اعلان‌ها' };
       case 'plans':
         return { title: 'پلن‌ها و اشتراک' };
+      case 'plan-catalog':
+        return { title: 'خرید اشتراک | ارتقاء پلن' };
+      case 'purchased-plans':
+        return { title: 'پلن‌های من' };
+      case 'wallet':
+        return { title: 'کیف پول' };
+      case 'financial-history':
+        return { title: 'تاریخچه مالی' };
       case 'edit-profile':
         return { title: 'ویرایش پروفایل' };
       case 'privacy-security':
@@ -213,7 +224,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
     : routeTitle;
   const isHomeRoute = actualRouteName === 'home' || actualRouteName === 'index';
   const activeTool = TOOL_DEFINITIONS.find((tool) => tool.key === actualRouteName);
-  const showBackButton = ['plans', 'edit-profile', 'privacy-security', 'settings', 'support', 'about-us', 'app-info', 'yearly-info', 'group-calculation', 'base-salary', 'family-allowance', 'housing-allowance', 'monthly-allowance', 'minimum-bonus', 'maximum-bonus', 'bonus-entitlement', 'spousal-allowance', 'monthly-shift-work', 'overtime-entitlement', 'night-shift-entitlement', 'insurance-days-entitlement', 'unemployment-insurance-entitlement', 'unemployment-insurance-allowance', 'unused-leave-entitlement', 'unused-leave-wage', 'suspension-wage', 'end-of-service-years', 'entitled-seniority', 'mission-allowance', 'friday-work', 'official-holiday-work', 'official-holidays-in-range', 'illegal-foreign-worker-penalty', 'article-87', 'social-security-premium-ceiling', 'ordinary-work-hours', 'hazardous-work-hours', 'young-worker-work-hours', 'category', 'title', 'chapter', 'topic', 'article'].includes(actualRouteName);
+  const showBackButton = ['notifications', 'plans', 'plan-catalog', 'purchased-plans', 'wallet', 'financial-history', 'edit-profile', 'privacy-security', 'settings', 'support', 'about-us', 'app-info', 'yearly-info', 'group-calculation', 'base-salary', 'family-allowance', 'housing-allowance', 'monthly-allowance', 'minimum-bonus', 'maximum-bonus', 'bonus-entitlement', 'spousal-allowance', 'monthly-shift-work', 'overtime-entitlement', 'night-shift-entitlement', 'insurance-days-entitlement', 'unemployment-insurance-entitlement', 'unemployment-insurance-allowance', 'unused-leave-entitlement', 'unused-leave-wage', 'suspension-wage', 'end-of-service-years', 'entitled-seniority', 'mission-allowance', 'friday-work', 'official-holiday-work', 'official-holidays-in-range', 'illegal-foreign-worker-penalty', 'article-87', 'social-security-premium-ceiling', 'ordinary-work-hours', 'hazardous-work-hours', 'young-worker-work-hours', 'category', 'title', 'chapter', 'topic', 'article'].includes(actualRouteName);
   const shouldAlignSecondaryHeaderStart = showBackButton && !centerContent;
 
   const { width } = useWindowDimensions();
@@ -222,6 +233,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
     : width >= 420 ? 18 : 16;
 
   return (
+    <View style={{ zIndex: 20, elevation: 20, backgroundColor: headerBackgroundColor }}>
     <Appbar.Header
       style={{
         backgroundColor: headerBackgroundColor,
@@ -239,8 +251,12 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
           onPress={() => {
             if (router.canGoBack()) {
               router.back();
-            } else if (actualRouteName === 'plans') {
-              router.replace('/(tabs)/account');
+            } else if (['notifications', 'plans', 'plan-catalog', 'purchased-plans', 'wallet', 'financial-history'].includes(actualRouteName)) {
+              if (['plan-catalog', 'purchased-plans'].includes(actualRouteName)) {
+                router.replace('/(tabs)/account/plans');
+              } else {
+                router.replace('/(tabs)/account');
+              }
             } else {
               router.replace('/(tabs)/home');
             }
@@ -338,5 +354,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
         )}
       </View>
     </Appbar.Header>
+    <NetworkStatusBanner />
+    </View>
   );
 }

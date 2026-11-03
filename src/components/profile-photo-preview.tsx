@@ -140,7 +140,6 @@ function ProfilePhotoPreviewContent({ uri, visible, onClose }: ProfilePhotoPrevi
             <StatusBar
                 hidden={false}
                 barStyle={isLightTheme ? 'dark-content' : 'light-content'}
-                backgroundColor={headerBackgroundColor}
             />
             <View style={{ height: insets.top, backgroundColor: headerBackgroundColor }} />
             <Appbar.Header

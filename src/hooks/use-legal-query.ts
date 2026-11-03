@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { getUserFacingErrorMessage } from '@/services/user-facing-error';
+
 export function useLegalQuery<T>(load: () => Promise<T>) {
     const [retryCount, setRetryCount] = useState(0);
     const [result, setResult] = useState<{
@@ -16,12 +18,11 @@ export function useLegalQuery<T>(load: () => Promise<T>) {
             if (active) setResult({ load, retryCount, value, error: null });
         }).catch((reason: unknown) => {
             if (active) {
-                const detail = reason instanceof Error ? reason.message : String(reason);
                 setResult({
                     load,
                     retryCount,
                     value: null,
-                    error: `بارگذاری اطلاعات انجام نشد. ${detail}`,
+                    error: getUserFacingErrorMessage(reason, 'بارگذاری اطلاعات انجام نشد.'),
                 });
             }
         });

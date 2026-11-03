@@ -1,28 +1,37 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, View } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
-import { usePlanAccess } from '@/hooks/use-plan-access';
+import { useAuth } from '@/hooks/use-auth';
+import { CACHE_KEYS } from '@/services/cache-policy';
+import { useOnlineRefetch } from '@/hooks/use-online-refetch';
 import { useTheme } from '@/hooks/use-theme';
 import { fetchPaymentOrder, getStoredAuthToken, type PaymentOrderStatus } from '@/services/auth-api';
 import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 
-type ReturnState = 'loading' | 'pending' | 'succeeded' | 'failed' | 'error';
+type ReturnState = 'loading' | 'pending' | 'succeeded' | 'failed' | 'error' | 'access-error';
+const MAX_AUTOMATIC_CHECKS = 6;
 
 export default function PaymentReturnScreen() {
     const theme = useTheme();
     const router = useRouter();
+    const queryClient = useQueryClient();
+    const { user, isLoading: authLoading } = useAuth();
     const { orderId } = useLocalSearchParams<{ orderId?: string }>();
-    const { refresh: refreshPlanAccess } = usePlanAccess();
     const [state, setState] = useState<ReturnState>('loading');
     const [errorMessage, setErrorMessage] = useState('');
     const [attempt, setAttempt] = useState(0);
+    const [autoPolling, setAutoPolling] = useState(true);
+    const automaticChecks = useRef(0);
+    const checkInFlight = useRef(false);
 
-    const checkOrder = useCallback(async () => {
+    const checkOrder = useCallback(async (keepPendingOnFailure = false) => {
+        if (authLoading) return;
         const id = Number(orderId);
         if (!Number.isSafeInteger(id) || id < 1) {
             setState('error');
@@ -35,9 +44,21 @@ export default function PaymentReturnScreen() {
             if (!token) throw new Error('برای بررسی پرداخت، دوباره وارد حساب کاربری شوید.');
 
             const result: PaymentOrderStatus = await fetchPaymentOrder(token, id);
+            setErrorMessage('');
             if (result.order.status === 'succeeded') {
-                await refreshPlanAccess();
-                setState('succeeded');
+                try {
+                    if (!user) throw new Error('برای به‌روزرسانی وضعیت اشتراک، دوباره وارد حساب کاربری شوید.');
+                    await queryClient.refetchQueries({
+                        queryKey: CACHE_KEYS.planAccess(user.id),
+                        type: 'active',
+                    }, {
+                        throwOnError: true,
+                    });
+                    setState('succeeded');
+                } catch (error) {
+                    setState('access-error');
+                    setErrorMessage(getUserFacingErrorMessage(error, 'به‌روزرسانی دسترسی اشتراک ناموفق بود.'));
+                }
                 return;
             }
             if (result.order.status === 'failed') {
@@ -46,10 +67,15 @@ export default function PaymentReturnScreen() {
             }
             setState('pending');
         } catch (error) {
-            setState('error');
+            setState(keepPendingOnFailure ? 'pending' : 'error');
             setErrorMessage(getUserFacingErrorMessage(error, 'بررسی وضعیت پرداخت ناموفق بود.'));
         }
-    }, [orderId, refreshPlanAccess]);
+    }, [authLoading, orderId, queryClient, user]);
+    useOnlineRefetch(() => {
+        automaticChecks.current = 0;
+        setAutoPolling(true);
+        void checkOrder(true);
+    }, true);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -62,33 +88,52 @@ export default function PaymentReturnScreen() {
     useEffect(() => {
         if (state !== 'pending') return;
 
-        const timer = setInterval(() => setAttempt((value) => value + 1), 4000);
+        const checkAutomatically = async () => {
+            if (checkInFlight.current) return;
+            if (automaticChecks.current >= MAX_AUTOMATIC_CHECKS) {
+                setAutoPolling(false);
+                return;
+            }
+            automaticChecks.current += 1;
+            checkInFlight.current = true;
+            try {
+                await checkOrder(true);
+            } finally {
+                checkInFlight.current = false;
+            }
+        };
+        if (!autoPolling) return;
+
+        const timer = setInterval(() => void checkAutomatically(), 4000);
         const subscription = AppState.addEventListener('change', (appState) => {
-            if (appState === 'active') setAttempt((value) => value + 1);
+            if (appState === 'active') void checkAutomatically();
         });
 
         return () => {
             clearInterval(timer);
             subscription.remove();
         };
-    }, [state]);
+    }, [autoPolling, checkOrder, state]);
 
-    const isLoading = state === 'loading' || state === 'pending';
+    const isLoading = state === 'loading';
     const icon = state === 'succeeded'
         ? 'check-circle-outline'
-        : state === 'failed' || state === 'error' ? 'close-circle-outline' : 'progress-clock';
+        : state === 'failed' || state === 'error' || state === 'access-error' ? 'close-circle-outline' : 'progress-clock';
     const iconColor = state === 'succeeded'
         ? theme.success
-        : state === 'failed' || state === 'error' ? theme.error : theme.primaryText;
+        : state === 'failed' || state === 'error' || state === 'access-error' ? theme.error : theme.primaryText;
     const title = state === 'succeeded'
         ? 'پرداخت با موفقیت تأیید شد'
         : state === 'failed' ? 'پرداخت تکمیل نشد'
-            : state === 'error' ? 'بررسی پرداخت ناموفق بود' : 'در حال بررسی پرداخت';
+            : state === 'access-error' ? 'پرداخت تأیید شد'
+            : state === 'error' ? 'بررسی پرداخت ناموفق بود'
+                : state === 'pending' ? 'نتیجهٔ پرداخت هنوز قطعی نیست' : 'در حال بررسی پرداخت';
     const description = state === 'succeeded'
         ? 'دسترسی پلن شما به‌روز شد. برای مشاهدهٔ وضعیت اشتراک به صفحهٔ پلن‌ها برگردید.'
         : state === 'failed' ? 'وضعیت سفارش ناموفق ثبت شده است. می‌توانید دوباره برای خرید اقدام کنید.'
+            : state === 'access-error' ? `پرداخت موفق بود، اما وضعیت اشتراک به‌روز نشد. ${errorMessage}`
             : state === 'error' ? errorMessage
-                : 'پرداخت در درگاه انجام شده است؟ چند لحظه برای دریافت تأیید نهایی صبر کنید.';
+                : `${errorMessage ? `آخرین بررسی موفق نبود: ${errorMessage} ` : ''}نتیجهٔ پرداخت هنوز قطعی نشده است و سفارش تا تأیید نهایی باز می‌ماند. لازم نیست این صفحه را باز نگه دارید؛ تا مشخص‌شدن نتیجه پرداخت دیگری انجام ندهید. می‌توانید بعداً از صفحهٔ پلن‌ها وضعیت سفارش را بررسی کنید.`;
 
     return (
         <ThemedView style={styles.container}>
@@ -100,9 +145,19 @@ export default function PaymentReturnScreen() {
                 <ThemedText type="body" themeColor="textSecondary" style={styles.description}>
                     {description}
                 </ThemedText>
-                {state === 'error' && (
-                    <Pressable accessibilityRole="button" onPress={() => setAttempt((value) => value + 1)}>
-                        <ThemedText type="smallBold" themeColor="primaryText">تلاش دوباره</ThemedText>
+                {(state === 'error' || state === 'access-error' || state === 'pending') && (
+                    <Pressable
+                        accessibilityRole="button"
+                        onPress={() => {
+                            automaticChecks.current = 0;
+                            setAutoPolling(true);
+                            setState('loading');
+                            setAttempt((value) => value + 1);
+                        }}
+                    >
+                        <ThemedText type="smallBold" themeColor="primaryText">
+                            {state === 'pending' ? 'بررسی وضعیت دوباره' : 'تلاش دوباره'}
+                        </ThemedText>
                     </Pressable>
                 )}
                 <Pressable

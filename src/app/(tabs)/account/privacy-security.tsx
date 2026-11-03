@@ -1,22 +1,24 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import Constants, { AppOwnership } from 'expo-constants';
-import * as Device from 'expo-device';
+import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Snackbar } from 'react-native-paper';
-import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ConfirmationModal } from '@/components/confirmation-modal';
 import { AppTextInput } from '@/components/app-text';
-import { IranianPhoneInput } from '@/components/iranian-phone-input';
 import { OtpCodeInput } from '@/components/otp-code-input';
+import { OtpResendControl } from '@/components/otp-resend-control';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
+import { useAppFeedback } from '@/hooks/use-app-feedback';
+import { useOtpResendCountdown } from '@/hooks/use-otp-resend-countdown';
 import { useTheme } from '@/hooks/use-theme';
-import { beginTwoFactorEnrollment, confirmTwoFactorEnrollment, disableTwoFactor, fetchPushSubscriptionStatus, fetchTwoFactorStatus, getDeviceId, getStoredAuthToken, removePushSubscription, savePushSubscription, sendOtp, type AuthDevice, type TwoFactorEnrollment, type TwoFactorStatus } from '@/services/auth-api';
-import { normalizeIranianPhone, normalizeOtpCode } from '@/services/iranian-phone';
+import { beginTwoFactorEnrollment, confirmTwoFactorEnrollment, disableTwoFactor, fetchTwoFactorStatus, getDeviceId, getStoredAuthToken, sendOtp, type AuthDevice, type TwoFactorEnrollment, type TwoFactorStatus } from '@/services/auth-api';
+import { normalizeOtpCode } from '@/services/iranian-phone';
+import { formatPersianDate } from '@/utils/persian-date';
 
 function platformLabel(platform: AuthDevice['platform']): string {
     switch (platform) {
@@ -46,15 +48,14 @@ function platformIcon(platform: AuthDevice['platform']): React.ComponentProps<ty
 
 type ConfirmationAction =
     | { type: 'delete-account'; code: string }
+    | { type: 'enable-inactivity-deletion'; period: 6 | 12 | 18 }
     | { type: 'sign-out-current' }
     | { type: 'sign-out-all' }
     | { type: 'revoke-device'; device: AuthDevice };
 
 type SnackbarKind = 'info' | 'success' | 'error';
-type BusyAction = 'phone' | 'delete-code' | 'inactivity' | null;
+type BusyAction = 'delete-code' | 'inactivity' | null;
 type InactivityDeletionPeriod = 6 | 12 | 18 | null;
-const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
-
 export default function PrivacySecurityScreen() {
     const theme = useTheme();
     const router = useRouter();
@@ -64,21 +65,20 @@ export default function PrivacySecurityScreen() {
         revokeUserDevice,
         signOut,
         signOutAll,
-        changePhone,
         deleteAccount,
         updateInactivityDeletion,
     } = useAuth();
+    const { showError } = useAppFeedback();
+    const restrictedCapabilities = user?.restricted_capabilities ?? [];
+    const securityRestricted = restrictedCapabilities.includes('security');
+    const profileRestricted = restrictedCapabilities.includes('profile');
     const [devices, setDevices] = useState<AuthDevice[]>([]);
-    const [phoneInput, setPhoneInput] = useState('');
-    const [phoneCode, setPhoneCode] = useState('');
-    const [phoneCodeSent, setPhoneCodeSent] = useState(false);
     const [deleteCode, setDeleteCode] = useState('');
     const [deleteCodeSent, setDeleteCodeSent] = useState(false);
+    const { secondsRemaining: resendSeconds, start: startResendCountdown } = useOtpResendCountdown();
     const [busy, setBusy] = useState(false);
     const [busyAction, setBusyAction] = useState<BusyAction>(null);
     const [pendingInactivityPeriod, setPendingInactivityPeriod] = useState<InactivityDeletionPeriod>(null);
-    const [pushEnabled, setPushEnabled] = useState(false);
-    const [pushBusy, setPushBusy] = useState(false);
     const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null);
     const [twoFactorEnrollment, setTwoFactorEnrollment] = useState<TwoFactorEnrollment | null>(null);
     const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState<string[]>([]);
@@ -87,7 +87,6 @@ export default function PrivacySecurityScreen() {
     const [snackbar, setSnackbar] = useState('');
     const [snackbarKind, setSnackbarKind] = useState<SnackbarKind>('info');
     const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction | null>(null);
-    const isVerifyingPhoneChange = useRef(false);
 
     const showMessage = (message: string, kind: SnackbarKind = 'info') => {
         setSnackbarKind(kind);
@@ -98,9 +97,9 @@ export default function PrivacySecurityScreen() {
         try {
             setDevices(await getDevices());
         } catch (loadError) {
-            showMessage(loadError instanceof Error ? loadError.message : 'دریافت فهرست دستگاه‌ها ناموفق بود.', 'error');
+            showError(loadError, 'دریافت فهرست دستگاه‌ها ناموفق بود.');
         }
-    }, [getDevices]);
+    }, [getDevices, showError]);
 
     useEffect(() => {
         let isMounted = true;
@@ -111,51 +110,14 @@ export default function PrivacySecurityScreen() {
                 })
                 .catch((loadError: unknown) => {
                     if (isMounted) {
-                        showMessage(loadError instanceof Error ? loadError.message : 'دریافت فهرست دستگاه‌ها ناموفق بود.', 'error');
+                        showError(loadError, 'دریافت فهرست دستگاه‌ها ناموفق بود.');
                     }
                 });
         }
         return () => {
             isMounted = false;
         };
-    }, [getDevices, user]);
-
-    useEffect(() => {
-        let isMounted = true;
-
-        const loadPushStatus = async () => {
-            if (!user) {
-                setPushEnabled(false);
-                return;
-            }
-
-            try {
-                const token = await getStoredAuthToken();
-                if (!token) {
-                    setPushEnabled(false);
-                    return;
-                }
-                const enabled = await fetchPushSubscriptionStatus(token);
-                if (isExpoGo) {
-                    if (isMounted) setPushEnabled(enabled);
-                    return;
-                }
-
-                const Notifications = await import('expo-notifications');
-                const permission = await Notifications.getPermissionsAsync();
-                if (isMounted) setPushEnabled(enabled && permission.status === 'granted');
-            } catch (loadError) {
-                if (isMounted) {
-                    showMessage(loadError instanceof Error ? loadError.message : 'وضعیت اعلان‌ها دریافت نشد.', 'error');
-                }
-            }
-        };
-
-        void loadPushStatus();
-        return () => {
-            isMounted = false;
-        };
-    }, [user]);
+    }, [getDevices, showError, user]);
 
     useEffect(() => {
         let isMounted = true;
@@ -173,7 +135,7 @@ export default function PrivacySecurityScreen() {
                 if (isMounted) setTwoFactorStatus(status);
             } catch (loadError) {
                 if (isMounted) {
-                    showMessage(loadError instanceof Error ? loadError.message : 'وضعیت تأیید دومرحله‌ای دریافت نشد.', 'error');
+                    showError(loadError, 'وضعیت تأیید دومرحله‌ای دریافت نشد.');
                 }
             }
         };
@@ -182,63 +144,7 @@ export default function PrivacySecurityScreen() {
         return () => {
             isMounted = false;
         };
-    }, [user]);
-
-    const togglePushNotifications = async () => {
-        if (pushBusy) return;
-        setPushBusy(true);
-        try {
-            const token = await getStoredAuthToken();
-            if (!token) throw new Error('برای مدیریت اعلان‌ها ابتدا دوباره وارد حساب شوید.');
-
-            if (pushEnabled) {
-                await removePushSubscription(token);
-                setPushEnabled(false);
-                showMessage('اعلان‌ها برای این دستگاه خاموش شدند.', 'success');
-                return;
-            }
-
-            if (isExpoGo) {
-                throw new Error('برای فعال‌سازی اعلان‌های راه‌دور، برنامه را با development build اجرا کنید؛ Expo Go در اندروید از این قابلیت پشتیبانی نمی‌کند.');
-            }
-
-            if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
-                throw new Error('اعلان‌های موبایل در نسخهٔ وب در دسترس نیستند.');
-            }
-            if (!Device.isDevice) {
-                throw new Error('برای فعال‌سازی اعلان‌ها از دستگاه واقعی استفاده کنید.');
-            }
-
-            const Notifications = await import('expo-notifications');
-            let permission = await Notifications.getPermissionsAsync();
-            if (permission.status !== 'granted') {
-                permission = await Notifications.requestPermissionsAsync();
-            }
-            if (permission.status !== 'granted') {
-                throw new Error('مجوز اعلان داده نشد. می‌توانید آن را از تنظیمات دستگاه فعال کنید.');
-            }
-
-            if (Platform.OS === 'android') {
-                await Notifications.setNotificationChannelAsync('default', {
-                    name: 'اعلان‌های پهناورکار',
-                    importance: Notifications.AndroidImportance.DEFAULT,
-                });
-            }
-
-            const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-            if (!projectId) {
-                throw new Error('شناسهٔ پروژهٔ Expo تنظیم نشده است.');
-            }
-            const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-            await savePushSubscription(token, pushToken, Platform.OS);
-            setPushEnabled(true);
-            showMessage('اعلان‌ها برای این دستگاه فعال شدند.', 'success');
-        } catch (pushError) {
-            showMessage(pushError instanceof Error ? pushError.message : 'تغییر تنظیم اعلان‌ها ناموفق بود.', 'error');
-        } finally {
-            setPushBusy(false);
-        }
-    };
+    }, [showError, user]);
 
     const beginTwoFactorSetup = async () => {
         setTwoFactorBusy(true);
@@ -249,7 +155,7 @@ export default function PrivacySecurityScreen() {
             setTwoFactorCode('');
             setTwoFactorRecoveryCodes([]);
         } catch (setupError) {
-            showMessage(setupError instanceof Error ? setupError.message : 'شروع راه‌اندازی ناموفق بود.', 'error');
+            showError(setupError, 'شروع راه‌اندازی ناموفق بود.');
         } finally {
             setTwoFactorBusy(false);
         }
@@ -272,9 +178,19 @@ export default function PrivacySecurityScreen() {
             setTwoFactorCode('');
             showMessage('تأیید دومرحله‌ای فعال شد. کدهای بازیابی را در جای امن نگه دارید.', 'success');
         } catch (setupError) {
-            showMessage(setupError instanceof Error ? setupError.message : 'تأیید راه‌اندازی ناموفق بود.', 'error');
+            showError(setupError, 'تأیید راه‌اندازی ناموفق بود.');
         } finally {
             setTwoFactorBusy(false);
+        }
+    };
+
+    const copyTwoFactorSecret = async () => {
+        if (!twoFactorEnrollment) return;
+        try {
+            await Clipboard.setStringAsync(twoFactorEnrollment.secret);
+            showMessage('کلید راه‌اندازی کپی شد.', 'success');
+        } catch (copyError) {
+            showError(copyError, 'کپی کلید راه‌اندازی ناموفق بود.');
         }
     };
 
@@ -290,69 +206,13 @@ export default function PrivacySecurityScreen() {
             setTwoFactorRecoveryCodes([]);
             showMessage('تأیید دومرحله‌ای خاموش شد.', 'success');
         } catch (disableError) {
-            showMessage(disableError instanceof Error ? disableError.message : 'خاموش‌کردن تأیید دومرحله‌ای ناموفق بود.', 'error');
+            showError(disableError, 'خاموش‌کردن تأیید دومرحله‌ای ناموفق بود.');
         } finally {
             setTwoFactorBusy(false);
         }
     };
 
-    const requestPhoneCode = async () => {
-        const normalizedPhone = normalizeIranianPhone(phoneInput);
-        if (!normalizedPhone) {
-            showMessage('شمارهٔ موبایل معتبر وارد کنید.', 'error');
-            return;
-        }
-        if (normalizedPhone === user?.phone) {
-            showMessage('این شماره هم‌اکنون به حساب شما متصل است.', 'error');
-            return;
-        }
-
-        setBusy(true);
-        setBusyAction('phone');
-        try {
-            await sendOtp({ phone: normalizedPhone, type: 'login' });
-            setPhoneInput(normalizedPhone.slice(3));
-            setPhoneCode('');
-            setPhoneCodeSent(true);
-            showMessage('اگر امکان استفاده از این درخواست وجود داشته باشد، کد تأیید ارسال می‌شود.');
-        } catch (requestError) {
-            showMessage(requestError instanceof Error ? requestError.message : 'ارسال کد ناموفق بود.', 'error');
-        } finally {
-            setBusy(false);
-            setBusyAction(null);
-        }
-    };
-
-    const verifyPhoneChange = async (submittedCode = phoneCode) => {
-        if (busy || isVerifyingPhoneChange.current) return;
-        const normalizedPhone = normalizeIranianPhone(phoneInput);
-        const normalizedCode = normalizeOtpCode(submittedCode);
-        if (!normalizedPhone || !/^\d{6}$/.test(normalizedCode)) {
-            showMessage('شماره و کد شش‌رقمی را بررسی کنید.', 'error');
-            return;
-        }
-
-        isVerifyingPhoneChange.current = true;
-        setBusy(true);
-        setBusyAction('phone');
-        try {
-            await changePhone(normalizedPhone, normalizedCode);
-            setPhoneInput('');
-            setPhoneCode('');
-            setPhoneCodeSent(false);
-            showMessage('شمارهٔ حساب با موفقیت تغییر کرد.', 'success');
-        } catch (changeError) {
-            showMessage(changeError instanceof Error ? changeError.message : 'تغییر شماره ناموفق بود.', 'error');
-        } finally {
-            isVerifyingPhoneChange.current = false;
-            setBusy(false);
-            setBusyAction(null);
-        }
-    };
-
-    const chooseInactivityDeletionPeriod = async (period: 6 | 12 | 18 | null) => {
-        if (busy || period === user?.inactivity_deletion_period_months) return;
-
+    const saveInactivityDeletionPeriod = async (period: InactivityDeletionPeriod) => {
         setBusy(true);
         setBusyAction('inactivity');
         setPendingInactivityPeriod(period);
@@ -365,12 +225,24 @@ export default function PrivacySecurityScreen() {
                 'success',
             );
         } catch (updateError) {
-            showMessage(updateError instanceof Error ? updateError.message : 'ذخیرهٔ تنظیم حذف خودکار ناموفق بود.', 'error');
+            showError(updateError, 'ذخیرهٔ تنظیم حذف خودکار ناموفق بود.');
         } finally {
             setBusy(false);
             setBusyAction(null);
             setPendingInactivityPeriod(null);
+            setConfirmationAction(null);
         }
+    };
+
+    const chooseInactivityDeletionPeriod = async (period: InactivityDeletionPeriod) => {
+        if (busy || period === user?.inactivity_deletion_period_months) return;
+
+        if (period !== null) {
+            setConfirmationAction({ type: 'enable-inactivity-deletion', period });
+            return;
+        }
+
+        await saveInactivityDeletionPeriod(null);
     };
 
     const requestDeleteCode = async () => {
@@ -382,12 +254,13 @@ export default function PrivacySecurityScreen() {
         setBusy(true);
         setBusyAction('delete-code');
         try {
-            await sendOtp({ phone: user.phone, type: 'login' });
+            const response = await sendOtp({ phone: user.phone, type: 'login' });
             setDeleteCode('');
             setDeleteCodeSent(true);
-            showMessage('برای تأیید حذف حساب، کد به شمارهٔ ثبت‌شده ارسال شد.');
+            startResendCountdown(response.resend_after);
+            showMessage('کد تأیید از طریق پیامک ارسال شد.');
         } catch (requestError) {
-            showMessage(requestError instanceof Error ? requestError.message : 'ارسال کد ناموفق بود.', 'error');
+            showError(requestError, 'ارسال کد ناموفق بود.');
         } finally {
             setBusy(false);
             setBusyAction(null);
@@ -415,7 +288,7 @@ export default function PrivacySecurityScreen() {
             }
             await refreshDevices();
         } catch (revokeError) {
-            showMessage(revokeError instanceof Error ? revokeError.message : 'غیرفعال‌کردن دستگاه ناموفق بود.', 'error');
+            showError(revokeError, 'غیرفعال‌کردن دستگاه ناموفق بود.');
             setConfirmationAction(null);
         } finally {
             setBusy(false);
@@ -429,7 +302,7 @@ export default function PrivacySecurityScreen() {
             setConfirmationAction(null);
             router.replace('/auth');
         } catch (signOutError) {
-            showMessage(signOutError instanceof Error ? signOutError.message : 'خروج از این دستگاه ناموفق بود.', 'error');
+            showError(signOutError, 'خروج از این دستگاه ناموفق بود.');
             setConfirmationAction(null);
             setBusy(false);
         }
@@ -449,11 +322,16 @@ export default function PrivacySecurityScreen() {
                 setConfirmationAction(null);
                 router.replace('/auth');
             } catch (deleteError) {
-                showMessage(deleteError instanceof Error ? deleteError.message : 'حذف حساب ناموفق بود.', 'error');
+                showError(deleteError, 'حذف حساب ناموفق بود.');
                 setConfirmationAction(null);
             } finally {
                 setBusy(false);
             }
+            return;
+        }
+
+        if (confirmationAction.type === 'enable-inactivity-deletion') {
+            await saveInactivityDeletionPeriod(confirmationAction.period);
             return;
         }
 
@@ -464,7 +342,7 @@ export default function PrivacySecurityScreen() {
                 setConfirmationAction(null);
                 router.replace('/auth');
             } catch (signOutError) {
-                showMessage(signOutError instanceof Error ? signOutError.message : 'خروج از همهٔ دستگاه‌ها ناموفق بود.', 'error');
+                showError(signOutError, 'خروج از همهٔ دستگاه‌ها ناموفق بود.');
                 setConfirmationAction(null);
             } finally {
                 setBusy(false);
@@ -490,13 +368,17 @@ export default function PrivacySecurityScreen() {
 
     const confirmationTitle = confirmationAction?.type === 'delete-account'
         ? 'حذف دائمی حساب؟'
-        : confirmationAction?.type === 'sign-out-all'
-            ? 'خروج از همهٔ دستگاه‌ها؟'
-            : confirmationAction?.type === 'sign-out-current'
-                ? 'خروج از این دستگاه؟'
-                : 'لغو این نشست؟';
+        : confirmationAction?.type === 'enable-inactivity-deletion'
+            ? 'تأیید فعال‌سازی حذف خودکار؟'
+            : confirmationAction?.type === 'sign-out-all'
+                ? 'خروج از همهٔ دستگاه‌ها؟'
+                : confirmationAction?.type === 'sign-out-current'
+                    ? 'خروج از این دستگاه؟'
+                    : 'لغو این نشست؟';
     const confirmationMessage = confirmationAction?.type === 'delete-account'
-        ? 'حساب، اطلاعات پروفایل، نشست‌ها و داده‌های مرتبط حذف می‌شوند. این کار قابل بازگشت نیست.'
+        ? 'با تأیید، حساب شما به‌صورت دائمی حذف خواهد شد:'
+        : confirmationAction?.type === 'enable-inactivity-deletion'
+        ? `با فعال‌سازی این گزینه و رسیدن مدت بی‌فعالیتی به ${confirmationAction.period} ماه، حذف حساب پس از هشدار پیامکی و مهلت ۳۰روزه انجام خواهد شد:`
         : confirmationAction?.type === 'sign-out-all'
             ? 'نشست شما در همهٔ دستگاه‌ها لغو می‌شود و برای استفادهٔ دوباره باید وارد شوید.'
             : confirmationAction?.type === 'sign-out-current'
@@ -504,8 +386,22 @@ export default function PrivacySecurityScreen() {
                 : confirmationAction?.type === 'revoke-device'
                     ? `دسترسی ${confirmationAction.device.device_name || platformLabel(confirmationAction.device.platform)} فوراً لغو می‌شود.`
                     : '';
+    const confirmationMessageItems = confirmationAction?.type === 'delete-account'
+        ? [
+            'ماندهٔ کیف پول و دسترسی به اشتراک فعال و مزایای آن از دسترس شما خارج می‌شود.',
+            'این اقدام قابل بازگشت نیست؛ پیش از تأیید، موجودی و وضعیت اشتراک خود را بررسی کنید.',
+        ]
+        : confirmationAction?.type === 'enable-inactivity-deletion'
+            ? [
+                'ماندهٔ کیف پول و دسترسی به اشتراک فعال و مزایای آن از دسترس شما خارج می‌شود.',
+                'ورود دوباره به حساب یا خاموش‌کردن این گزینه، فرایند حذف را لغو می‌کند.',
+                'وجود پرداخت یا برداشت حل‌نشده، حذف را تا تعیین تکلیف آن به تعویق می‌اندازد.',
+            ]
+            : undefined;
     const confirmationLabel = confirmationAction?.type === 'delete-account'
         ? 'حذف دائمی'
+        : confirmationAction?.type === 'enable-inactivity-deletion'
+            ? 'فعال‌سازی'
         : confirmationAction?.type === 'sign-out-all'
             ? 'خروج از همه'
             : confirmationAction?.type === 'sign-out-current'
@@ -513,6 +409,8 @@ export default function PrivacySecurityScreen() {
                 : 'لغو نشست';
     const confirmationIcon = confirmationAction?.type === 'delete-account'
         ? 'delete-outline'
+        : confirmationAction?.type === 'enable-inactivity-deletion'
+            ? 'timer-alert-outline'
         : 'logout';
 
     return (
@@ -527,35 +425,6 @@ export default function PrivacySecurityScreen() {
                         نشست‌ها، شمارهٔ تلفن و داده‌های شخصی خود را مدیریت کنید.
                     </ThemedText>
                 </View>
-
-                <Section title="اعلان‌ها" icon="bell-outline" theme={theme}>
-                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                        دریافت اعلان روی این دستگاه فقط پس از انتخاب شما فعال می‌شود.
-                    </ThemedText>
-                    {isExpoGo && !pushEnabled ? (
-                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                            برای فعال‌سازی اعلان‌های راه‌دور در Android، از development build استفاده کنید؛ Expo Go این قابلیت را ندارد.
-                        </ThemedText>
-                    ) : null}
-                    <Pressable
-                        accessibilityRole="button"
-                        disabled={pushBusy || (isExpoGo && !pushEnabled)}
-                        onPress={() => void togglePushNotifications()}
-                        style={({ pressed }) => [
-                            styles.notificationButton,
-                            {
-                                backgroundColor: pushEnabled ? theme.surfaceVariant : theme.primary,
-                                borderColor: theme.border,
-                                opacity: pressed || pushBusy ? 0.72 : 1,
-                            },
-                        ]}
-                    >
-                        {pushBusy ? <ActivityIndicator size="small" color={pushEnabled ? theme.text : theme.onPrimary} /> : null}
-                        <ThemedText type="smallBold" style={{ color: pushEnabled ? theme.text : theme.onPrimary }}>
-                            {pushEnabled ? 'خاموش‌کردن اعلان‌ها' : 'فعال‌کردن اعلان‌ها'}
-                        </ThemedText>
-                    </Pressable>
-                </Section>
 
                 <Section title="تأیید دومرحله‌ای" icon="shield-key-outline" theme={theme}>
                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -574,6 +443,7 @@ export default function PrivacySecurityScreen() {
                                 autoCapitalize="characters"
                                 autoCorrect={false}
                                 maxLength={64}
+                                editable={!securityRestricted}
                                 onChangeText={setTwoFactorCode}
                                 placeholder="کد برنامه یا کد بازیابی"
                                 placeholderTextColor={theme.textMuted}
@@ -584,6 +454,7 @@ export default function PrivacySecurityScreen() {
                                 label="خاموش‌کردن تأیید دومرحله‌ای"
                                 icon="shield-off-outline"
                                 busy={twoFactorBusy}
+                                disabled={securityRestricted}
                                 onPress={() => void turnOffTwoFactor()}
                                 theme={theme}
                             />
@@ -598,9 +469,25 @@ export default function PrivacySecurityScreen() {
                                     <ThemedText selectable type="code" style={[styles.twoFactorSecret, { color: theme.text }]}>
                                         {twoFactorEnrollment.secret}
                                     </ThemedText>
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel="کپی کلید راه‌اندازی تأیید دومرحله‌ای"
+                                        onPress={() => void copyTwoFactorSecret()}
+                                        style={({ pressed }) => [
+                                            styles.copySecretButton,
+                                            {
+                                                backgroundColor: theme.primaryContainer,
+                                                borderColor: theme.border,
+                                                opacity: pressed ? 0.7 : 1,
+                                            },
+                                        ]}
+                                    >
+                                        <MaterialCommunityIcons name="content-copy" size={18} color={theme.primaryText} />
+                                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>کپی کلید</ThemedText>
+                                    </Pressable>
                                     <OtpCodeInput
                                         accessibilityLabel="کد برنامه برای فعال‌سازی تأیید دومرحله‌ای"
-                                        disabled={twoFactorBusy}
+                                        disabled={twoFactorBusy || securityRestricted}
                                         label="کد ۶ رقمی برنامه"
                                         onChangeText={setTwoFactorCode}
                                         value={twoFactorCode}
@@ -609,7 +496,7 @@ export default function PrivacySecurityScreen() {
                                         label="تأیید و فعال‌سازی"
                                         icon="check"
                                         busy={twoFactorBusy}
-                                        disabled={twoFactorCode.length !== 6}
+                                        disabled={securityRestricted || twoFactorCode.length !== 6}
                                         onPress={() => void confirmTwoFactorSetup()}
                                         theme={theme}
                                     />
@@ -619,7 +506,7 @@ export default function PrivacySecurityScreen() {
                                     label="راه‌اندازی تأیید دومرحله‌ای"
                                     icon="shield-key-outline"
                                     busy={twoFactorBusy || twoFactorStatus === null}
-                                    disabled={twoFactorStatus === null}
+                                    disabled={securityRestricted || twoFactorStatus === null}
                                     onPress={() => void beginTwoFactorSetup()}
                                     theme={theme}
                                 />
@@ -634,61 +521,10 @@ export default function PrivacySecurityScreen() {
                             </ThemedText>
                         </View>
                     ) : null}
-                </Section>
-
-                <Section title="امنیت حساب" icon="cellphone-key" theme={theme}>
-                    <View style={[styles.currentPhone, { backgroundColor: theme.surfaceVariant }]}>
-                        <View style={[styles.currentPhoneIcon, { backgroundColor: theme.primaryContainer }]}>
-                            <MaterialCommunityIcons name="cellphone" size={19} color={theme.primaryText} />
-                        </View>
-                        <View style={styles.currentPhoneText}>
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>شمارهٔ فعلی</ThemedText>
-                            <ThemedText type="body" style={[styles.phoneValue, { color: theme.text }]}>{user.phone}</ThemedText>
-                        </View>
-                        <MaterialCommunityIcons name="check-decagram-outline" size={20} color={theme.success} />
-                    </View>
-                    <View style={styles.fieldGroup}>
-                        <ThemedText type="smallBold" style={styles.fieldLabel}>تغییر شمارهٔ تلفن</ThemedText>
-                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                            کد به شمارهٔ جدید فرستاده می‌شود؛ تغییر فقط پس از تأیید موفق اعمال خواهد شد.
+                    {securityRestricted ? (
+                        <ThemedText type="small" style={{ color: theme.warning }}>
+                            به‌دلیل محدودیت امنیت حساب، تغییر تنظیمات تأیید دومرحله‌ای موقتاً غیرفعال است.
                         </ThemedText>
-                        <IranianPhoneInput
-                            accessibilityLabel="شمارهٔ تلفن جدید"
-                            onChangeText={(value) => {
-                                setPhoneInput(value);
-                                setPhoneCode('');
-                                setPhoneCodeSent(false);
-                            }}
-                            value={phoneInput}
-                        />
-                    </View>
-                    {phoneCodeSent ? (
-                        <OtpCodeInput
-                            accessibilityLabel="کد تأیید شمارهٔ جدید"
-                            disabled={busy}
-                            label="کد ۶ رقمی پیامک‌شده"
-                            onChangeText={setPhoneCode}
-                            onComplete={(value) => void verifyPhoneChange(value)}
-                            value={phoneCode}
-                        />
-                    ) : null}
-                    <ActionButton
-                        label={phoneCodeSent ? 'تأیید و تغییر شماره' : 'ارسال کد به شمارهٔ جدید'}
-                        icon={phoneCodeSent ? 'check' : 'message-text-outline'}
-                        busy={busyAction === 'phone'}
-                        disabled={busy}
-                        onPress={() => void (phoneCodeSent ? verifyPhoneChange() : requestPhoneCode())}
-                        theme={theme}
-                    />
-                    {phoneCodeSent ? (
-                        <Pressable
-                            accessibilityRole="button"
-                            disabled={busy}
-                            onPress={() => void requestPhoneCode()}
-                            style={styles.linkButton}
-                        >
-                            <ThemedText type="smallBold" style={{ color: theme.primaryText }}>ارسال دوبارهٔ کد</ThemedText>
-                        </Pressable>
                     ) : null}
                 </Section>
 
@@ -723,7 +559,7 @@ export default function PrivacySecurityScreen() {
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel={`لغو نشست ${device.device_name || 'دستگاه'}`}
-                                        disabled={busy}
+                                        disabled={busy || securityRestricted}
                                         onPress={() => setConfirmationAction({ type: 'revoke-device', device })}
                                         style={({ pressed }) => [
                                             styles.revokeDeviceButton,
@@ -772,7 +608,7 @@ export default function PrivacySecurityScreen() {
                                         آخرین فعالیت:
                                     </ThemedText>
                                     <ThemedText type="small" style={[styles.deviceDetailValue, { color: theme.text }]}>
-                                        {device.last_activity ? new Date(device.last_activity).toLocaleString('fa-IR') : 'نامشخص'}
+                                        {device.last_activity ? formatPersianDate(device.last_activity, { dateStyle: 'medium', timeStyle: 'short' }) : 'نامشخص'}
                                     </ThemedText>
                                 </View>
                                 {device.expires_at ? (
@@ -782,7 +618,7 @@ export default function PrivacySecurityScreen() {
                                             انقضای نشست:
                                         </ThemedText>
                                         <ThemedText type="small" style={[styles.deviceDetailValue, { color: theme.text }]}>
-                                            {new Date(device.expires_at).toLocaleString('fa-IR')}
+                                            {formatPersianDate(device.expires_at, { dateStyle: 'medium', timeStyle: 'short' })}
                                         </ThemedText>
                                     </View>
                                 ) : null}
@@ -828,9 +664,27 @@ export default function PrivacySecurityScreen() {
                             </ThemedText>
                         </View>
                     </View>
-                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                        پس از دورهٔ انتخاب‌شدهٔ بی‌فعالیتی، در صورت ارسال موفق هشدار پیامکی به شمارهٔ تلفن تأییدشده، حذف حساب برای ۳۰ روز بعد زمان‌بندی می‌شود. ورود دوباره یا خاموش‌کردن این گزینه، فرایند حذف را لغو می‌کند. فعال‌سازی این قابلیت به پیکربندی پیامک در سرور نیاز دارد.
-                    </ThemedText>
+                    <View style={styles.inactivityNotes}>
+                        {[
+                            'پس از دورهٔ بی‌فعالیتی انتخاب‌شده، هشدار حذف به شمارهٔ تلفن تأییدشده ارسال می‌شود و مهلت ۳۰روزه برای لغو در نظر گرفته می‌شود.',
+                            'اگر پرداخت یا برداشت حل‌نشده‌ای وجود داشته باشد، حذف تا تعیین تکلیف آن به تعویق می‌افتد.',
+                            'ورود دوباره به حساب یا خاموش‌کردن این گزینه، فرایند حذف خودکار را لغو می‌کند.',
+                            'فعال‌سازی این قابلیت به پیکربندی پیامک در سرور نیاز دارد.',
+                        ].map((note) => (
+                            <View key={note} style={styles.inactivityNote}>
+                                <View style={[styles.inactivityNoteBullet, { backgroundColor: theme.textSecondary }]} />
+                                <ThemedText type="small" style={[styles.inactivityNoteText, { color: theme.textSecondary }]}>
+                                    {note}
+                                </ThemedText>
+                            </View>
+                        ))}
+                    </View>
+                    <View style={[styles.noticeCard, { backgroundColor: theme.warningFill }]}>
+                        <MaterialCommunityIcons name="alert-outline" size={19} color={theme.onWarning} />
+                        <ThemedText type="small" style={[styles.noticeText, { color: theme.onWarning }]}>
+                            با حذف حساب، ماندهٔ کیف پول و دسترسی به اشتراک فعال و مزایای آن از دسترس شما خارج می‌شود. پیش از فعال‌سازی، موجودی و وضعیت اشتراک خود را بررسی کنید.
+                        </ThemedText>
+                    </View>
                     {!user.phone_verified_at ? (
                         <View style={[styles.noticeCard, { backgroundColor: theme.surfaceVariant }]}>
                             <MaterialCommunityIcons name="cellphone-lock" size={19} color={theme.textSecondary} />
@@ -843,7 +697,7 @@ export default function PrivacySecurityScreen() {
                         <View style={[styles.pendingDeletion, { backgroundColor: theme.warningFill }]}>
                             <MaterialCommunityIcons name="alert-outline" size={19} color={theme.onWarning} />
                             <ThemedText type="small" style={[styles.pendingDeletionText, { color: theme.onWarning }]}>
-                                حذف حساب برای {new Date(user.inactivity_deletion_scheduled_at).toLocaleDateString('fa-IR')} زمان‌بندی شده است. برای لغو، وارد حساب بمانید یا گزینهٔ حذف خودکار را خاموش کنید.
+                                حذف حساب برای {formatPersianDate(user.inactivity_deletion_scheduled_at, { dateStyle: 'medium' }) ?? 'نامشخص'} زمان‌بندی شده است؛ با حذف، ماندهٔ کیف پول و دسترسی به اشتراک فعال و مزایای آن از دسترس خارج می‌شود. وجود پرداخت یا برداشت حل‌نشده حذف را تا تعیین تکلیف آن به تعویق می‌اندازد. برای لغو، وارد حساب بمانید یا گزینهٔ حذف خودکار را خاموش کنید.
                             </ThemedText>
                         </View>
                     ) : null}
@@ -855,7 +709,7 @@ export default function PrivacySecurityScreen() {
                             { value: 18, label: '۱۸ ماه' },
                         ] as const).map((option, index) => {
                             const selected = user.inactivity_deletion_period_months === option.value;
-                            const optionDisabled = busy || (
+                            const optionDisabled = busy || profileRestricted || (
                                 option.value !== null
                                 && !user.phone_verified_at
                                 && !selected
@@ -892,13 +746,18 @@ export default function PrivacySecurityScreen() {
                             );
                         })}
                     </View>
+                    {profileRestricted ? (
+                        <ThemedText type="small" style={{ color: theme.warning }}>
+                            تغییر تنظیم حذف خودکار به‌دلیل محدودیت ویرایش پروفایل موقتاً غیرفعال است.
+                        </ThemedText>
+                    ) : null}
                 </Section>
 
                 <Section title="حذف حساب" icon="delete-outline" theme={theme}>
                     <View style={[styles.noticeCard, { backgroundColor: theme.warningFill }]}>
                         <MaterialCommunityIcons name="alert-outline" size={19} color={theme.onWarning} />
                         <ThemedText type="small" style={[styles.noticeText, { color: theme.onWarning }]}>
-                            حذف حساب دائمی است و پس از انجام، قابل بازگشت نیست. برای تأیید، کد به شمارهٔ ثبت‌شده ارسال می‌شود.
+                            حذف حساب دائمی است و پس از انجام، قابل بازگشت نیست. اگر پرداخت یا برداشت در حال تعیین تکلیف باشد، تا نهایی‌شدن آن امکان حذف حساب وجود ندارد. برای تأیید، کد به شمارهٔ ثبت‌شده ارسال می‌شود.
                         </ThemedText>
                     </View>
                     {deleteCodeSent ? (
@@ -906,6 +765,14 @@ export default function PrivacySecurityScreen() {
                             accessibilityLabel="کد تأیید حذف حساب"
                             onChangeText={setDeleteCode}
                             value={deleteCode}
+                        />
+                    ) : null}
+                    {deleteCodeSent ? (
+                        <OtpResendControl
+                            disabled={busy}
+                            label="ارسال دوبارهٔ کد حذف"
+                            onPress={() => void requestDeleteCode()}
+                            secondsRemaining={resendSeconds}
                         />
                     ) : null}
                     <ActionButton
@@ -916,16 +783,6 @@ export default function PrivacySecurityScreen() {
                         onPress={() => void (deleteCodeSent ? confirmDeleteAccount() : requestDeleteCode())}
                         theme={theme}
                     />
-                    {deleteCodeSent ? (
-                        <Pressable
-                            accessibilityRole="button"
-                            disabled={busy}
-                            onPress={() => void requestDeleteCode()}
-                            style={styles.linkButton}
-                        >
-                            <ThemedText type="smallBold" style={{ color: theme.primaryText }}>ارسال دوبارهٔ کد حذف</ThemedText>
-                        </Pressable>
-                    ) : null}
                 </Section>
 
             </ScrollView>
@@ -933,6 +790,7 @@ export default function PrivacySecurityScreen() {
                 visible={confirmationAction !== null}
                 title={confirmationTitle}
                 message={confirmationMessage}
+                messageItems={confirmationMessageItems}
                 confirmLabel={confirmationLabel}
                 icon={confirmationIcon}
                 busy={busy}
@@ -1049,6 +907,10 @@ const styles = StyleSheet.create({
     inactivityHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
     inactivityIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
     inactivityHeaderText: { flex: 1, gap: 2 },
+    inactivityNotes: { gap: Spacing.two },
+    inactivityNote: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
+    inactivityNoteBullet: { width: 6, height: 6, borderRadius: 3, marginTop: 8 },
+    inactivityNoteText: { flex: 1 },
     inactivityOptions: { borderWidth: 1, borderRadius: Radius.md, overflow: 'hidden' },
     inactivityOption: {
         minHeight: 48,
@@ -1064,16 +926,20 @@ const styles = StyleSheet.create({
     sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginHorizontal: Spacing.one },
     sectionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
     sectionBody: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two },
-    notificationButton: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
     twoFactorSecret: { borderRadius: Radius.md, padding: Spacing.three, backgroundColor: '#0000000D', textAlign: 'center', letterSpacing: 2 },
+    copySecretButton: {
+        minHeight: 44,
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.one,
+        borderWidth: 1,
+        borderRadius: Radius.md,
+        paddingHorizontal: Spacing.three,
+    },
     recoveryCodes: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two },
     profileInput: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
-    currentPhone: { minHeight: 64, borderRadius: Radius.md, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-    currentPhoneIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-    currentPhoneText: { flex: 1, gap: 2 },
-    phoneValue: { writingDirection: 'ltr', textAlign: 'left' },
-    fieldGroup: { gap: Spacing.one },
-    fieldLabel: { paddingHorizontal: Spacing.one },
     actionButton: { minHeight: 52, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.two },
     actionChevron: { marginLeft: 'auto' },
     divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },
