@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -65,8 +66,8 @@ export default function AboutUsScreen() {
                     <ThemedText type="body" style={[styles.introDescription, { color: theme.textSecondary }]}>
                         پهناور کار مجموعه‌ای از ابزارهای محاسباتی مرتبط با حقوق و مزایا، اطلاعات مصوبات مزدی و امکانات حساب کاربری را در یک برنامه گرد هم آورده است.
                     </ThemedText>
-                    <View style={[styles.introTag, { backgroundColor: theme.primaryContainer }]}>
-                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                    <View style={[styles.introTag, { backgroundColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                             محاسبات و اطلاعات حوزهٔ کار
                         </ThemedText>
                     </View>
@@ -78,8 +79,8 @@ export default function AboutUsScreen() {
                         return (
                             <View key={section.title} style={styles.timelineEntry}>
                                 <View style={styles.rail}>
-                                    <View style={[styles.marker, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                        <MaterialCommunityIcons name={section.icon} size={19} color={theme.primaryText} />
+                                    <View style={[styles.marker, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                        <MaterialCommunityIcons name={section.icon} size={19} color={theme.onPrimary} />
                                     </View>
                                     {!isLast ? <View style={[styles.connector, { backgroundColor: theme.border }]} /> : null}
                                 </View>
@@ -122,7 +123,7 @@ const styles = StyleSheet.create({
     },
     brandCopy: { flex: 1, gap: 2 },
     introTitle: { marginTop: Spacing.one },
-    introDescription: { lineHeight: 25 },
+    introDescription: { lineHeight: Typography.lineHeight.spacious },
     introTag: {
         alignSelf: 'flex-start',
         borderRadius: 999,
@@ -162,5 +163,5 @@ const styles = StyleSheet.create({
         gap: Spacing.two,
     },
     sectionHeading: { gap: Spacing.one },
-    sectionDescription: { lineHeight: 25 },
+    sectionDescription: { lineHeight: Typography.lineHeight.spacious },
 });

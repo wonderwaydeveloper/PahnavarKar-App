@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -40,7 +41,7 @@ export function DailyWorkTimeField({
                     ? { gap: Spacing.one }
                     : { backgroundColor: theme.surfaceVariant, borderRadius: 14, padding: Spacing.two, gap: Spacing.one }}
             >
-                <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18, fontFamily: 'AppFont-Medium' }}>
+                <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption, fontFamily: 'AppFont-Medium' }}>
                     {label ?? (isFullTime ? 'ساعات کارکرد روزانه بر اساس ماده ۵۱ قانون کار' : 'ساعات کارکرد روزانه بر اساس ماده ۳۹ قانون کار')}
                 </ThemedText>
                 <Pressable
@@ -51,7 +52,7 @@ export function DailyWorkTimeField({
                     <MaterialCommunityIcons name="clock-outline" size={18} color={theme.primaryText} />
                 </Pressable>
                 {showFullTimeHint ? (
-                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18 }}>مبنای تمام‌وقت: ۷ ساعت و ۲۰ دقیقه در روز</ThemedText>
+                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption }}>مبنای تمام‌وقت: ۷ ساعت و ۲۰ دقیقه در روز</ThemedText>
                 ) : null}
             </View>
             <PersianTimePickerModal

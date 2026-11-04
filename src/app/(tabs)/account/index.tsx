@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
@@ -21,7 +22,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { usePlanAccess } from '@/hooks/use-plan-access';
 import { fetchNotificationUnreadCount, getProfilePhotoUrl, getStoredAuthToken } from '@/services/auth-api';
-import { getPlanTierIcon, getPlanTierLogoBackground, getPlanTierLogoForeground } from '@/utils/plan-tier-visual';
+import { getPlanTierColor, getPlanTierIcon, getPlanTierLogoBackground, getPlanTierLogoForeground } from '@/utils/plan-tier-visual';
 
 type ProfileAction = {
     key: string;
@@ -228,8 +229,8 @@ export default function ProfileScreen() {
                                 <Image source={{ uri: profilePhotoUrl }} contentFit="cover" style={styles.heroAvatar} />
                             </Pressable>
                         ) : (
-                            <View style={[styles.heroAvatar, { backgroundColor: theme.primaryContainer }]}>
-                                <MaterialCommunityIcons name="account-outline" size={42} color={theme.primaryText} />
+                            <View style={[styles.heroAvatar, { backgroundColor: theme.primary }]}>
+                                <MaterialCommunityIcons name="account-outline" size={42} color={theme.onPrimary} />
                             </View>
                         )}
                         <ThemedText type="largeTitle" style={styles.heroName}>{user.name}</ThemedText>
@@ -261,20 +262,20 @@ export default function ProfileScreen() {
                                 style={({ pressed }) => [
                                     styles.subscriptionBadge,
                                     {
-                                        backgroundColor: theme.primaryContainer,
-                                        borderColor: theme.border,
+                                        backgroundColor: getPlanTierLogoBackground(subscriptionBadge.tier, appTheme),
+                                        borderColor: getPlanTierColor(subscriptionBadge.tier, appTheme),
                                         opacity: pressed ? 0.8 : 1,
                                     },
                                 ]}
                             >
-                                <View style={[styles.subscriptionBadgeIcon, { backgroundColor: getPlanTierLogoBackground(subscriptionBadge.tier, appTheme) }]}>
+                                <View style={[styles.subscriptionBadgeIcon, { backgroundColor: theme.surface }]}>
                                     <MaterialCommunityIcons
                                         name={subscriptionBadge.icon}
                                         size={16}
-                                        color={getPlanTierLogoForeground(subscriptionBadge.tier, appTheme)}
+                                        color={getPlanTierColor(subscriptionBadge.tier, appTheme)}
                                     />
                                 </View>
-                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                <ThemedText type="smallBold" style={{ color: getPlanTierLogoForeground(subscriptionBadge.tier, appTheme) }}>
                                     {subscriptionBadge.label}
                                 </ThemedText>
                             </Pressable>
@@ -294,8 +295,8 @@ export default function ProfileScreen() {
                     </View>
                 ) : (
                     <View style={[styles.profileHero, styles.guestHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        <View style={[styles.heroAvatar, { backgroundColor: theme.primaryContainer }]}>
-                            <MaterialCommunityIcons name="account-outline" size={42} color={theme.primaryText} />
+                        <View style={[styles.heroAvatar, { backgroundColor: theme.primary }]}>
+                            <MaterialCommunityIcons name="account-outline" size={42} color={theme.onPrimary} />
                         </View>
                         <ThemedText type="largeTitle" style={styles.heroName}>پروفایل مهمان</ThemedText>
                         <ThemedText type="body" style={[styles.guestDescription, { color: theme.textSecondary }]}>
@@ -349,8 +350,8 @@ export default function ProfileScreen() {
                                         },
                                     ]}
                                 >
-                                    <View style={[styles.actionIcon, { backgroundColor: theme.primaryContainer }]}>
-                                        <MaterialCommunityIcons name={action.icon} size={20} color={theme.primaryText} />
+                                    <View style={[styles.actionIcon, { backgroundColor: theme.primary }]}>
+                                        <MaterialCommunityIcons name={action.icon} size={20} color={theme.onPrimary} />
                                     </View>
                                     <View style={styles.actionTextWrap}>
                                         <ThemedText type="smallBold" style={[styles.actionLabel, { color: theme.text }]}>
@@ -361,8 +362,8 @@ export default function ProfileScreen() {
                                         </ThemedText>
                                     </View>
                                     {action.key === 'app-info' ? (
-                                        <View style={[styles.valuePill, { backgroundColor: theme.primaryContainer }]}>
-                                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.primaryText }]}>
+                                        <View style={[styles.valuePill, { backgroundColor: theme.primary }]}>
+                                            <ThemedText type="smallBold" style={[styles.valueText, { color: theme.onPrimary }]}>
                                                 {appVersion}
                                             </ThemedText>
                                         </View>
@@ -571,8 +572,8 @@ const styles = StyleSheet.create({
     },
     actionLabel: {},
     actionSubtitle: {
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.compact,
+        lineHeight: Typography.lineHeight.caption,
     },
     valuePill: {
         paddingHorizontal: Spacing.two,
@@ -580,6 +581,6 @@ const styles = StyleSheet.create({
         borderRadius: 999,
     },
     valueText: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
 });

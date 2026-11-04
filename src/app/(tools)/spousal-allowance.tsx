@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -478,7 +479,7 @@ export default function SpousalAllowanceScreen() {
                                                 style={[
                                                     styles.workHoursMethodOption,
                                                     {
-                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: selected ? theme.primary : theme.surface,
                                                         borderColor: selected ? theme.primary : theme.border,
                                                         borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                                                     },
@@ -487,13 +488,13 @@ export default function SpousalAllowanceScreen() {
                                                 <MaterialCommunityIcons
                                                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={20}
-                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                    color={selected ? theme.onPrimary : theme.textSecondary}
                                                 />
                                                 <ThemedText
                                                     type="smallBold"
                                                     style={[
                                                         styles.workHoursMethodLabel,
-                                                        { color: selected ? theme.primaryText : theme.text },
+                                                        { color: selected ? theme.onPrimary : theme.text },
                                                     ]}
                                                 >
                                                     {option.label}
@@ -532,13 +533,15 @@ export default function SpousalAllowanceScreen() {
                                                 disabled={normalizedActualWorkedHours <= 0}
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                                                 ]}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="کاهش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                             <NumericInputField
                                                 mode="decimal"
@@ -559,7 +562,7 @@ export default function SpousalAllowanceScreen() {
                                                 }
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     maximumAllowedWorkHours !== null
                                                     && normalizedActualWorkedHours >= maximumAllowedWorkHours
                                                     && styles.workHoursStepperButtonDisabled,
@@ -567,7 +570,9 @@ export default function SpousalAllowanceScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="افزایش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                         </View>
                                         {workedHoursError ? (
@@ -627,7 +632,7 @@ export default function SpousalAllowanceScreen() {
                                     color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
-                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
+                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                                         مشمول معافیت از پرداخت سهم بیمه ی کارگر هستم
                                     </ThemedText>
                                     <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
@@ -709,29 +714,29 @@ export default function SpousalAllowanceScreen() {
                                                         {toPersianDigits(formatCurrency(employerInsuranceAmount))}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                         حق تاهل پس از کسر سهم بیمه ی کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                         حق تأهل پس از کسر مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                         {remainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : formatCurrency(remainingClaimAmount)}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                         حق تأهل پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                         {finalRemainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : formatCurrency(finalRemainingClaimAmount)}
@@ -778,7 +783,7 @@ export default function SpousalAllowanceScreen() {
                                                             },
                                                         ]}
                                                     >
-                                                        <View style={styles.breakdownItemHeaderRow}>
+                                                        <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                             <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>
                                                                 {`سال ${toPersianDigits(String(item.year))}${(periodBuckets.find((bucket) => bucket.year === item.year)?.periods.length ?? 0) > 1 ? ` · دوره ${toPersianDigits(String(item.periodIndex))}` : ''}`}
                                                             </ThemedText>
@@ -912,7 +917,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     sectionLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
         fontWeight: '500',
     },
     dateInput: {
@@ -926,7 +931,7 @@ const styles = StyleSheet.create({
         minHeight: 40,
     },
     fieldValue: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         flex: 1,
     },
     optionBox: {
@@ -947,14 +952,14 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     detailLabel: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     helpRow: {
         marginTop: Spacing.one,
     },
     helpText: {
-        lineHeight: 20,
-        fontSize: 11,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.caption,
     },
     actionsGroup: {
         flexDirection: 'row',
@@ -967,7 +972,7 @@ const styles = StyleSheet.create({
     },
     actionLabel: {
         fontFamily: 'AppFont-Bold',
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     breakdownCard: {
         borderRadius: Radius.md,
@@ -1000,20 +1005,20 @@ const styles = StyleSheet.create({
     },
     insuranceSummaryLabel: {
         textAlign: 'center',
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     insuranceSummaryValue: {
         textAlign: 'center',
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     insuranceSummaryEmphasisLabel: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     insuranceSummaryEmphasisValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     insuranceExemptionOption: {
@@ -1044,7 +1049,7 @@ const styles = StyleSheet.create({
     },
     workHoursMethodLabel: {
         flexShrink: 1,
-        lineHeight: 20,
+        lineHeight: Typography.lineHeight.body,
     },
     workHoursDivider: {
         height: StyleSheet.hairlineWidth,
@@ -1058,12 +1063,12 @@ const styles = StyleSheet.create({
         minHeight: 48,
         paddingVertical: 0,
         fontFamily: 'AppFont-Bold',
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
         writingDirection: 'ltr',
     },
     workHoursHint: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     workHoursStepper: {
         minHeight: 54,
@@ -1095,7 +1100,7 @@ const styles = StyleSheet.create({
         gap: Spacing.half,
     },
     insuranceExemptionDescription: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     insuranceLegalBasis: {
         gap: Spacing.one,
@@ -1104,8 +1109,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
     insuranceLegalSummary: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     insuranceLegalToggle: {
         flexDirection: 'row',
@@ -1115,11 +1120,11 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.half,
     },
     insuranceLegalToggleLabel: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     insuranceLegalText: {
-        fontSize: 12,
-        lineHeight: 20,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.body,
     },
     breakdownSectionHeader: {
         flexDirection: 'row',
@@ -1130,7 +1135,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     breakdownSectionTitle: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         fontFamily: 'AppFont-Bold',
     },
     toggleButton: {
@@ -1143,7 +1148,7 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
     },
     toggleButtonLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     breakdownGrid: {
         gap: Spacing.two,
@@ -1159,10 +1164,9 @@ const styles = StyleSheet.create({
         paddingBottom: 2,
         marginBottom: 2,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0, 0, 0, 0.12)',
     },
     breakdownItemTitle: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     breakdownDetailGrid: {
         gap: Spacing.one,
@@ -1175,26 +1179,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     detailValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     pageTitle: {
         display: 'none',
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     pageDescription: {
-        lineHeight: 20,
-        fontSize: 13,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.compact,
     },
     formulaLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
         fontWeight: '500',
     },
     formulaValue: {
-        fontSize: 13,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.compact,
+        lineHeight: Typography.lineHeight.caption,
     },
 });

@@ -1,13 +1,15 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
-import type { CalculationSound, CurrencyPreference, FontPreference, ThemePalette } from '@/context';
+import type { CalculationSound, CurrencyPreference, FontPreference, FontSizePreference, ThemePalette } from '@/context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ColorPalettes, Radius, Spacing } from '@/constants/theme';
+import { getScaledTextStyle } from '@/constants/font-scale';
 import { useAppContext } from '@/hooks/use-app-context';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useTheme } from '@/hooks/use-theme';
@@ -25,7 +27,7 @@ type SettingRowProps = {
     onPress: () => void;
 };
 
-type SettingsSectionKey = 'currency' | 'palette' | 'appearance' | 'font' | 'calculation-sound';
+type SettingsSectionKey = 'currency' | 'palette' | 'appearance' | 'font' | 'font-size' | 'calculation-sound';
 
 type SettingsSectionProps = {
     title: string;
@@ -59,8 +61,8 @@ function SettingsSection({
                     pressed && { backgroundColor: theme.surfaceVariant },
                 ]}
             >
-                <View style={[styles.sectionIcon, { backgroundColor: theme.primaryContainer }]}>
-                    <MaterialCommunityIcons name={icon} size={21} color={theme.primaryText} />
+                <View style={[styles.sectionIcon, { backgroundColor: theme.primary }]}>
+                    <MaterialCommunityIcons name={icon} size={21} color={theme.onPrimary} />
                 </View>
                 <View style={styles.sectionHeadingText}>
                     <ThemedText type="smallBold">{title}</ThemedText>
@@ -99,6 +101,7 @@ function SettingRow({
     onPress,
 }: SettingRowProps) {
     const theme = useTheme();
+    const { fontSizePreference } = useAppContext();
 
     return (
         <View
@@ -141,7 +144,7 @@ function SettingRow({
                     {previewFont ? (
                         <Text
                             style={[
-                                styles.fontPreview,
+                                getScaledTextStyle(styles.fontPreview, fontSizePreference),
                                 {
                                     color: theme.text,
                                     fontFamily: previewFont === 'system' ? undefined : getAppFontFamily(previewFont, 'Bold'),
@@ -175,6 +178,8 @@ export default function SettingsScreen() {
         setColorPalette,
         fontPreference,
         setFontPreference,
+        fontSizePreference,
+        setFontSizePreference,
         fontError: fontLoadError,
         clearFontError,
         currencyPreference,
@@ -188,6 +193,8 @@ export default function SettingsScreen() {
     } = useAppContext();
     const [fontActionError, setFontActionError] = useState('');
     const [fontChangePending, setFontChangePending] = useState(false);
+    const [fontSizeActionError, setFontSizeActionError] = useState('');
+    const [fontSizeChangePending, setFontSizeChangePending] = useState(false);
     const [currencyActionError, setCurrencyActionError] = useState('');
     const [paletteActionError, setPaletteActionError] = useState('');
     const [calculationSoundActionError, setCalculationSoundActionError] = useState('');
@@ -227,6 +234,22 @@ export default function SettingsScreen() {
             setFontActionError(`بارگذاری یا ذخیرهٔ فونت انتخاب‌شده انجام نشد${reason}`);
         } finally {
             setFontChangePending(false);
+        }
+    };
+
+    const handleFontSizeChange = async (value: FontSizePreference) => {
+        if (value === fontSizePreference || fontSizeChangePending) return;
+
+        setFontSizeChangePending(true);
+        setFontSizeActionError('');
+        try {
+            await setFontSizePreference(value);
+        } catch (error) {
+            console.error('Unable to save font size preference', error);
+            const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
+            setFontSizeActionError(`ذخیرهٔ اندازهٔ متن انجام نشد${reason}`);
+        } finally {
+            setFontSizeChangePending(false);
         }
     };
 
@@ -305,17 +328,32 @@ export default function SettingsScreen() {
     };
     const paletteLabels: Record<ThemePalette, string> = {
         default: 'فیروزه‌ای پیش‌فرض',
-        blue: 'آبی',
-        green: 'سبز',
-        yellow: 'زرد',
-        red: 'قرمز',
-        pink: 'صورتی',
+        skyBlue: 'آبی آسمانی',
+        emerald: 'سبز زمردی',
+        amber: 'کهربایی',
+        ruby: 'قرمز یاقوتی',
+        softPurple: 'ارغوانی ملایم',
+        purple: 'بنفش',
+        indigo: 'نیلی',
+        deepTeal: 'فیروزه‌ای تیره',
+        burntOrange: 'نارنجی سوخته',
+        dustyRose: 'صورتی چرک',
+        brown: 'قهوه‌ای',
+        slateBlue: 'آبی نفتی',
+        lightPurple: 'بنفش روشن',
+        olive: 'سبز زیتونی',
+        tealBlue: 'آبی فیروزه‌ای',
     };
     const fontLabels: Record<FontPreference, string> = {
         iransans: 'ایران سنس',
         vazir: 'وزیر',
         shabnam: 'شبنم',
         system: 'فونت پیش‌فرض سیستم',
+    };
+    const fontSizeLabels: Record<FontSizePreference, string> = {
+        standard: 'استاندارد',
+        large: 'بزرگ',
+        extraLarge: 'خیلی بزرگ',
     };
     const themeLabels = {
         light: 'روشن',
@@ -376,35 +414,95 @@ export default function SettingsScreen() {
                             onPress={() => void handleColorPaletteChange('default')}
                         />
                         <SettingRow
-                            colorPreview={ColorPalettes.blue[themeMode].primary}
-                            title="آبی"
-                            selected={colorPalette === 'blue'}
-                            onPress={() => void handleColorPaletteChange('blue')}
+                            colorPreview={ColorPalettes.skyBlue[themeMode].primary}
+                            title="آبی آسمانی"
+                            selected={colorPalette === 'skyBlue'}
+                            onPress={() => void handleColorPaletteChange('skyBlue')}
                         />
                         <SettingRow
-                            colorPreview={ColorPalettes.green[themeMode].primary}
-                            title="سبز"
-                            selected={colorPalette === 'green'}
-                            onPress={() => void handleColorPaletteChange('green')}
+                            colorPreview={ColorPalettes.emerald[themeMode].primary}
+                            title="سبز زمردی"
+                            selected={colorPalette === 'emerald'}
+                            onPress={() => void handleColorPaletteChange('emerald')}
                         />
                         <SettingRow
-                            colorPreview={ColorPalettes.yellow[themeMode].primary}
-                            title="زرد"
-                            selected={colorPalette === 'yellow'}
-                            onPress={() => void handleColorPaletteChange('yellow')}
+                            colorPreview={ColorPalettes.amber[themeMode].primary}
+                            title="کهربایی"
+                            selected={colorPalette === 'amber'}
+                            onPress={() => void handleColorPaletteChange('amber')}
                         />
                         <SettingRow
-                            colorPreview={ColorPalettes.red[themeMode].primary}
-                            title="قرمز"
-                            selected={colorPalette === 'red'}
-                            onPress={() => void handleColorPaletteChange('red')}
+                            colorPreview={ColorPalettes.ruby[themeMode].primary}
+                            title="قرمز یاقوتی"
+                            selected={colorPalette === 'ruby'}
+                            onPress={() => void handleColorPaletteChange('ruby')}
                         />
                         <SettingRow
-                            colorPreview={ColorPalettes.pink[themeMode].primary}
-                            title="صورتی"
-                            selected={colorPalette === 'pink'}
+                            colorPreview={ColorPalettes.softPurple[themeMode].primary}
+                            title="ارغوانی ملایم"
+                            selected={colorPalette === 'softPurple'}
+                            onPress={() => void handleColorPaletteChange('softPurple')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.purple[themeMode].primary}
+                            title="بنفش"
+                            selected={colorPalette === 'purple'}
+                            onPress={() => void handleColorPaletteChange('purple')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.indigo[themeMode].primary}
+                            title="نیلی"
+                            selected={colorPalette === 'indigo'}
+                            onPress={() => void handleColorPaletteChange('indigo')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.deepTeal[themeMode].primary}
+                            title="فیروزه‌ای تیره"
+                            selected={colorPalette === 'deepTeal'}
+                            onPress={() => void handleColorPaletteChange('deepTeal')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.burntOrange[themeMode].primary}
+                            title="نارنجی سوخته"
+                            selected={colorPalette === 'burntOrange'}
+                            onPress={() => void handleColorPaletteChange('burntOrange')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.dustyRose[themeMode].primary}
+                            title="صورتی چرک"
+                            selected={colorPalette === 'dustyRose'}
+                            onPress={() => void handleColorPaletteChange('dustyRose')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.brown[themeMode].primary}
+                            title="قهوه‌ای"
+                            selected={colorPalette === 'brown'}
+                            onPress={() => void handleColorPaletteChange('brown')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.slateBlue[themeMode].primary}
+                            title="آبی نفتی"
+                            selected={colorPalette === 'slateBlue'}
+                            onPress={() => void handleColorPaletteChange('slateBlue')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.lightPurple[themeMode].primary}
+                            title="بنفش روشن"
+                            selected={colorPalette === 'lightPurple'}
+                            onPress={() => void handleColorPaletteChange('lightPurple')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.olive[themeMode].primary}
+                            title="سبز زیتونی"
+                            selected={colorPalette === 'olive'}
+                            onPress={() => void handleColorPaletteChange('olive')}
+                        />
+                        <SettingRow
+                            colorPreview={ColorPalettes.tealBlue[themeMode].primary}
+                            title="آبی فیروزه‌ای"
+                            selected={colorPalette === 'tealBlue'}
                             showDivider={false}
-                            onPress={() => void handleColorPaletteChange('pink')}
+                            onPress={() => void handleColorPaletteChange('tealBlue')}
                         />
                     </View>
                 </SettingsSection>
@@ -524,17 +622,51 @@ export default function SettingsScreen() {
                         />
                     </View>
                 </SettingsSection>
+
+                <SettingsSection
+                    title="اندازهٔ نوشته‌ها"
+                    summary={fontSizeLabels[fontSizePreference]}
+                    icon="format-size"
+                    expanded={expandedSection === 'font-size'}
+                    cardStyle={sectionCardStyle}
+                    onToggle={() => toggleSection('font-size')}
+                >
+                    <View accessibilityRole="radiogroup" style={styles.optionsCard}>
+                        <SettingRow
+                            icon="format-size"
+                            title="استاندارد"
+                            selected={fontSizePreference === 'standard'}
+                            disabled={fontSizeChangePending}
+                            onPress={() => void handleFontSizeChange('standard')}
+                        />
+                        <SettingRow
+                            icon="format-size"
+                            title="بزرگ"
+                            selected={fontSizePreference === 'large'}
+                            disabled={fontSizeChangePending}
+                            onPress={() => void handleFontSizeChange('large')}
+                        />
+                        <SettingRow
+                            icon="format-size"
+                            title="خیلی بزرگ"
+                            selected={fontSizePreference === 'extraLarge'}
+                            disabled={fontSizeChangePending}
+                            showDivider={false}
+                            onPress={() => void handleFontSizeChange('extraLarge')}
+                        />
+                    </View>
+                </SettingsSection>
             </ScrollView>
 
             <Snackbar
-                visible={fontActionError.length > 0 || !!fontLoadError || currencyActionError.length > 0 || !!currencyError || paletteActionError.length > 0 || calculationSoundActionError.length > 0 || !!calculationSoundError}
-                onDismiss={calculationSoundActionError || calculationSoundError ? () => {
+                visible={fontSizeActionError.length > 0 || fontActionError.length > 0 || !!fontLoadError || currencyActionError.length > 0 || !!currencyError || paletteActionError.length > 0 || calculationSoundActionError.length > 0 || !!calculationSoundError}
+                onDismiss={fontSizeActionError ? () => setFontSizeActionError('') : calculationSoundActionError || calculationSoundError ? () => {
                     setCalculationSoundActionError('');
                     clearCalculationSoundError();
                 } : paletteActionError ? () => setPaletteActionError('') : currencyActionError || currencyError ? dismissCurrencyError : dismissFontError}
                 duration={5000}
             >
-                {calculationSoundActionError || calculationSoundError || paletteActionError || currencyActionError || currencyError || fontActionError || fontLoadError}
+                {fontSizeActionError || calculationSoundActionError || calculationSoundError || paletteActionError || currencyActionError || currencyError || fontActionError || fontLoadError}
             </Snackbar>
         </ThemedView>
     );
@@ -613,6 +745,6 @@ const styles = StyleSheet.create({
         borderWidth: StyleSheet.hairlineWidth,
     },
     optionText: { flex: 1 },
-    fontPreview: { fontSize: 14, lineHeight: 20 },
+    fontPreview: { fontSize: Typography.fontSize.bodySmall, lineHeight: Typography.lineHeight.body },
     disabledRow: { opacity: 0.55 },
 });

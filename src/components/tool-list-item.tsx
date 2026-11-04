@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type AccessibilityRole, type AccessibilityState } from 'react-native';
@@ -63,7 +64,7 @@ export function ToolListItem({
                     </ThemedText>
                 )}
                 {detailContent ?? (
-                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19 }}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                         {tool.detail}
                     </ThemedText>
                 )}

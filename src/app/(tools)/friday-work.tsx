@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -431,13 +432,15 @@ export default function FridayWorkScreen() {
                                                     disabled={Number(normalizeDigits(fridayWorkDays)) <= 0}
                                                     style={({ pressed }) => [
                                                         styles.stepperButton,
-                                                        { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                        { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                         Number(normalizeDigits(fridayWorkDays)) <= 0 && styles.stepperButtonDisabled,
                                                     ]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`کاهش جمعه‌کاری سال ${year} دوره ${periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                                 <NumericInputField
                                                     value={fridayWorkDays}
@@ -454,13 +457,15 @@ export default function FridayWorkScreen() {
                                                     disabled={Number(normalizeDigits(fridayWorkDays)) >= availableFridays}
                                                     style={({ pressed }) => [
                                                         styles.stepperButton,
-                                                        { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                        { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                         Number(normalizeDigits(fridayWorkDays)) >= availableFridays && styles.stepperButtonDisabled,
                                                     ]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`افزایش جمعه‌کاری سال ${year} دوره ${periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                             </View>
                                         </View>
@@ -503,7 +508,7 @@ export default function FridayWorkScreen() {
                                     color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
-                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
+                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                                         مشمول معافیت از پرداخت سهم بیمه ی کارگر هستم
                                     </ThemedText>
                                     <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
@@ -563,25 +568,25 @@ export default function FridayWorkScreen() {
                                                 <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مجموع جمعه‌های موجود در بازهٔ انتخاب‌شده</ThemedText>
                                                 <ThemedText type="bodyBold" style={[styles.totalFridaysValue, { color: theme.text }]}>{toPersianDigits(String(totalFridaysInRange))} روز</ThemedText>
                                             </View>
-                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>مبلغ جمعه‌کاری پس از کسر سهم بیمهٔ کارگر</ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>{toPersianDigits(formatCurrency(finalClaimAmount))}</ThemedText>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>مبلغ جمعه‌کاری پس از کسر سهم بیمهٔ کارگر</ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>{toPersianDigits(formatCurrency(finalClaimAmount))}</ThemedText>
                                             </View>
-                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                     مبلغ جمعه‌کاری پس از کسر مبلغ پرداخت‌شده به کارگر
                                                 </ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                     {remainingFridayWorkAmount === null
                                                         ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                         : formatCurrency(remainingFridayWorkAmount)}
                                                 </ThemedText>
                                             </View>
-                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                     مبلغ جمعه‌کاری پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
                                                 </ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                     {finalRemainingFridayWorkAmount === null
                                                         ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                         : formatCurrency(finalRemainingFridayWorkAmount)}
@@ -603,13 +608,13 @@ export default function FridayWorkScreen() {
                                                             <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>{`سال ${toPersianDigits(String(item.year))}${(periodBuckets.find((bucket) => bucket.year === item.year)?.periods.length ?? 0) > 1 ? ` · دوره ${toPersianDigits(String(item.periodIndex))}` : ''}`}</ThemedText>
                                                         </View>
                                                         <View style={styles.breakdownDetailGrid}>
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{`${formatDisplayedDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا ${formatDisplayedDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}`}</ThemedText></View>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>بازهٔ زمانی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{`${formatDisplayedDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا ${formatDisplayedDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}`}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>نوع بازه</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{item.phase === 'before-anniversary' ? 'پیش از سالگرد استخدام' : 'بعد از سالگرد استخدام'}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>جمعه‌های موجود در این دوره</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(String(item.fridaysInPeriod))} روز</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>جمعه‌کاری واردشده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(String(item.fridayWorkDays))} روز</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>حداقل مزد روزانه</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(item.dailyMinimumWage))}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{workshopType === 'classified' ? 'پایه سنوات استحقاقی روزانه گروه شغلی' : 'پایه سنوات استحقاقی روزانه'}</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(item.dailySeniority))}</ThemedText></View>
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مبلغ یک روز جمعه کاری</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{item.fridayWorkRate != null ? toPersianDigits(formatCurrency(item.fridayWorkRate)) : '-'}</ThemedText></View>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>مبلغ یک روز جمعه کاری</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{item.fridayWorkRate != null ? toPersianDigits(formatCurrency(item.fridayWorkRate)) : '-'}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مبلغ این دوره</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{toPersianDigits(formatCurrency(item.amount))}</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>حق بیمه پرداختی به سازمان تامین اجتماعی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{toPersianDigits(formatCurrency(Math.round(item.amount * 0.3)))}</ThemedText></View>
                                                         </View>
@@ -642,64 +647,64 @@ const styles = StyleSheet.create({
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerRow: { alignItems: 'flex-start' },
     headerText: { alignSelf: 'stretch', flex: 1, gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { lineHeight: 20, fontSize: 13 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { lineHeight: Typography.lineHeight.body, fontSize: Typography.fontSize.compact },
     formulaBox: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, gap: Spacing.one },
-    formulaLabel: { fontSize: 11 },
-    formulaValue: { lineHeight: 20, fontSize: 12 },
+    formulaLabel: { fontSize: Typography.fontSize.caption },
+    formulaValue: { lineHeight: Typography.lineHeight.body, fontSize: Typography.fontSize.footnote },
     metricsRow: { flexDirection: 'row', gap: Spacing.two },
     metricBox: { flex: 1, borderRadius: 14, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, gap: Spacing.one },
     yearFieldsGroup: { gap: Spacing.two },
     yearField: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
     yearFieldHeader: { gap: Spacing.half },
-    sectionLabel: { fontSize: 11 },
+    sectionLabel: { fontSize: Typography.fontSize.caption },
     dateInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: 14, paddingVertical: 0 },
-    fieldValue: { fontSize: 13, flex: 1 },
-    helpText: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' },
+    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall, paddingVertical: 0 },
+    fieldValue: { fontSize: Typography.fontSize.compact, flex: 1 },
+    helpText: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Regular' },
     optionSection: { gap: Spacing.two },
     optionsRow: { flexDirection: 'row', gap: Spacing.two },
     optionButton: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.two },
     checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two },
     checkText: { flex: 1, gap: Spacing.one },
-    optionTitle: { fontSize: 13, lineHeight: 19, fontFamily: 'AppFont-Bold' },
-    optionDescription: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' },
+    optionTitle: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact, fontFamily: 'AppFont-Bold' },
+    optionDescription: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Regular' },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 12 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     breakdownCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     breakdownContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     insuranceSummary: { width: '100%', gap: Spacing.one },
     insuranceSummaryRow: { minHeight: 52, flexDirection: 'column', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: 12, borderWidth: 1 },
-    insuranceSummaryLabel: { textAlign: 'center', fontSize: 12 },
-    insuranceSummaryValue: { textAlign: 'center', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    insuranceSummaryEmphasisLabel: { fontSize: 13 },
-    insuranceSummaryEmphasisValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    insuranceSummaryLabel: { textAlign: 'center', fontSize: Typography.fontSize.footnote },
+    insuranceSummaryValue: { textAlign: 'center', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    insuranceSummaryEmphasisLabel: { fontSize: Typography.fontSize.compact },
+    insuranceSummaryEmphasisValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     insuranceExemptionOption: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     insuranceExemptionText: { flex: 1, gap: Spacing.half },
-    insuranceExemptionDescription: { fontSize: 12 },
+    insuranceExemptionDescription: { fontSize: Typography.fontSize.footnote },
     insuranceLegalBasis: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
-    insuranceLegalSummary: { fontSize: 12, lineHeight: 18 },
+    insuranceLegalSummary: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
     insuranceLegalToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one, paddingVertical: Spacing.half },
-    insuranceLegalToggleLabel: { fontSize: 13 },
-    insuranceLegalText: { fontSize: 12, lineHeight: 20 },
-    summaryLabel: { fontSize: 11 },
+    insuranceLegalToggleLabel: { fontSize: Typography.fontSize.compact },
+    insuranceLegalText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.body },
+    summaryLabel: { fontSize: Typography.fontSize.caption },
     totalFridaysBox: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
-    totalFridaysValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    totalFridaysValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     breakdownSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one },
-    breakdownSectionTitle: { fontSize: 13 },
+    breakdownSectionTitle: { fontSize: Typography.fontSize.compact },
     toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
-    toggleButtonLabel: { fontSize: 11 },
+    toggleButtonLabel: { fontSize: Typography.fontSize.caption },
     breakdownGrid: { gap: Spacing.two },
     breakdownItemCard: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.two, gap: Spacing.one },
     breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },
-    breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' },
+    breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' },
     breakdownDetailGrid: { gap: Spacing.one },
     breakdownDetailBox: { borderRadius: 8, borderWidth: 1, padding: Spacing.one, gap: Spacing.one, alignItems: 'center' },
-    detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    detailLabel: { fontSize: Typography.fontSize.footnote },
+    detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

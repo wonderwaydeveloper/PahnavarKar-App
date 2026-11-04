@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Asset } from 'expo-asset';
 import { jalaaliMonthLength, toGregorian, toJalaali } from 'jalaali-js';
@@ -181,7 +182,7 @@ function calculateContractorMonthlyTotals(
             ? 'جمع حقوق و مزایا قابل محاسبه نیست.'
             : !Number.isFinite(employerInsuranceTotal)
                 ? 'سهم بیمهٔ کارفرما قابل محاسبه نیست.'
-            : undefined;
+                : undefined;
     const calculateContractorTotal = (monthDays: number) => {
         const employerInsuranceAmount = periodDayCountIsValid
             ? (employerInsuranceTotal / periodDayCount) * monthDays * workerCount
@@ -916,7 +917,7 @@ async function getGroupCalculationPdfAssets(fontPreference: FontPreference): Pro
 export default function GroupCalculationScreen() {
     const theme = useTheme();
     const { showError } = useAppFeedback();
-    const { fontPreference, currencyPreference, notifyCalculationCompleted } = useAppContext();
+    const { fontPreference, currencyPreference, colorPalette, notifyCalculationCompleted } = useAppContext();
     const { formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -1631,7 +1632,7 @@ export default function GroupCalculationScreen() {
                     ? 'پایه سنوات استحقاقی گروه شغلی (کل دوره)'
                     : result.key === 'entitled-seniority'
                         ? 'پایه سنوات استحقاقی (کل دوره)'
-                    : RESULT_SUMMARY_LABELS[result.key];
+                        : RESULT_SUMMARY_LABELS[result.key];
             const detailsTitle = result.key === 'unused-leave-wage'
                 || result.key === 'unused-leave-entitlement'
                 || result.key === 'end-of-service-years'
@@ -1641,7 +1642,7 @@ export default function GroupCalculationScreen() {
                     ? 'جزئیات بازه‌های محاسبه'
                     : result.key === 'insurance-days-entitlement'
                         ? 'جزئیات ماه‌ها'
-                    : 'جزئیات دوره‌ها';
+                        : 'جزئیات دوره‌ها';
             const details: GroupCalculationPdfDetail[] = [];
 
             if (includePdfDetails && !result.error && result.key === 'unused-leave-entitlement') {
@@ -1926,7 +1927,7 @@ export default function GroupCalculationScreen() {
         setPdfSnackbarVisible(false);
         try {
             const pdfAssets = await getGroupCalculationPdfAssets(fontPreference);
-            const html = buildGroupCalculationPdfHtml(pdfSections, metadata, includePdfDetails, pdfAssets, wageTotal);
+            const html = buildGroupCalculationPdfHtml(pdfSections, metadata, includePdfDetails, pdfAssets, colorPalette, wageTotal);
             if (action === 'preview') {
                 if (Platform.OS === 'web') {
                     await Print.printAsync({ html });
@@ -2055,7 +2056,7 @@ export default function GroupCalculationScreen() {
                                             <ThemedText
                                                 type="small"
                                                 themeColor="textSecondary"
-                                                style={{ fontSize: 13, lineHeight: 19 }}
+                                                style={{ fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}
                                             >
                                                 {tool.detail}
                                             </ThemedText>
@@ -2071,7 +2072,7 @@ export default function GroupCalculationScreen() {
                                                 ]}
                                             >
                                                 {checked ? (
-                                                    <MaterialCommunityIcons name="check-bold" size={15} color="#FFFFFF" />
+                                                    <MaterialCommunityIcons name="check-bold" size={15} color={theme.onPrimary} />
                                                 ) : null}
                                             </View>
                                         )}
@@ -2089,8 +2090,8 @@ export default function GroupCalculationScreen() {
                     <Card.Content style={styles.form}>
                         <View style={[styles.employeeInfoSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                             <View style={styles.employeeInfoHeader}>
-                                <View style={[styles.employeeInfoIcon, { backgroundColor: theme.primaryContainer }]}>
-                                    <MaterialCommunityIcons name="domain" size={20} color={theme.primaryText} />
+                                <View style={[styles.employeeInfoIcon, { backgroundColor: theme.primary }]}>
+                                    <MaterialCommunityIcons name="domain" size={20} color={theme.onPrimary} />
                                 </View>
                                 <ThemedText type="smallBold" style={[styles.employeeInfoTitle, { color: theme.text }]}>
                                     مشخصات کارفرما
@@ -2135,8 +2136,8 @@ export default function GroupCalculationScreen() {
 
                         <View style={[styles.employeeInfoSection, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                             <View style={styles.employeeInfoHeader}>
-                                <View style={[styles.employeeInfoIcon, { backgroundColor: theme.primaryContainer }]}>
-                                    <MaterialCommunityIcons name="account-box-outline" size={20} color={theme.primaryText} />
+                                <View style={[styles.employeeInfoIcon, { backgroundColor: theme.primary }]}>
+                                    <MaterialCommunityIcons name="account-box-outline" size={20} color={theme.onPrimary} />
                                 </View>
                                 <ThemedText type="smallBold" style={[styles.employeeInfoTitle, { color: theme.text }]}>
                                     مشخصات کارگر
@@ -2296,7 +2297,7 @@ export default function GroupCalculationScreen() {
                                                 accessibilityState={{ selected }}
                                                 accessibilityLabel={option.label}
                                             >
-                                                <ThemedText type="smallBold" style={{ color: selected ? theme.surface : theme.text }}>
+                                                <ThemedText type="smallBold" style={{ color: selected ? theme.onPrimary : theme.text }}>
                                                     {option.label}
                                                 </ThemedText>
                                             </Pressable>
@@ -2362,11 +2363,13 @@ export default function GroupCalculationScreen() {
                                         <Pressable
                                             onPress={() => changeInitialSavedLeaveDays(-1)}
                                             disabled={(Number(normalizeDigits(initialSavedLeaveDays)) || 0) <= 0}
-                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, (Number(normalizeDigits(initialSavedLeaveDays)) || 0) <= 0 && styles.stepperButtonDisabled]}
+                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, (Number(normalizeDigits(initialSavedLeaveDays)) || 0) <= 0 && styles.stepperButtonDisabled]}
                                             accessibilityRole="button"
                                             accessibilityLabel="کاهش ذخیره مرخصی سال‌های قبل"
                                         >
-                                            <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                            {({ pressed }) => (
+                                                <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                            )}
                                         </Pressable>
                                         <NumericInputField
                                             mode="decimal"
@@ -2380,11 +2383,13 @@ export default function GroupCalculationScreen() {
                                         />
                                         <Pressable
                                             onPress={() => changeInitialSavedLeaveDays(1)}
-                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }]}
+                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }]}
                                             accessibilityRole="button"
                                             accessibilityLabel="افزایش ذخیره مرخصی سال‌های قبل"
                                         >
-                                            <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                            {({ pressed }) => (
+                                                <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                            )}
                                         </Pressable>
                                     </View>
                                 </View>
@@ -2411,11 +2416,13 @@ export default function GroupCalculationScreen() {
                                                         <Pressable
                                                             onPress={() => changeUsedLeaveDays(index, -1)}
                                                             disabled={normalizedValue <= 0}
-                                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, normalizedValue <= 0 && styles.stepperButtonDisabled]}
+                                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, normalizedValue <= 0 && styles.stepperButtonDisabled]}
                                                             accessibilityRole="button"
                                                             accessibilityLabel="کاهش مرخصی استفاده‌شده"
                                                         >
-                                                            <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                            {({ pressed }) => (
+                                                                <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                            )}
                                                         </Pressable>
                                                         <NumericInputField
                                                             mode="decimal"
@@ -2429,11 +2436,13 @@ export default function GroupCalculationScreen() {
                                                         />
                                                         <Pressable
                                                             onPress={() => changeUsedLeaveDays(index, 1)}
-                                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }]}
+                                                            style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }]}
                                                             accessibilityRole="button"
                                                             accessibilityLabel="افزایش مرخصی استفاده‌شده"
                                                         >
-                                                            <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                            {({ pressed }) => (
+                                                                <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                            )}
                                                         </Pressable>
                                                     </View>
                                                 </View>
@@ -2503,10 +2512,10 @@ export default function GroupCalculationScreen() {
                                                     accessibilityState={{ selected: isSelected }}
                                                     accessibilityLabel={`${option.label} ${option.percentage}`}
                                                 >
-                                                    <ThemedText type="smallBold" style={{ color: isSelected ? theme.surface : theme.text }}>
+                                                    <ThemedText type="smallBold" style={{ color: isSelected ? theme.onPrimary : theme.text }}>
                                                         {option.label}
                                                     </ThemedText>
-                                                    <ThemedText type="small" style={{ color: isSelected ? theme.surface : theme.textSecondary }}>
+                                                    <ThemedText type="small" style={{ color: isSelected ? theme.onPrimary : theme.textSecondary }}>
                                                         {option.percentage}
                                                     </ThemedText>
                                                 </Pressable>
@@ -2543,11 +2552,13 @@ export default function GroupCalculationScreen() {
                                                 <Pressable
                                                     onPress={() => setFridayWorkDays((current) => ({ ...current, [key]: clampDayCount(normalizedValue - 1, period.availableFridays) }))}
                                                     disabled={normalizedValue <= 0}
-                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, normalizedValue <= 0 && styles.stepperButtonDisabled]}
+                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, normalizedValue <= 0 && styles.stepperButtonDisabled]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`کاهش جمعه‌کاری سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                                 <NumericInputField
                                                     value={displayedValue}
@@ -2563,11 +2574,13 @@ export default function GroupCalculationScreen() {
                                                 <Pressable
                                                     onPress={() => setFridayWorkDays((current) => ({ ...current, [key]: clampDayCount(normalizedValue + 1, period.availableFridays) }))}
                                                     disabled={normalizedValue >= period.availableFridays}
-                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, normalizedValue >= period.availableFridays && styles.stepperButtonDisabled]}
+                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, normalizedValue >= period.availableFridays && styles.stepperButtonDisabled]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`افزایش جمعه‌کاری سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                             </View>
                                         </View>
@@ -2621,11 +2634,13 @@ export default function GroupCalculationScreen() {
                                                 <Pressable
                                                     onPress={() => setMissionDays((current) => ({ ...current, [key]: clampDayCount(normalizedValue - 1, period.availableDays) }))}
                                                     disabled={normalizedValue <= 0}
-                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, normalizedValue <= 0 && styles.stepperButtonDisabled]}
+                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, normalizedValue <= 0 && styles.stepperButtonDisabled]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`کاهش روزهای مأموریت سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                                 <NumericInputField
                                                     value={displayedValue}
@@ -2641,11 +2656,13 @@ export default function GroupCalculationScreen() {
                                                 <Pressable
                                                     onPress={() => setMissionDays((current) => ({ ...current, [key]: clampDayCount(normalizedValue + 1, period.availableDays) }))}
                                                     disabled={normalizedValue >= period.availableDays}
-                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, normalizedValue >= period.availableDays && styles.stepperButtonDisabled]}
+                                                    style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, normalizedValue >= period.availableDays && styles.stepperButtonDisabled]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`افزایش روزهای مأموریت سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                             </View>
                                         </View>
@@ -2681,7 +2698,7 @@ export default function GroupCalculationScreen() {
                                                 style={[
                                                     styles.workHoursMethodOption,
                                                     {
-                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: selected ? theme.primary : theme.surface,
                                                         borderColor: selected ? theme.primary : theme.border,
                                                         borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                                                     },
@@ -2690,13 +2707,13 @@ export default function GroupCalculationScreen() {
                                                 <MaterialCommunityIcons
                                                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={20}
-                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                    color={selected ? theme.onPrimary : theme.textSecondary}
                                                 />
                                                 <ThemedText
                                                     type="smallBold"
                                                     style={[
                                                         styles.workHoursMethodLabel,
-                                                        { color: selected ? theme.primaryText : theme.text },
+                                                        { color: selected ? theme.onPrimary : theme.text },
                                                     ]}
                                                 >
                                                     {option.label}
@@ -2739,13 +2756,15 @@ export default function GroupCalculationScreen() {
                                                 disabled={normalizedActualWorkedHours <= 0}
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                                                 ]}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="کاهش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                             <NumericInputField
                                                 mode="decimal"
@@ -2766,7 +2785,7 @@ export default function GroupCalculationScreen() {
                                                 }
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     maximumAllowedWorkHours !== null
                                                     && normalizedActualWorkedHours >= maximumAllowedWorkHours
                                                     && styles.workHoursStepperButtonDisabled,
@@ -2774,7 +2793,9 @@ export default function GroupCalculationScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="افزایش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                         </View>
                                         {workedHoursError ? (
@@ -2850,13 +2871,15 @@ export default function GroupCalculationScreen() {
                                     disabled={!contractorWorkerCountIsSafe || contractorWorkerCountValue <= 1}
                                     style={({ pressed }) => [
                                         styles.stepperButton,
-                                        { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                        { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         (!contractorWorkerCountIsSafe || contractorWorkerCountValue <= 1) && styles.stepperButtonDisabled,
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityLabel="کاهش تعداد کارگران"
                                 >
-                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                    {({ pressed }) => (
+                                        <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                    )}
                                 </Pressable>
                                 <NumericInputField
                                     value={contractorWorkerCount}
@@ -2873,13 +2896,15 @@ export default function GroupCalculationScreen() {
                                     disabled={contractorWorkerCountIsSafe && contractorWorkerCountValue >= Number.MAX_SAFE_INTEGER}
                                     style={({ pressed }) => [
                                         styles.stepperButton,
-                                        { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                        { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         contractorWorkerCountIsSafe && contractorWorkerCountValue >= Number.MAX_SAFE_INTEGER && styles.stepperButtonDisabled,
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityLabel="افزایش تعداد کارگران"
                                 >
-                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                    {({ pressed }) => (
+                                        <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                    )}
                                 </Pressable>
                             </View>
                         </View>
@@ -2904,7 +2929,7 @@ export default function GroupCalculationScreen() {
                                         color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                     />
                                     <View style={styles.insuranceExemptionText}>
-                                        <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
+                                        <ThemedText type="smallBold" style={{ color: theme.text, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                                             مشمول معافیت از پرداخت سهم بیمه ی کارگر هستم
                                         </ThemedText>
                                         <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
@@ -2988,7 +3013,7 @@ export default function GroupCalculationScreen() {
                                 const excludedBonusItems = getExcludedBonusItemTitles(results);
                                 return (
                                     <View style={styles.summaryBoxHeader}>
-                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
+                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
                                             <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                 <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
                                                     جمع حقوق و مزایای محاسبه‌شده در بازه
@@ -3052,7 +3077,7 @@ export default function GroupCalculationScreen() {
                                                 </ThemedText>
                                             </View>
                                             {excludedBonusItems.length > 0 ? (
-                                                <ThemedText type="small" style={[styles.wageTotalNote, { color: theme.textSecondary }]}>
+                                                <ThemedText type="small" style={[styles.wageTotalNote, { color: theme.onPrimary }]}>
                                                     این جمع شامل {excludedBonusItems.map((title) => `«${title}»`).join(' و ')} نمی‌شود.
                                                 </ThemedText>
                                             ) : null}
@@ -3246,11 +3271,11 @@ export default function GroupCalculationScreen() {
                                                         {formatCurrency(employerInsuranceAmount)}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, styles.insuranceSummaryFinalRow, { backgroundColor: theme.primaryContainer }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, styles.insuranceSummaryFinalRow, { backgroundColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, { color: theme.onPrimary }]}>
                                                         مبلغ پس از کسر سهم بیمهٔ کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, { color: theme.onPrimary }]}>
                                                         {formatCurrency(finalClaimAmount)}
                                                     </ThemedText>
                                                 </View>
@@ -3259,13 +3284,13 @@ export default function GroupCalculationScreen() {
                                             <>
                                                 {result.key === 'entitled-seniority' ? (
                                                     <View style={styles.summaryBoxHeader}>
-                                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                            <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                            <ThemedText type="small" style={[styles.summaryLabel, { color: theme.onPrimary }]}>
                                                                 {workshopType === 'classified'
                                                                     ? 'پایه سنوات استحقاقی کل دوره گروه شغلی'
                                                                     : 'پایه سنوات استحقاقی کل دوره'}
                                                             </ThemedText>
-                                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
+                                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.onPrimary }]}>
                                                                 {formatCurrency(totalPeriodEntitlement)}
                                                             </ThemedText>
                                                         </View>
@@ -3309,7 +3334,7 @@ export default function GroupCalculationScreen() {
                                                     <View style={styles.breakdownGrid}>
                                                         {result.key === 'unused-leave-entitlement' ? (
                                                             <View style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                                <View style={styles.breakdownItemHeaderRow}>
+                                                                <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                                     <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>
                                                                         خلاصه محاسبه
                                                                     </ThemedText>
@@ -3327,9 +3352,9 @@ export default function GroupCalculationScreen() {
                                                                             {formatBreakdownNumber(result.breakdown.reduce<number>((total, item) => total + (isRecord(item) && typeof item.usedLeaveDays === 'number' ? item.usedLeaveDays : 0), 0))} روز
                                                                         </ThemedText>
                                                                     </View>
-                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره نهایی</ThemedText>
-                                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
+                                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>ذخیره نهایی</ThemedText>
+                                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>
                                                                             {formatBreakdownNumber(result.value)} روز
                                                                         </ThemedText>
                                                                     </View>
@@ -3349,7 +3374,7 @@ export default function GroupCalculationScreen() {
 
                                                             return (
                                                                 <View key={`${result.key}-detail-${index}`} style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                                    <View style={styles.breakdownItemHeaderRow}>
+                                                                    <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                                         <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>
                                                                             {title}
                                                                         </ThemedText>
@@ -3367,7 +3392,7 @@ export default function GroupCalculationScreen() {
                                                                                 || ['amount', 'dailyWage', 'entitlement', 'entitlementAmount', 'daysCalculated', 'savedLeaveDays', 'carryAfter', 'requiredHours', 'workingDays', 'unusedLeaveDays', 'finalDailyWage', 'fridayWorkRate'].includes(field.key);
                                                                             const isWarning = field.key === 'excessUsedDays';
                                                                             return (
-                                                                                <View key={`${result.key}-${field.key}-${field.format}-${index}`} style={[styles.breakdownDetailBox, { backgroundColor: isEmphasized ? theme.primaryContainer : theme.surfaceVariant, borderColor: isEmphasized ? theme.primary : theme.border }]}>
+                                                                                <View key={`${result.key}-${field.key}-${field.format}-${index}`} style={[styles.breakdownDetailBox, { backgroundColor: isEmphasized ? theme.primary : theme.surfaceVariant, borderColor: isEmphasized ? theme.primary : theme.border }]}>
                                                                                     <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
                                                                                         {field.label}
                                                                                     </ThemedText>
@@ -3475,9 +3500,9 @@ const styles = StyleSheet.create({
     content: { flexGrow: 1, paddingHorizontal: 0, gap: Spacing.three },
     intro: { gap: Spacing.two },
     introGuidance: { gap: Spacing.one, paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth },
-    introGuidanceText: { fontSize: 12, lineHeight: 18 },
+    introGuidanceText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
     introHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, paddingHorizontal: Spacing.three },
-    selectAllLabel: { fontFamily: 'AppFont-Medium', fontSize: 12 },
+    selectAllLabel: { fontFamily: 'AppFont-Medium', fontSize: Typography.fontSize.footnote },
     resultsTitle: { paddingHorizontal: Spacing.three },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     selectionList: { paddingVertical: 0, paddingHorizontal: 0 },
@@ -3485,13 +3510,13 @@ const styles = StyleSheet.create({
     selectionCheckbox: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderRadius: 6 },
     form: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     calculateButton: { borderRadius: 10 },
-    calculateButtonLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    calculateButtonLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     inputSection: { gap: Spacing.two, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two },
     contractorAnalysisSection: { gap: Spacing.two, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two },
     employeeInfoSection: { gap: Spacing.two, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.three },
     employeeInfoHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
     employeeInfoIcon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-    employeeInfoTitle: { fontSize: 14 },
+    employeeInfoTitle: { fontSize: Typography.fontSize.bodySmall },
     employeeInfoHint: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 8 },
     employeeInfoHintText: { flex: 1 },
     employeeTextInput: { backgroundColor: 'transparent' },
@@ -3500,11 +3525,11 @@ const styles = StyleSheet.create({
     specificCalculationSection: { gap: Spacing.two, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two },
     workHoursMethods: { gap: Spacing.one },
     workHoursMethodOption: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10 },
-    workHoursMethodLabel: { flexShrink: 1, lineHeight: 20 },
+    workHoursMethodLabel: { flexShrink: 1, lineHeight: Typography.lineHeight.body },
     workHoursDivider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },
     workHoursDetails: { gap: Spacing.two },
-    workHoursInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: 16, writingDirection: 'ltr' },
-    workHoursHint: { fontSize: 12, lineHeight: 18 },
+    workHoursInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodyLarge, writingDirection: 'ltr' },
+    workHoursHint: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
     workHoursStepper: { minHeight: 54, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: Spacing.one, gap: Spacing.one },
     workHoursStepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     workHoursStepperButtonDisabled: { opacity: 0.4 },
@@ -3514,20 +3539,20 @@ const styles = StyleSheet.create({
     maritalOptionsRow: { flexDirection: 'row', gap: Spacing.two },
     maritalOption: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.two, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth },
     fieldGroup: { gap: Spacing.one, padding: Spacing.two, borderRadius: 12 },
-    fieldGroupLabel: { fontSize: 11, lineHeight: 18 },
+    fieldGroupLabel: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.caption },
     valuePicker: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 8, borderWidth: 1 },
-    valuePickerText: { flex: 1, fontSize: 13, fontFamily: 'AppFont-Regular' },
+    valuePickerText: { flex: 1, fontSize: Typography.fontSize.compact, fontFamily: 'AppFont-Regular' },
     periodInputCard: { gap: Spacing.one, borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two },
     periodInputHeader: { gap: Spacing.half },
-    fieldHint: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' },
+    fieldHint: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Regular' },
     dayCountStepper: { minHeight: 50, flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     leaveInitialBox: { gap: Spacing.one, borderRadius: 14, padding: Spacing.two },
     leaveSegmentsBox: { gap: Spacing.two, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two },
     leaveSegmentRow: { flexDirection: 'column', alignItems: 'stretch', gap: Spacing.two },
-    leaveSegmentLabel: { flex: 1, fontSize: 12, lineHeight: 19 },
+    leaveSegmentLabel: { flex: 1, fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyCompact },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    stepperInput: { flex: 1, minHeight: 42, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: 14 },
+    stepperInput: { flex: 1, minHeight: 42, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall },
     shiftTypeField: { gap: Spacing.one, padding: Spacing.two, borderRadius: 12 },
     shiftOptionsGroup: { flexDirection: 'column', gap: Spacing.one },
     shiftOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 12, borderWidth: 1 },
@@ -3539,12 +3564,12 @@ const styles = StyleSheet.create({
     insuranceOptions: { gap: Spacing.one },
     insuranceExemptionOption: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     insuranceExemptionText: { flex: 1, gap: Spacing.half },
-    insuranceExemptionDescription: { fontSize: 12 },
+    insuranceExemptionDescription: { fontSize: Typography.fontSize.footnote },
     insuranceLegalBasis: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
-    insuranceLegalSummary: { fontSize: 12, lineHeight: 18 },
+    insuranceLegalSummary: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
     insuranceLegalToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one, paddingVertical: Spacing.half },
-    insuranceLegalToggleLabel: { fontSize: 13 },
-    insuranceLegalText: { fontSize: 12, lineHeight: 20 },
+    insuranceLegalToggleLabel: { fontSize: Typography.fontSize.compact },
+    insuranceLegalText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.body },
     pdfExportHeader: { gap: Spacing.half },
     pdfDetailsOption: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, paddingEnd: Spacing.two },
     pdfDetailsLabel: { flex: 1, gap: Spacing.half, paddingVertical: Spacing.two },
@@ -3552,8 +3577,8 @@ const styles = StyleSheet.create({
     pdfActionItem: { flex: 1, minWidth: 0 },
     pdfActionButton: { minHeight: 46, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', paddingHorizontal: Spacing.half },
     pdfActionButtonContent: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.half },
-    pdfActionButtonLabel: { flexShrink: 1, minWidth: 0, fontSize: 10, lineHeight: 16, textAlign: 'center' },
-    wageTotalNote: { fontSize: 11, lineHeight: 16, textAlign: 'center' },
+    pdfActionButtonLabel: { flexShrink: 1, minWidth: 0, fontSize: Typography.fontSize.tiny, lineHeight: Typography.lineHeight.tight, textAlign: 'center' },
+    wageTotalNote: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.tight, textAlign: 'center' },
     resultCard: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.two, paddingHorizontal: Spacing.three },
     resultHeading: { alignItems: 'stretch', justifyContent: 'space-between', gap: Spacing.one },
@@ -3562,30 +3587,30 @@ const styles = StyleSheet.create({
     resultTitle: { textAlign: 'right', flexShrink: 1 },
     resultHeaderActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
     resultToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
-    resultToggleLabel: { fontSize: 12 },
+    resultToggleLabel: { fontSize: Typography.fontSize.footnote },
     summaryBoxHeader: { alignItems: 'center', marginBottom: Spacing.one },
     summaryBoxContent: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
     contractorTotalBox: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
-    contractorInsuranceNote: { fontSize: 10, textAlign: 'center' },
-    summaryLabel: { fontSize: 12, lineHeight: 18 },
-    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    contractorInsuranceNote: { fontSize: Typography.fontSize.tiny, textAlign: 'center' },
+    summaryLabel: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
+    amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     insuranceSummary: { width: '100%', overflow: 'hidden', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     insuranceSummaryRow: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
     insuranceSummaryFinalRow: { borderTopWidth: StyleSheet.hairlineWidth },
-    insuranceSummaryLabel: { flex: 1, fontSize: 12, lineHeight: 18 },
-    insuranceSummaryValue: { maxWidth: '55%', flexShrink: 1, fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold', textAlign: 'left' },
+    insuranceSummaryLabel: { flex: 1, fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
+    insuranceSummaryValue: { maxWidth: '55%', flexShrink: 1, fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold', textAlign: 'left' },
     breakdownSection: { gap: Spacing.two },
     breakdownSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one },
-    breakdownSectionTitle: { fontSize: 13, fontFamily: 'AppFont-Bold' },
+    breakdownSectionTitle: { fontSize: Typography.fontSize.compact, fontFamily: 'AppFont-Bold' },
     toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
-    toggleButtonLabel: { fontSize: 11 },
+    toggleButtonLabel: { fontSize: Typography.fontSize.caption },
     breakdownGrid: { gap: Spacing.two },
     breakdownItemCard: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.two, gap: Spacing.one },
-    breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0, 0, 0, 0.12)' },
-    breakdownItemTitle: { fontSize: 13, lineHeight: 19, fontFamily: 'AppFont-Bold', textAlign: 'center' },
+    breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },
+    breakdownItemTitle: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact, fontFamily: 'AppFont-Bold', textAlign: 'center' },
     breakdownDetailGrid: { gap: Spacing.one },
     breakdownDetailBox: { borderRadius: 8, borderWidth: 1, padding: Spacing.one, gap: Spacing.one, alignItems: 'center' },
-    detailLabel: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
-    detailValue: { paddingHorizontal: Spacing.two, paddingBottom: Spacing.two, fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold', textAlign: 'center' },
+    detailLabel: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption, textAlign: 'center' },
+    detailValue: { paddingHorizontal: Spacing.two, paddingBottom: Spacing.two, fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold', textAlign: 'center' },
     detailContext: { textAlign: 'center' },
 });

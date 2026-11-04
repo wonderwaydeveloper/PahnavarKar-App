@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -240,8 +241,8 @@ export default function EditProfileScreen() {
                     </View>
                     <View style={[styles.securityCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                         <View style={[styles.currentPhone, { backgroundColor: theme.surfaceVariant }]}>
-                            <View style={[styles.currentPhoneIcon, { backgroundColor: theme.primaryContainer }]}>
-                                <MaterialCommunityIcons name="cellphone" size={19} color={theme.primaryText} />
+                            <View style={[styles.currentPhoneIcon, { backgroundColor: theme.primary }]}>
+                                <MaterialCommunityIcons name="cellphone" size={19} color={theme.onPrimary} />
                             </View>
                             <View style={styles.currentPhoneText}>
                                 <ThemedText type="small" style={{ color: theme.textSecondary }}>شمارهٔ فعلی</ThemedText>
@@ -375,7 +376,7 @@ const styles = StyleSheet.create({
     sectionHeading: { marginHorizontal: Spacing.one, gap: 2 },
     formCard: { borderWidth: 1, borderRadius: Radius.lg, overflow: 'hidden' },
     field: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.three, gap: Spacing.one },
-    input: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
+    input: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: Typography.fontSize.bodyLarge },
     phoneValue: { writingDirection: 'ltr', textAlign: 'left' },
     securityCard: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.three },
     currentPhone: { minHeight: 64, borderRadius: Radius.md, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },

@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -759,7 +760,7 @@ export default function SuspensionWageScreen() {
                         style={[
                           styles.workHoursMethodOption,
                           {
-                            backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                            backgroundColor: selected ? theme.primary : theme.surface,
                             borderColor: selected ? theme.primary : theme.border,
                             borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                           },
@@ -768,13 +769,13 @@ export default function SuspensionWageScreen() {
                         <MaterialCommunityIcons
                           name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                           size={20}
-                          color={selected ? theme.primaryText : theme.textSecondary}
+                          color={selected ? theme.onPrimary : theme.textSecondary}
                         />
                         <ThemedText
                           type="smallBold"
                           style={[
                             styles.workHoursMethodLabel,
-                            { color: selected ? theme.primaryText : theme.text },
+                            { color: selected ? theme.onPrimary : theme.text },
                           ]}
                         >
                           {option.label}
@@ -813,13 +814,15 @@ export default function SuspensionWageScreen() {
                         disabled={normalizedActualWorkedHours <= 0}
                         style={({ pressed }) => [
                           styles.workHoursStepperButton,
-                          { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                          { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                           normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                         ]}
                         accessibilityRole="button"
                         accessibilityLabel="کاهش ساعات کارکرد کارگر"
                       >
-                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                        {({ pressed }) => (
+                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                        )}
                       </Pressable>
                       <NumericInputField
                         mode="decimal"
@@ -840,7 +843,7 @@ export default function SuspensionWageScreen() {
                         }
                         style={({ pressed }) => [
                           styles.workHoursStepperButton,
-                          { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                          { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                           maximumAllowedWorkHours !== null
                           && normalizedActualWorkedHours >= maximumAllowedWorkHours
                           && styles.workHoursStepperButtonDisabled,
@@ -848,7 +851,9 @@ export default function SuspensionWageScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="افزایش ساعات کارکرد کارگر"
                       >
-                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                        {({ pressed }) => (
+                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                        )}
                       </Pressable>
                     </View>
                     {workedHoursError ? (
@@ -920,7 +925,7 @@ export default function SuspensionWageScreen() {
                   }
                 />
                 <View style={styles.insuranceExemptionText}>
-                  <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
+                  <ThemedText type="smallBold" style={{ color: theme.text, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                     مشمول معافیت از پرداخت سهم بیمه ی کارگر هستم
                   </ThemedText>
                   <ThemedText
@@ -1058,29 +1063,29 @@ export default function SuspensionWageScreen() {
                           {toPersianDigits(formatCurrency(employerInsuranceAmount))}
                         </ThemedText>
                       </View>
-                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                           مبلغ حق‌السعی ایام تعلیق پس از کسر سهم بیمهٔ کارگر
                         </ThemedText>
-                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                           {toPersianDigits(formatCurrency(finalClaimAmount))}
                         </ThemedText>
                       </View>
-                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                           مبلغ حق‌السعی ایام تعلیق پس از کسر مبلغ پرداخت‌شده به کارگر
                         </ThemedText>
-                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                           {remainingSuspensionAmount === null
                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                             : formatCurrency(remainingSuspensionAmount)}
                         </ThemedText>
                       </View>
-                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                      <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                           مبلغ حق‌السعی ایام تعلیق پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
                         </ThemedText>
-                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                        <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                           {finalRemainingSuspensionAmount === null
                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                             : formatCurrency(finalRemainingSuspensionAmount)}
@@ -1136,7 +1141,7 @@ export default function SuspensionWageScreen() {
                               },
                             ]}
                           >
-                            <View style={styles.breakdownItemHeaderRow}>
+                            <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                               <ThemedText
                                 type="smallBold"
                                 style={[
@@ -1154,7 +1159,7 @@ export default function SuspensionWageScreen() {
                                 style={[
                                   styles.detailBox,
                                   {
-                                    backgroundColor: theme.primaryContainer,
+                                    backgroundColor: theme.primary,
                                     borderColor: theme.primary,
                                   },
                                 ]}
@@ -1163,7 +1168,7 @@ export default function SuspensionWageScreen() {
                                   type="small"
                                   style={[
                                     styles.detailLabel,
-                                    { color: theme.textSecondary },
+                                    { color: theme.onPrimary },
                                   ]}
                                 >
                                   بازهٔ تعلیق
@@ -1172,7 +1177,7 @@ export default function SuspensionWageScreen() {
                                   type="smallBold"
                                   style={[
                                     styles.detailValue,
-                                    { color: theme.primaryText },
+                                    { color: theme.onPrimary },
                                   ]}
                                 >{`${formatDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا ${formatDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}`}</ThemedText>
                               </View>
@@ -1386,7 +1391,7 @@ export default function SuspensionWageScreen() {
                                 style={[
                                   styles.detailBox,
                                   {
-                                    backgroundColor: theme.primaryContainer,
+                                    backgroundColor: theme.primary,
                                     borderColor: theme.primary,
                                   },
                                 ]}
@@ -1395,7 +1400,7 @@ export default function SuspensionWageScreen() {
                                   type="small"
                                   style={[
                                     styles.detailLabel,
-                                    { color: theme.textSecondary },
+                                    { color: theme.onPrimary },
                                   ]}
                                 >
                                   جمع مزد روزانه
@@ -1404,7 +1409,7 @@ export default function SuspensionWageScreen() {
                                   type="smallBold"
                                   style={[
                                     styles.detailValue,
-                                    { color: theme.primaryText },
+                                    { color: theme.onPrimary },
                                   ]}
                                 >
                                   {toPersianDigits(
@@ -1416,7 +1421,7 @@ export default function SuspensionWageScreen() {
                                 style={[
                                   styles.detailBox,
                                   {
-                                    backgroundColor: theme.primaryContainer,
+                                    backgroundColor: theme.primary,
                                     borderColor: theme.primary,
                                   },
                                 ]}
@@ -1425,7 +1430,7 @@ export default function SuspensionWageScreen() {
                                   type="small"
                                   style={[
                                     styles.detailLabel,
-                                    { color: theme.textSecondary },
+                                    { color: theme.onPrimary },
                                   ]}
                                 >
                                   مبلغ این بازه
@@ -1434,7 +1439,7 @@ export default function SuspensionWageScreen() {
                                   type="smallBold"
                                   style={[
                                     styles.detailValue,
-                                    { color: theme.primaryText },
+                                    { color: theme.onPrimary },
                                   ]}
                                 >
                                   {toPersianDigits(formatCurrency(item.amount))}
@@ -1518,8 +1523,8 @@ const styles = StyleSheet.create({
   },
   headerRow: { alignItems: "flex-start" },
   headerText: { alignSelf: 'stretch', flex: 1, gap: Spacing.one },
-  pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
-  pageDescription: { fontSize: 13, lineHeight: 20 },
+  pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: "AppFont-Bold" },
+  pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
   formulaBox: {
     borderRadius: Radius.md,
     borderWidth: StyleSheet.hairlineWidth,
@@ -1527,8 +1532,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.two,
     gap: Spacing.one,
   },
-  formulaLabel: { fontSize: 11 },
-  formulaValue: { fontSize: 12, lineHeight: 20 },
+  formulaLabel: { fontSize: Typography.fontSize.caption },
+  formulaValue: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.body },
   metricsRow: { flexDirection: "row", alignItems: "stretch", gap: Spacing.two },
   metricBox: {
     flex: 1,
@@ -1544,7 +1549,7 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
   },
   workshopTypeSection: { gap: Spacing.two },
-  sectionLabel: { fontSize: 11, fontFamily: "AppFont-Medium" },
+  sectionLabel: { fontSize: Typography.fontSize.caption, fontFamily: "AppFont-Medium" },
   workHoursSection: {
     gap: Spacing.two,
     padding: Spacing.two,
@@ -1561,7 +1566,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 10,
   },
-  workHoursMethodLabel: { flexShrink: 1, lineHeight: 20 },
+  workHoursMethodLabel: { flexShrink: 1, lineHeight: Typography.lineHeight.body },
   workHoursDivider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },
   workHoursDetails: { gap: Spacing.two },
   workHoursInput: {
@@ -1569,10 +1574,10 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingVertical: 0,
     fontFamily: "AppFont-Bold",
-    fontSize: 16,
+    fontSize: Typography.fontSize.bodyLarge,
     writingDirection: "ltr",
   },
-  workHoursHint: { fontSize: 12, lineHeight: 18 },
+  workHoursHint: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
   workHoursStepper: {
     minHeight: 54,
     flexDirection: "row",
@@ -1601,7 +1606,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     gap: Spacing.one,
   },
-  fieldValue: { flex: 1, fontSize: 13, lineHeight: 19 },
+  fieldValue: { flex: 1, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact },
   optionsRow: { flexDirection: "row", gap: Spacing.two },
   optionButton: {
     flex: 1,
@@ -1621,10 +1626,10 @@ const styles = StyleSheet.create({
     padding: Spacing.two,
   },
   checkText: { flex: 1, gap: Spacing.one },
-  optionTitle: { fontSize: 13, lineHeight: 19, fontFamily: "AppFont-Bold" },
+  optionTitle: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact, fontFamily: "AppFont-Bold" },
   optionDescription: {
-    fontSize: 11,
-    lineHeight: 20,
+    fontSize: Typography.fontSize.caption,
+    lineHeight: Typography.lineHeight.body,
     fontFamily: "AppFont-Regular",
   },
   helpRow: {
@@ -1633,11 +1638,11 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     marginTop: Spacing.one,
   },
-  detailLabel: { fontSize: 12 },
+  detailLabel: { fontSize: Typography.fontSize.footnote },
   helpText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 20,
+    fontSize: Typography.fontSize.caption,
+    lineHeight: Typography.lineHeight.body,
     fontFamily: "AppFont-Regular",
   },
   actionsGroup: {
@@ -1646,7 +1651,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.one,
   },
   actionButton: { flex: 1, borderRadius: 12 },
-  actionLabel: { fontFamily: "AppFont-Bold", fontSize: 12 },
+  actionLabel: { fontFamily: "AppFont-Bold", fontSize: Typography.fontSize.footnote },
   resultCard: {
     borderRadius: Radius.md,
     borderWidth: 1,
@@ -1669,10 +1674,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
   },
-  insuranceSummaryLabel: { textAlign: "center", fontSize: 12 },
-  insuranceSummaryValue: { textAlign: "center", fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
-  insuranceSummaryEmphasisLabel: { fontSize: 13 },
-  insuranceSummaryEmphasisValue: { fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
+  insuranceSummaryLabel: { textAlign: "center", fontSize: Typography.fontSize.footnote },
+  insuranceSummaryValue: { textAlign: "center", fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: "AppFont-Bold" },
+  insuranceSummaryEmphasisLabel: { fontSize: Typography.fontSize.compact },
+  insuranceSummaryEmphasisValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: "AppFont-Bold" },
   insuranceExemptionOption: {
     flexDirection: "row",
     alignItems: "center",
@@ -1688,14 +1693,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   insuranceExemptionText: { flex: 1, gap: Spacing.half },
-  insuranceExemptionDescription: { fontSize: 12 },
+  insuranceExemptionDescription: { fontSize: Typography.fontSize.footnote },
   insuranceLegalBasis: {
     gap: Spacing.one,
     padding: Spacing.two,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 12,
   },
-  insuranceLegalSummary: { fontSize: 12, lineHeight: 18 },
+  insuranceLegalSummary: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
   insuranceLegalToggle: {
     flexDirection: "row",
     alignItems: "center",
@@ -1703,8 +1708,8 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
     paddingVertical: Spacing.half,
   },
-  insuranceLegalToggleLabel: { fontSize: 13 },
-  insuranceLegalText: { fontSize: 12, lineHeight: 20 },
+  insuranceLegalToggleLabel: { fontSize: Typography.fontSize.compact },
+  insuranceLegalText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.body },
   breakdownHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1713,7 +1718,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     gap: Spacing.one,
   },
-  breakdownSectionTitle: { fontSize: 13, fontFamily: "AppFont-Bold" },
+  breakdownSectionTitle: { fontSize: Typography.fontSize.compact, fontFamily: "AppFont-Bold" },
   toggleButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1723,7 +1728,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  toggleButtonLabel: { fontSize: 11 },
+  toggleButtonLabel: { fontSize: Typography.fontSize.caption },
   breakdownGrid: { gap: Spacing.two },
   breakdownItemCard: {
     borderRadius: Radius.md,
@@ -1736,9 +1741,8 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
     marginBottom: 2,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "rgba(0, 0, 0, 0.12)",
   },
-  breakdownItemTitle: { fontSize: 12, fontFamily: "AppFont-Bold" },
+  breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: "AppFont-Bold" },
   breakdownDetailGrid: { gap: Spacing.one },
   detailBox: {
     alignItems: "center",
@@ -1747,5 +1751,5 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
   },
-  detailValue: { fontSize: 16, lineHeight: 22, fontFamily: "AppFont-Bold" },
+  detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: "AppFont-Bold" },
 });

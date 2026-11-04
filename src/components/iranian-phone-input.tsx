@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -99,7 +100,7 @@ const styles = StyleSheet.create({
         flex: 1,
         minHeight: 52,
         paddingVertical: 0,
-        fontSize: 17,
+        fontSize: Typography.fontSize.input,
         direction: 'ltr',
         writingDirection: 'ltr',
         textAlign: 'left',

@@ -1,13 +1,15 @@
 import { Image } from 'expo-image';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useMemo } from 'react';
-import { Modal, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Modal, Pressable, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { ZoomIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Appbar } from 'react-native-paper';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FontAwareAppbarContent } from '@/components/font-aware-paper';
+import { AppText } from '@/components/app-text';
+import { Typography } from '@/constants/typography';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useAppContext } from '@/hooks/use-app-context';
 
 interface ProfilePhotoPreviewProps {
@@ -17,6 +19,8 @@ interface ProfilePhotoPreviewProps {
 }
 
 export function ProfilePhotoPreview({ uri, visible, onClose }: ProfilePhotoPreviewProps) {
+    const colors = useTheme();
+
     return (
         <Modal
             animationType="fade"
@@ -25,7 +29,7 @@ export function ProfilePhotoPreview({ uri, visible, onClose }: ProfilePhotoPrevi
             transparent={false}
             visible={visible && uri !== null}
         >
-            <SafeAreaProvider style={styles.modal}>
+            <SafeAreaProvider style={[styles.modal, { backgroundColor: colors.scrim }]}>
                 <ProfilePhotoPreviewContent uri={uri} visible={visible} onClose={onClose} />
             </SafeAreaProvider>
         </Modal>
@@ -37,8 +41,7 @@ function ProfilePhotoPreviewContent({ uri, visible, onClose }: ProfilePhotoPrevi
     const { width } = useWindowDimensions();
     const { colors, theme } = useAppContext();
     const isLightTheme = theme === 'light';
-    const headerBackgroundColor = isLightTheme ? colors.primary : colors.surface;
-    const headerTextColor = isLightTheme ? colors.surface : colors.text;
+    const foregroundColor = isLightTheme ? colors.surface : colors.text;
     const scale = useSharedValue(1);
     const savedScale = useSharedValue(1);
     const translateX = useSharedValue(0);
@@ -136,46 +139,34 @@ function ProfilePhotoPreviewContent({ uri, visible, onClose }: ProfilePhotoPrevi
     /* eslint-enable react-hooks/immutability */
 
     return (
-        <GestureHandlerRootView style={styles.modal}>
-            <StatusBar
-                hidden={false}
-                barStyle={isLightTheme ? 'dark-content' : 'light-content'}
-            />
-            <View style={{ height: insets.top, backgroundColor: headerBackgroundColor }} />
-            <Appbar.Header
-                statusBarHeight={0}
-                style={[
-                    styles.appBar,
-                    {
-                        backgroundColor: headerBackgroundColor,
-                        shadowColor: colors.text,
-                        shadowOpacity: isLightTheme ? 0.16 : 0.08,
-                    },
-                ]}
-            >
-                <View style={styles.appBarContentRow}>
-                    <Appbar.Action
-                        accessibilityLabel="بستن پیش‌نمایش"
-                        icon="close"
-                        color={headerTextColor}
-                        onPress={onClose}
-                        size={22}
-                        style={styles.appBarAction}
-                    />
-                    <FontAwareAppbarContent
-                        title="پیش‌نمایش تصویر پروفایل"
-                        color={headerTextColor}
-                        titleStyle={[
-                            styles.appBarTitle,
-                            {
-                                fontSize: width >= 420 ? 16 : 14,
-                                lineHeight: (width >= 420 ? 16 : 14) + 8,
-                            },
-                        ]}
-                        titleMaxFontSizeMultiplier={1.2}
-                    />
-                </View>
-            </Appbar.Header>
+        <GestureHandlerRootView style={[styles.modal, { backgroundColor: colors.scrim }]}>
+            <StatusBar barStyle="light-content" />
+            <View style={{ height: insets.top }} />
+            <View style={styles.topBar}>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="بازگشت"
+                    hitSlop={8}
+                    onPress={onClose}
+                    style={styles.backButton}
+                >
+                    <MaterialCommunityIcons name="chevron-right" size={24} color={foregroundColor} />
+                </Pressable>
+                <AppText
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    style={[
+                        styles.title,
+                        {
+                            color: foregroundColor,
+                            fontSize: width >= 420 ? Typography.fontSize.bodyLarge : Typography.fontSize.bodySmall,
+                            lineHeight: width >= 420 ? Typography.lineHeight.comfortable : Typography.lineHeight.label,
+                        },
+                    ]}
+                >
+                    تصویر
+                </AppText>
+            </View>
             <Animated.View entering={ZoomIn.duration(220)} style={styles.previewContent}>
                 <GestureDetector gesture={gestures}>
                     <View
@@ -206,22 +197,27 @@ function ProfilePhotoPreviewContent({ uri, visible, onClose }: ProfilePhotoPrevi
 }
 
 const styles = StyleSheet.create({
-    modal: { flex: 1, backgroundColor: '#05080B' },
-    appBar: {
-        elevation: 4,
-        shadowRadius: 12,
-        shadowOffset: { width: 0, height: 4 },
-        paddingHorizontal: Spacing.two,
-    },
-    appBarContentRow: {
-        flex: 1,
+    modal: { flex: 1 },
+    topBar: {
         flexDirection: 'row',
-        direction: 'ltr',
-        justifyContent: 'space-between',
+        direction: 'rtl',
+        justifyContent: 'flex-start',
         alignItems: 'center',
+        minHeight: 56,
+        paddingHorizontal: Spacing.three,
     },
-    appBarAction: { width: 40, marginHorizontal: 0 },
-    appBarTitle: { fontFamily: 'AppFont-Bold', textAlign: 'right' },
-    previewContent: { flex: 1 },
+    backButton: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginEnd: Spacing.two,
+    },
+    title: {
+        flexShrink: 1,
+        fontFamily: 'AppFont-Bold',
+        textAlign: 'right',
+    },
+    previewContent: { flex: 1, minHeight: 0 },
     gestureArea: { flex: 1, overflow: 'hidden' },
 });

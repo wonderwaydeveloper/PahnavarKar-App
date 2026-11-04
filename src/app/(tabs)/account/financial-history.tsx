@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorNoticeCard } from '@/components/error-notice-card';
 import { DateInputField } from '@/components/date-input-field';
+import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -600,11 +601,11 @@ const HistoryRowItem = memo(function HistoryRowItem({
                     ]}
                 >
                     <View style={styles.historyEntryMain}>
-                        <View style={[styles.historyEntryIcon, { backgroundColor: theme.primaryContainer }]}>
+                        <View style={[styles.historyEntryIcon, { backgroundColor: theme.primary }]}>
                             <MaterialCommunityIcons
                                 name={row.icon}
                                 size={18}
-                                color={theme.primaryText}
+                                color={theme.onPrimary}
                             />
                         </View>
                         <View style={styles.historyEntryCopy}>
@@ -729,8 +730,8 @@ const HistoryRowItem = memo(function HistoryRowItem({
                                                                     style={({ pressed }) => [
                                                                         styles.copyReferenceAction,
                                                                         {
-                                                                            backgroundColor: theme.backgroundSelected,
-                                                                            borderColor: theme.border,
+                                                                            backgroundColor: theme.primary,
+                                                                            borderColor: theme.primary,
                                                                         },
                                                                         pressed && styles.copyReferenceActionPressed,
                                                                     ]}
@@ -738,9 +739,9 @@ const HistoryRowItem = memo(function HistoryRowItem({
                                                                     <MaterialCommunityIcons
                                                                         name="content-copy"
                                                                         size={16}
-                                                                        color={theme.primaryText}
+                                                                        color={theme.onPrimary}
                                                                     />
-                                                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                                                    <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                                                                         کپی
                                                                     </ThemedText>
                                                                 </Pressable>
@@ -1347,18 +1348,21 @@ export default function FinancialHistoryScreen() {
                 : dateRange.to
                     ? `تا ${formatHistoryDate(dateRange.to)}`
                     : 'همهٔ سوابق';
+        const offlineCacheSavedAt = sceneQuery.data?.pages.reduce<number | undefined>(
+            (latest, page) => page.offlineCacheSavedAt === undefined
+                ? latest
+                : Math.max(latest ?? page.offlineCacheSavedAt, page.offlineCacheSavedAt),
+            undefined,
+        );
         const listHeader = (
             <View style={styles.listHeader}>
-                {sceneQuery.data?.pages.some((page) => page.offlineCacheSavedAt !== undefined) ? (
-                    <View
-                        accessibilityRole="alert"
-                        style={[styles.offlineHistoryNotice, { backgroundColor: theme.surfaceVariant }]}
-                    >
-                        <MaterialCommunityIcons name="cloud-off-outline" size={18} color={theme.warning} />
-                        <ThemedText type="small" style={{ color: theme.text }}>
-                            نسخهٔ ذخیره‌شده نمایش داده می‌شود و ممکن است جدیدترین وضعیت نباشد.
-                        </ThemedText>
-                    </View>
+                {offlineCacheSavedAt !== undefined ? (
+                    <OfflineDataNotice
+                        theme={theme}
+                        title="نسخهٔ ذخیره‌شدهٔ تاریخچه نمایش داده می‌شود"
+                        description="این سوابق ممکن است جدیدترین وضعیت سرور نباشند."
+                        sources={[{ label: 'این زبانه', timestamp: offlineCacheSavedAt, kind: 'saved' }]}
+                    />
                 ) : null}
                 <View style={[styles.filterCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                     <Pressable
@@ -1472,12 +1476,12 @@ export default function FinancialHistoryScreen() {
                         style={({ pressed }) => [
                             styles.showAllButton,
                             {
-                                backgroundColor: theme.primaryContainer,
+                                backgroundColor: theme.primary,
                                 opacity: pressed ? 0.75 : 1,
                             },
                         ]}
                     >
-                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                        <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                             نمایش همهٔ سوابق
                         </ThemedText>
                     </Pressable>
@@ -1651,13 +1655,6 @@ const styles = StyleSheet.create({
     },
     listHeader: {
         gap: Spacing.two,
-    },
-    offlineHistoryNotice: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: Spacing.two,
-        borderRadius: Radius.md,
-        padding: Spacing.two,
     },
     filterCard: {
         gap: Spacing.two,

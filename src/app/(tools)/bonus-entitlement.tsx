@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -336,7 +337,7 @@ export default function BonusEntitlementScreen() {
                                 </CalculationDescriptionBox>
                             </View>
                             <HiddenCalculationGuide>
-                                    مبلغ محاسبه‌شدهٔ هر بازه = ماه‌های پوشش‌یافته × ۵ × (حداقل مزد روزانه + پایه سنوات روزانه). سقف هر بازه = ماه‌های پوشش‌یافته × ۷٫۵ × حداقل مزد روزانه؛ مبلغ استحقاقی از این سقف بیشتر نمی‌شود. نسبت ساعات کارکرد روزانه یا نسبت مجموع ساعات کارکرد بازه به ساعات موظفی نیز اعمال می‌شود.
+                                مبلغ محاسبه‌شدهٔ هر بازه = ماه‌های پوشش‌یافته × ۵ × (حداقل مزد روزانه + پایه سنوات روزانه). سقف هر بازه = ماه‌های پوشش‌یافته × ۷٫۵ × حداقل مزد روزانه؛ مبلغ استحقاقی از این سقف بیشتر نمی‌شود. نسبت ساعات کارکرد روزانه یا نسبت مجموع ساعات کارکرد بازه به ساعات موظفی نیز اعمال می‌شود.
                             </HiddenCalculationGuide>
                             <View style={styles.metricsRow}>
                                 <DateInputField label="از تاریخ" value={startDate} onPress={() => setPickerTarget('start')} formatValue={formatDate} />
@@ -373,7 +374,7 @@ export default function BonusEntitlementScreen() {
                                                 style={[
                                                     styles.workHoursMethodOption,
                                                     {
-                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: selected ? theme.primary : theme.surface,
                                                         borderColor: selected ? theme.primary : theme.border,
                                                         borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                                                     },
@@ -382,13 +383,13 @@ export default function BonusEntitlementScreen() {
                                                 <MaterialCommunityIcons
                                                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={20}
-                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                    color={selected ? theme.onPrimary : theme.textSecondary}
                                                 />
                                                 <ThemedText
                                                     type="smallBold"
                                                     style={[
                                                         styles.workHoursMethodLabel,
-                                                        { color: selected ? theme.primaryText : theme.text },
+                                                        { color: selected ? theme.onPrimary : theme.text },
                                                     ]}
                                                 >
                                                     {option.label}
@@ -427,13 +428,15 @@ export default function BonusEntitlementScreen() {
                                                 disabled={normalizedActualWorkedHours <= 0}
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                                                 ]}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="کاهش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                             <NumericInputField
                                                 mode="decimal"
@@ -454,7 +457,7 @@ export default function BonusEntitlementScreen() {
                                                 }
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     maximumAllowedWorkHours !== null
                                                     && normalizedActualWorkedHours >= maximumAllowedWorkHours
                                                     && styles.workHoursStepperButtonDisabled,
@@ -462,7 +465,9 @@ export default function BonusEntitlementScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="افزایش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                         </View>
                                         {workedHoursError ? (
@@ -531,11 +536,11 @@ export default function BonusEntitlementScreen() {
                                                 <ThemedText type="smallBold" style={{ color: theme.text }}>{toPersianDigits(formatCurrency(result.totalMaximumAmount))}</ThemedText>
                                             </View>
                                         </View>
-                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                            <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                            <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.onPrimary }]}>
                                                 عیدی و پاداش استحقاقی پس از کسر مبلغ پرداخت‌شده به کارگر
                                             </ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.onPrimary }]}>
                                                 {remainingBonusAmount === null
                                                     ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                     : toPersianDigits(formatCurrency(remainingBonusAmount))}
@@ -554,9 +559,9 @@ export default function BonusEntitlementScreen() {
                                                     <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>{`سال ${toPersianDigits(item.year)}${(periodBuckets.find((bucket) => bucket.year === item.year)?.periods.length ?? 0) > 1 ? ` · دوره ${toPersianDigits(item.periodIndex)}` : ''}`}</ThemedText>
                                                 </View>
                                                 <View style={styles.breakdownDetailGrid}>
-                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی</ThemedText>
-                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا {formatDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}</ThemedText>
+                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>بازهٔ زمانی</ThemedText>
+                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{formatDate(`${item.startDate.year}/${item.startDate.month}/${item.startDate.day}`)} تا {formatDate(`${item.endDate.year}/${item.endDate.month}/${item.endDate.day}`)}</ThemedText>
                                                     </View>
                                                     <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                                         <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>نوع بازه</ThemedText>
@@ -582,9 +587,9 @@ export default function BonusEntitlementScreen() {
                                                         <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>حداکثر عیدی و پاداش</ThemedText>
                                                         <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{toPersianDigits(formatCurrency(item.maximumAmount))}</ThemedText>
                                                     </View>
-                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>سهم نهایی دوره</ThemedText>
-                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{toPersianDigits(formatCurrency(item.entitlementAmount))}</ThemedText>
+                                                    <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                        <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>سهم نهایی دوره</ThemedText>
+                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{toPersianDigits(formatCurrency(item.entitlementAmount))}</ThemedText>
                                                     </View>
                                                 </View>
                                             </View>
@@ -605,24 +610,24 @@ export default function BonusEntitlementScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1 }, scrollContent: { flexGrow: 1 }, safeArea: { flex: 1, justifyContent: 'center', paddingHorizontal: 0 },
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' }, cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
-    headerText: { alignSelf: 'stretch', gap: Spacing.one }, pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' }, pageDescription: { fontSize: 13, lineHeight: 20 },
-    formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one }, formulaLabel: { fontSize: 11 }, formulaText: { fontSize: 12, lineHeight: 21 },
-    metricsRow: { flexDirection: 'row', gap: Spacing.two }, metricBox: { flex: 1, borderRadius: 14, padding: Spacing.two, gap: Spacing.one }, sectionLabel: { fontSize: 11 },
+    headerText: { alignSelf: 'stretch', gap: Spacing.one }, pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' }, pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
+    formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one }, formulaLabel: { fontSize: Typography.fontSize.caption }, formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
+    metricsRow: { flexDirection: 'row', gap: Spacing.two }, metricBox: { flex: 1, borderRadius: 14, padding: Spacing.two, gap: Spacing.one }, sectionLabel: { fontSize: Typography.fontSize.caption },
     workHoursSection: { gap: Spacing.two, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     workHoursMethods: { gap: Spacing.one },
     workHoursMethodOption: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10 },
-    workHoursMethodLabel: { flexShrink: 1, lineHeight: 20 },
+    workHoursMethodLabel: { flexShrink: 1, lineHeight: Typography.lineHeight.body },
     workHoursDivider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },
     workHoursDetails: { gap: Spacing.two },
-    workHoursInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: 16, writingDirection: 'ltr' },
-    workHoursHint: { fontSize: 12, lineHeight: 18 },
+    workHoursInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodyLarge, writingDirection: 'ltr' },
+    workHoursHint: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
     workHoursStepper: { minHeight: 54, flexDirection: 'row', alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: Spacing.one, gap: Spacing.one },
     workHoursStepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     workHoursStepperButtonDisabled: { opacity: 0.4 },
     dateInput: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     optionSection: { gap: Spacing.two }, optionsRow: { flexDirection: 'row', gap: Spacing.two }, optionButton: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
     paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
-    checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, checkText: { flex: 1, gap: Spacing.one }, optionTitle: { fontSize: 13, lineHeight: 19, fontFamily: 'AppFont-Bold' }, optionDescription: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' }, actionsGroup: { flexDirection: 'row', gap: Spacing.two }, actionButton: { flex: 1, borderRadius: 12 }, actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
-    resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' }, resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two }, summaryBoxContent: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryDetailsGrid: { gap: Spacing.one }, summaryDetailBox: { width: '100%', alignItems: 'center', gap: Spacing.half, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryLabel: { fontSize: 11 }, amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one }, breakdownSectionTitle: { fontSize: 13 }, toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, toggleButtonLabel: { fontSize: 11, lineHeight: 17, fontFamily: 'AppFont-Bold' }, breakdownGrid: { gap: Spacing.two }, breakdownItemCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1 }, breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },     breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' }, breakdownDetailGrid: { gap: Spacing.one }, breakdownDetailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 }, detailLabel: { fontSize: 12 }, detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, checkText: { flex: 1, gap: Spacing.one }, optionTitle: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact, fontFamily: 'AppFont-Bold' }, optionDescription: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Regular' }, actionsGroup: { flexDirection: 'row', gap: Spacing.two }, actionButton: { flex: 1, borderRadius: 12 }, actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
+    resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' }, resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two }, summaryBoxContent: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryDetailsGrid: { gap: Spacing.one }, summaryDetailBox: { width: '100%', alignItems: 'center', gap: Spacing.half, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryLabel: { fontSize: Typography.fontSize.caption }, amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one }, breakdownSectionTitle: { fontSize: Typography.fontSize.compact }, toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, toggleButtonLabel: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.inputCompact, fontFamily: 'AppFont-Bold' }, breakdownGrid: { gap: Spacing.two }, breakdownItemCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1 }, breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth }, breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' }, breakdownDetailGrid: { gap: Spacing.one }, breakdownDetailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 }, detailLabel: { fontSize: Typography.fontSize.footnote }, detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

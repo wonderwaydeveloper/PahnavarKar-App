@@ -42,11 +42,11 @@ export function ErrorNoticeCard({
                 onPress={onRetry}
                 style={({ pressed }) => [
                     styles.retryButton,
-                    { backgroundColor: theme.primaryContainer, opacity: pressed || busy ? 0.7 : 1 },
+                    { backgroundColor: theme.primary, opacity: pressed || busy ? 0.7 : 1 },
                 ]}
             >
-                {busy ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
-                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                {busy ? <ActivityIndicator size="small" color={theme.onPrimary} /> : null}
+                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                     {busy && busyLabel ? busyLabel : retryLabel}
                 </ThemedText>
             </Pressable>

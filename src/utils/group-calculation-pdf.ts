@@ -1,3 +1,6 @@
+import { ColorPalettes, type ThemePalette } from '@/constants/theme';
+import { PRODUCT_COLOR_TOKENS } from '@/constants/product-color-tokens';
+
 export interface GroupCalculationPdfDetail {
     title: string;
     rows: { label: string; value: string }[];
@@ -68,8 +71,10 @@ export function buildGroupCalculationPdfHtml(
     metadata: GroupCalculationPdfMetadata[],
     includeDetails: boolean,
     assets: GroupCalculationPdfAssets,
+    palette: ThemePalette,
     wageTotal?: GroupCalculationPdfWageTotal,
 ) {
+    const colors = ColorPalettes[palette].light;
     const summaryRows = sections.map((section) => `
         <tr>
             <td>${escapeHtml(section.title)}</td>
@@ -212,6 +217,20 @@ export function buildGroupCalculationPdfHtml(
         }`
         : '';
     const bodyFontFamily = assets.regularFont ? '"IRANSansX", sans-serif' : 'system-ui, sans-serif';
+    const colorVariables = `
+            --pdf-page-bg: ${PRODUCT_COLOR_TOKENS.pdfCanvas};
+            --pdf-text: ${colors.text};
+            --pdf-text-secondary: ${colors.textSecondary};
+            --pdf-text-muted: ${colors.textMuted};
+            --pdf-surface-variant: ${colors.surfaceVariant};
+            --pdf-border: ${colors.border};
+            --pdf-primary: ${colors.primary};
+            --pdf-on-primary: ${colors.onPrimary};
+            --pdf-error: ${colors.error};
+            --pdf-warning: ${colors.warning};
+            --pdf-warning-fill: ${colors.warningFill};
+            --pdf-on-warning: ${colors.onWarning};
+    `;
 
     return `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -220,13 +239,14 @@ export function buildGroupCalculationPdfHtml(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>پهناور کار - فیش حقوقی</title>
     <style>
+        :root { ${colorVariables} }
         ${fontFaces}
         @page { size: A4; margin: 15mm; }
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            color: #172b35;
-            background: #fff;
+            color: var(--pdf-text);
+            background: var(--pdf-page-bg);
             font-family: ${bodyFontFamily};
             font-size: 11px;
             line-height: 1.9;
@@ -239,7 +259,7 @@ export function buildGroupCalculationPdfHtml(
             width: 320px;
             height: 320px;
             transform: translate(-50%, -50%);
-            background-color: #26C6DA;
+            background-color: var(--pdf-primary);
             background-image: url("${escapeHtml(assets.logo)}");
             background-position: center;
             background-size: contain;
@@ -253,7 +273,7 @@ export function buildGroupCalculationPdfHtml(
             position: relative;
             text-align: center;
             padding: 0 0 16px;
-            border-bottom: 3px solid #087e8b;
+            border-bottom: 3px solid var(--pdf-primary);
         }
         .header-brand { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
         .header-logo-wrap {
@@ -264,10 +284,10 @@ export function buildGroupCalculationPdfHtml(
             justify-content: center;
             overflow: hidden;
             border-radius: 10px;
-            background-color: #26C6DA;
+            background-color: var(--pdf-primary);
         }
         .header-logo { width: 100%; height: 100%; object-fit: contain; }
-        .brand { color: #087e8b; font-size: 21px; font-weight: bold; }
+        .brand { color: var(--pdf-primary); font-size: 21px; font-weight: bold; }
         h1 { margin: 2px 0 0; font-size: 18px; }
         .generated {
             position: absolute;
@@ -275,16 +295,16 @@ export function buildGroupCalculationPdfHtml(
             left: 0;
             max-width: 150px;
             padding: 6px 9px;
-            border: 1px solid #d9e3e6;
+            border: 1px solid var(--pdf-border);
             border-radius: 7px;
-            color: #4b6275;
-            background: #f5f9fa;
+            color: var(--pdf-text-secondary);
+            background: var(--pdf-surface-variant);
             text-align: right;
             direction: rtl;
             font-size: 8px;
             line-height: 1.7;
         }
-        .generated-label { display: block; margin-bottom: 2px; color: #087e8b; font-weight: bold; }
+        .generated-label { display: block; margin-bottom: 2px; color: var(--pdf-primary); font-weight: bold; }
         .generated strong { display: block; white-space: nowrap; font-weight: normal; }
         .metadata-table {
             width: 100%;
@@ -294,69 +314,69 @@ export function buildGroupCalculationPdfHtml(
         }
         .metadata-table th, .metadata-table td {
             padding: 6px 9px;
-            border: 1px solid #d9e3e6;
+            border: 1px solid var(--pdf-border);
             text-align: right;
             vertical-align: top;
             overflow-wrap: anywhere;
         }
         .metadata-table thead { display: table-header-group; }
-        .metadata-table thead th { color: #fff; background: #087e8b; }
-        .metadata-table tbody tr:nth-child(even) { background: #f5f9fa; }
-        .metadata-table tbody th[scope="row"] { width: 38%; color: #5b6d75; font-weight: normal; }
+        .metadata-table thead th { color: var(--pdf-on-primary); background: var(--pdf-primary); }
+        .metadata-table tbody tr:nth-child(even) { background: var(--pdf-surface-variant); }
+        .metadata-table tbody th[scope="row"] { width: 38%; color: var(--pdf-text-muted); font-weight: normal; }
         .metadata-table .metadata-section-row th {
-            color: #087e8b;
-            background: #edf6f7;
+            color: var(--pdf-on-primary);
+            background: var(--pdf-primary);
             font-weight: bold;
         }
         .metadata-table tr { page-break-inside: avoid; }
         .pdf-section-title {
             margin: 18px 0 7px;
             padding-right: 8px;
-            border-right: 3px solid #087e8b;
-            color: #173d4a;
+            border-right: 3px solid var(--pdf-primary);
+            color: var(--pdf-text);
             font-size: 13px;
             line-height: 1.7;
         }
         .summary { width: 100%; border-collapse: collapse; margin: 12px 0 22px; }
         .summary th, .summary td {
             padding: 8px 10px;
-            border: 1px solid #d9e3e6;
+            border: 1px solid var(--pdf-border);
             text-align: right;
             vertical-align: top;
         }
         .summary thead { display: table-header-group; }
-        .summary th { color: #fff; background: #087e8b; }
-        .summary tbody tr:nth-child(even) { background: #f5f9fa; }
+        .summary th { color: var(--pdf-on-primary); background: var(--pdf-primary); }
+        .summary tbody tr:nth-child(even) { background: var(--pdf-surface-variant); }
         .summary td:last-child { width: 42%; }
         .summary .insurance-summary-row th {
-            color: #5b6d75;
-            background: #f5f9fa;
+            color: var(--pdf-text-muted);
+            background: var(--pdf-surface-variant);
             font-size: 10px;
             font-weight: normal;
         }
         .summary .insurance-summary-row td { font-size: 10px; }
         .summary .wage-total-row th, .summary .wage-total-row td {
-            color: #fff;
-            background: #087e8b;
+            color: var(--pdf-on-primary);
+            background: var(--pdf-primary);
         }
         .summary .wage-total-row th { font-weight: bold; }
-        .summary .wage-total-row td.amount, .summary .wage-total-row td.error-text { color: #fff; font-weight: bold; }
+        .summary .wage-total-row td.amount, .summary .wage-total-row td.error-text { color: var(--pdf-on-primary); font-weight: bold; }
         .summary .contractor-total-row th, .summary .contractor-total-row td {
-            color: #fff;
-            background: #087e8b;
-            border-top: 2px solid #fff;
+            color: var(--pdf-on-primary);
+            background: var(--pdf-primary);
+            border-top: 2px solid var(--pdf-on-primary);
         }
         .summary .contractor-total-row th { font-weight: bold; }
-        .summary .contractor-total-row td.amount, .summary .contractor-total-row td.error-text { color: #fff; font-size: 12px; font-weight: bold; }
-        .summary .wage-total-note-row td { color: #5b6d75; font-size: 9px; }
-        .amount { color: #087e8b; font-weight: bold; }
-        .error-text { color: #b42318; }
+        .summary .contractor-total-row td.amount, .summary .contractor-total-row td.error-text { color: var(--pdf-on-primary); font-size: 12px; font-weight: bold; }
+        .summary .wage-total-note-row td { color: var(--pdf-text-muted); font-size: 9px; }
+        .amount { color: var(--pdf-primary); font-weight: bold; }
+        .error-text { color: var(--pdf-error); }
         .calculation-section { margin: 12px 0; }
         .details-title {
             margin: 10px 0 4px;
             padding-right: 7px;
-            border-right: 2px solid #087e8b;
-            color: #173d4a;
+            border-right: 2px solid var(--pdf-primary);
+            color: var(--pdf-text);
             font-size: 10px;
             line-height: 1.6;
         }
@@ -364,26 +384,26 @@ export function buildGroupCalculationPdfHtml(
         .detail-table thead { display: table-header-group; }
         .detail-table thead th {
             padding: 3px 6px;
-            border: 1px solid #d9e3e6;
-            color: #fff;
-            background: #087e8b;
+            border: 1px solid var(--pdf-border);
+            color: var(--pdf-on-primary);
+            background: var(--pdf-primary);
             text-align: right;
             font-weight: normal;
         }
         .detail-table th, .detail-table td {
             width: 50%;
             padding: 2px 6px;
-            border: 1px solid #e2e9eb;
+            border: 1px solid var(--pdf-border);
             text-align: right;
             vertical-align: top;
             overflow-wrap: anywhere;
         }
-        .detail-table tbody tr:nth-child(even) { background: #f5f9fa; }
-        .detail-table tbody th[scope="row"] { color: #5b6d75; font-weight: normal; }
+        .detail-table tbody tr:nth-child(even) { background: var(--pdf-surface-variant); }
+        .detail-table tbody th[scope="row"] { color: var(--pdf-text-muted); font-weight: normal; }
         .detail-table .detail-period-heading th {
             padding: 3px 6px;
-            color: #087e8b;
-            background: #edf6f7;
+            color: var(--pdf-on-primary);
+            background: var(--pdf-primary);
             font-weight: bold;
             text-align: right;
         }
@@ -391,30 +411,30 @@ export function buildGroupCalculationPdfHtml(
         .note {
             margin-top: 22px;
             padding: 10px 12px;
-            border: 1px solid #e4d6ac;
+            border: 1px solid var(--pdf-warning);
             border-radius: 6px;
-            color: #66521b;
-            background: #fff9e9;
+            color: var(--pdf-on-warning);
+            background: var(--pdf-warning-fill);
         }
         .about-section {
             margin-top: 20px;
             padding: 12px;
-            border: 1px solid #d9e3e6;
-            border-top: 3px solid #087e8b;
+            border: 1px solid var(--pdf-border);
+            border-top: 3px solid var(--pdf-primary);
             border-radius: 8px;
-            background: #f5f9fa;
+            background: var(--pdf-surface-variant);
             page-break-inside: avoid;
         }
-        .about-section h2 { margin: 0 0 4px; color: #087e8b; font-size: 14px; }
-        .about-intro { margin: 0 0 10px; color: #4b6275; font-size: 10px; }
+        .about-section h2 { margin: 0 0 4px; color: var(--pdf-primary); font-size: 14px; }
+        .about-intro { margin: 0 0 10px; color: var(--pdf-text-secondary); font-size: 10px; }
         .about-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-        .about-item { padding: 7px 9px; border: 1px solid #d9e3e6; border-radius: 6px; background: #fff; page-break-inside: avoid; }
+        .about-item { padding: 7px 9px; border: 1px solid var(--pdf-border); border-radius: 6px; background: var(--pdf-on-primary); page-break-inside: avoid; }
         .about-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
-        .about-item h3 { margin: 0; color: #173d4a; font-size: 10px; }
-        .about-item p { margin: 2px 0 0; color: #4b6275; font-size: 9px; line-height: 1.7; }
+        .about-item h3 { margin: 0; color: var(--pdf-text); font-size: 10px; }
+        .about-item p { margin: 2px 0 0; color: var(--pdf-text-secondary); font-size: 9px; line-height: 1.7; }
         .document-attribution {
             margin-top: 12px;
-            color: #697a81;
+            color: var(--pdf-text-muted);
             font-size: 9px;
             text-align: center;
         }
@@ -426,8 +446,8 @@ export function buildGroupCalculationPdfHtml(
             gap: 8px 12px;
             margin-top: 12px;
             padding: 8px 0 0;
-            border-top: 1px solid #c8dde3;
-            color: #4b6275;
+            border-top: 1px solid var(--pdf-border);
+            color: var(--pdf-text-secondary);
             font-size: 8px;
             line-height: 1.5;
             text-align: center;
@@ -437,7 +457,7 @@ export function buildGroupCalculationPdfHtml(
             flex: 0 0 auto;
             align-items: center;
             gap: 5px;
-            color: #087e8b;
+            color: var(--pdf-primary);
             font-size: 9px;
             font-weight: bold;
             white-space: nowrap;
@@ -446,12 +466,12 @@ export function buildGroupCalculationPdfHtml(
             width: 18px;
             height: 18px;
             border-radius: 4px;
-            background: #26c6da;
+            background: var(--pdf-primary);
         }
         .page-footer-rights { flex: 1 1 220px; }
         .page-footer-promo {
             flex: 0 0 auto;
-            color: #087e8b;
+            color: var(--pdf-primary);
             font-weight: bold;
             white-space: nowrap;
         }

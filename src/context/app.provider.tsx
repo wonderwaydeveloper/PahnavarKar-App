@@ -1,4 +1,5 @@
 import { ColorPalettes, type ThemePalette } from '@/constants/theme';
+import { FONT_SIZE_PREFERENCES, type FontSizePreference } from '@/constants/font-scale';
 import { CalculationFeedbackHost } from '@/components/calculation-feedback-host';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -22,6 +23,7 @@ interface AppProviderProps {
 const THEME_PREFERENCE_STORAGE_KEY = '@pahnavarkar/theme-preference';
 const COLOR_PALETTE_STORAGE_KEY = '@pahnavarkar/color-palette';
 const FONT_PREFERENCE_STORAGE_KEY = '@pahnavarkar/font-preference';
+const FONT_SIZE_PREFERENCE_STORAGE_KEY = '@pahnavarkar/font-size-preference';
 const CURRENCY_PREFERENCE_STORAGE_KEY = '@pahnavarkar/currency-preference';
 const CALCULATION_SOUND_STORAGE_KEY = '@pahnavarkar/calculation-sound';
 
@@ -29,17 +31,32 @@ function isThemePreference(value: string | null): value is ThemePreference {
     return value === 'light' || value === 'dark' || value === 'system';
 }
 
-function isThemePalette(value: string | null): value is ThemePalette {
-    return value === 'default'
-        || value === 'blue'
-        || value === 'green'
-        || value === 'yellow'
-        || value === 'red'
-        || value === 'pink';
+function isThemePalette(value: string): value is ThemePalette {
+    return Object.prototype.hasOwnProperty.call(ColorPalettes, value);
+}
+
+function migrateThemePalette(value: string | null): ThemePalette | null {
+    const legacyPalettes: Record<string, ThemePalette> = {
+        blue: 'skyBlue',
+        green: 'emerald',
+        yellow: 'amber',
+        red: 'ruby',
+        pink: 'softPurple',
+    };
+
+    if (value && Object.prototype.hasOwnProperty.call(legacyPalettes, value)) {
+        return legacyPalettes[value]!;
+    }
+
+    return value && isThemePalette(value) ? value : null;
 }
 
 function isFontPreference(value: string | null): value is FontPreference {
     return value === 'iransans' || value === 'vazir' || value === 'shabnam' || value === 'system';
+}
+
+function isFontSizePreference(value: string | null): value is FontSizePreference {
+    return FONT_SIZE_PREFERENCES.some((preference) => preference === value);
 }
 
 function isCurrencyPreference(value: string | null): value is CurrencyPreference {
@@ -71,6 +88,7 @@ export function AppProvider({ children }: AppProviderProps) {
     const [themePreference, setThemePreference] = useState<ThemePreference>('system');
     const [colorPalette, setColorPaletteState] = useState<ThemePalette>('default');
     const [fontPreference, setFontPreference] = useState<FontPreference>('vazir');
+    const [fontSizePreference, setFontSizePreferenceState] = useState<FontSizePreference>('standard');
     const [fontError, setFontError] = useState<string | null>(null);
     const [currencyPreference, setCurrencyPreference] = useState<CurrencyPreference>('rial');
     const [currencyError, setCurrencyError] = useState<string | null>(null);
@@ -87,21 +105,29 @@ export function AppProvider({ children }: AppProviderProps) {
             let storedFontPreference: FontPreference = 'vazir';
 
             try {
-                const [storedTheme, storedPalette, storedFont, storedCurrency, storedCalculationSound] = await Promise.all([
+                const [storedTheme, storedPalette, storedFont, storedFontSize, storedCurrency, storedCalculationSound] = await Promise.all([
                     AsyncStorage.getItem(THEME_PREFERENCE_STORAGE_KEY),
                     AsyncStorage.getItem(COLOR_PALETTE_STORAGE_KEY),
                     AsyncStorage.getItem(FONT_PREFERENCE_STORAGE_KEY),
+                    AsyncStorage.getItem(FONT_SIZE_PREFERENCE_STORAGE_KEY),
                     AsyncStorage.getItem(CURRENCY_PREFERENCE_STORAGE_KEY),
                     AsyncStorage.getItem(CALCULATION_SOUND_STORAGE_KEY),
                 ]);
                 if (isMounted && isThemePreference(storedTheme)) {
                     setThemePreference(storedTheme);
                 }
-                if (isMounted && isThemePalette(storedPalette)) {
-                    setColorPaletteState(storedPalette);
+                const migratedPalette = migrateThemePalette(storedPalette);
+                if (isMounted && migratedPalette) {
+                    setColorPaletteState(migratedPalette);
+                    if (storedPalette !== migratedPalette) {
+                        await AsyncStorage.setItem(COLOR_PALETTE_STORAGE_KEY, migratedPalette);
+                    }
                 }
                 if (isMounted && isFontPreference(storedFont)) {
                     storedFontPreference = storedFont;
+                }
+                if (isMounted && isFontSizePreference(storedFontSize)) {
+                    setFontSizePreferenceState(storedFontSize);
                 }
                 if (isMounted && isCurrencyPreference(storedCurrency)) {
                     setCurrencyPreference(storedCurrency);
@@ -184,6 +210,11 @@ export function AppProvider({ children }: AppProviderProps) {
         setFontError(null);
     }, []);
 
+    const handleSetFontSizePreference = useCallback(async (nextSize: FontSizePreference) => {
+        await AsyncStorage.setItem(FONT_SIZE_PREFERENCE_STORAGE_KEY, nextSize);
+        setFontSizePreferenceState(nextSize);
+    }, []);
+
     const handleSetCurrencyPreference = useCallback(async (nextCurrency: CurrencyPreference) => {
         await AsyncStorage.setItem(CURRENCY_PREFERENCE_STORAGE_KEY, nextCurrency);
         setCurrencyPreference(nextCurrency);
@@ -200,8 +231,8 @@ export function AppProvider({ children }: AppProviderProps) {
         [colorPalette, resolvedTheme],
     );
     const paperTheme = useMemo(
-        () => getAppPaperTheme(resolvedTheme, fontPreference, colorPalette),
-        [colorPalette, fontPreference, resolvedTheme]
+        () => getAppPaperTheme(resolvedTheme, fontPreference, colorPalette, fontSizePreference),
+        [colorPalette, fontPreference, fontSizePreference, resolvedTheme]
     );
     const clearFontError = useCallback(() => setFontError(null), []);
     const clearCurrencyError = useCallback(() => setCurrencyError(null), []);
@@ -215,6 +246,7 @@ export function AppProvider({ children }: AppProviderProps) {
         themePreference,
         colorPalette,
         fontPreference,
+        fontSizePreference,
         fontError,
         currencyPreference,
         currencyError,
@@ -227,6 +259,7 @@ export function AppProvider({ children }: AppProviderProps) {
         setTheme: handleSetTheme,
         setColorPalette: handleSetColorPalette,
         setFontPreference: handleSetFontPreference,
+        setFontSizePreference: handleSetFontSizePreference,
         setCurrencyPreference: handleSetCurrencyPreference,
         setCalculationSound: handleSetCalculationSound,
         notifyCalculationCompleted,

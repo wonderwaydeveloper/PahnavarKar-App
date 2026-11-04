@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -101,13 +102,15 @@ export default function Article87Screen() {
                                         disabled={Number(normalizeDigits(area || '0')) <= 0}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                             Number(normalizeDigits(area || '0')) <= 0 && styles.stepperButtonDisabled,
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش متراژ زیربنا"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
 
                                     <NumericInputField
@@ -125,12 +128,14 @@ export default function Article87Screen() {
                                         onPress={() => changeArea(1)}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش متراژ زیربنا"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                 </View>
                             </View>
@@ -180,21 +185,21 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    formulaLabel: { fontSize: 11 },
-    formulaText: { fontSize: 12, lineHeight: 21 },
+    formulaLabel: { fontSize: Typography.fontSize.caption },
+    formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
     yearFieldsGroup: { gap: Spacing.two },
     metricBox: { borderRadius: 14, padding: Spacing.two, gap: Spacing.one },
-    sectionLabel: { fontSize: 11 },
+    sectionLabel: { fontSize: Typography.fontSize.caption },
     stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: 14, paddingVertical: 0 },
+    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall, paddingVertical: 0 },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBox: {
@@ -205,6 +210,6 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
     },
-    summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    summaryLabel: { fontSize: Typography.fontSize.caption },
+    amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

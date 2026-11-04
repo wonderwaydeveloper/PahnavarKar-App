@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -352,14 +353,14 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    formulaLabel: { fontSize: 11 },
-    formulaText: { fontSize: 12, lineHeight: 21 },
+    formulaLabel: { fontSize: Typography.fontSize.caption },
+    formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
     metricsRow: { flexDirection: 'row', gap: Spacing.two },
     metricBox: { flex: 1, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    sectionLabel: { fontSize: 11 },
+    sectionLabel: { fontSize: Typography.fontSize.caption },
     dateInput: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -371,7 +372,7 @@ const styles = StyleSheet.create({
     },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBox: {
@@ -382,15 +383,15 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
     },
-    summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    summaryLabel: { fontSize: Typography.fontSize.caption },
+    amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     breakdownHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: Spacing.one,
     },
-    breakdownSectionTitle: { fontSize: 12 },
+    breakdownSectionTitle: { fontSize: Typography.fontSize.footnote },
     toggleButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -400,7 +401,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.two,
         paddingVertical: Spacing.one,
     },
-    toggleButtonLabel: { fontSize: 11 },
+    toggleButtonLabel: { fontSize: Typography.fontSize.caption },
     breakdownGrid: { gap: Spacing.one },
     breakdownItemCard: {
         borderRadius: Radius.md,
@@ -412,7 +413,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.two,
         paddingVertical: Spacing.one,
     },
-    breakdownItemTitle: { fontSize: 11 },
+    breakdownItemTitle: { fontSize: Typography.fontSize.caption },
     detailGrid: { gap: Spacing.one, padding: Spacing.two },
     detailBox: {
         width: '100%',
@@ -422,6 +423,6 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         borderWidth: 1,
     },
-    detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    detailLabel: { fontSize: Typography.fontSize.footnote },
+    detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

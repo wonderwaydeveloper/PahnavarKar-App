@@ -7,6 +7,7 @@ import { Appbar } from 'react-native-paper';
 
 import { ThemedText } from '@/components/themed-text';
 import { NetworkStatusBanner } from '@/components/network-status-banner';
+import { Typography } from '@/constants/typography';
 import { TOOL_DEFINITIONS } from '@/constants/tool-definitions';
 
 interface AppHeaderProps {
@@ -229,8 +230,11 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
 
   const { width } = useWindowDimensions();
   const titleFontSize = showBackButton
-    ? width >= 420 ? 16 : 14
-    : width >= 420 ? 18 : 16;
+    ? width >= 420 ? Typography.fontSize.bodyLarge : Typography.fontSize.bodySmall
+    : width >= 420 ? Typography.fontSize.subtitle : Typography.fontSize.bodyLarge;
+  const titleLineHeight = showBackButton
+    ? width >= 420 ? Typography.lineHeight.comfortable : Typography.lineHeight.label
+    : width >= 420 ? Typography.lineHeight.headerLarge : Typography.lineHeight.comfortable;
 
   return (
     <View style={{ zIndex: 20, elevation: 20, backgroundColor: headerBackgroundColor }}>
@@ -306,7 +310,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                   borderRadius: 16,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: colors.primaryContainer,
+                  backgroundColor: colors.primary,
                   borderColor: colors.border,
                   borderWidth: 1,
                 }}
@@ -314,7 +318,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                 <MaterialCommunityIcons
                   name={activeTool.icon}
                   size={18}
-                  color={colors.primaryText}
+                  color={colors.onPrimary}
                 />
               </View>
             ) : null}
@@ -326,7 +330,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                   minWidth: 0,
                   maxWidth: '100%',
                   fontSize: titleFontSize,
-                  lineHeight: titleFontSize + 8,
+                  lineHeight: titleLineHeight,
                   fontFamily: 'AppFont-Bold',
                   color: titleColor,
                   textAlign: shouldAlignSecondaryHeaderStart ? 'right' : 'center',
@@ -341,7 +345,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                 minWidth: 0,
                 maxWidth: '100%',
                 fontSize: titleFontSize,
-                lineHeight: titleFontSize + 8,
+                lineHeight: titleLineHeight,
                 fontFamily: 'AppFont-Bold',
                 color: titleColor,
                 textAlign: shouldAlignSecondaryHeaderStart ? 'right' : 'center',

@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -479,7 +480,7 @@ export default function InsuranceDaysEntitlementScreen() {
                                                 style={[
                                                     styles.workHoursMethodOption,
                                                     {
-                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: selected ? theme.primary : theme.surface,
                                                         borderColor: selected ? theme.primary : theme.border,
                                                         borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                                                     },
@@ -488,13 +489,13 @@ export default function InsuranceDaysEntitlementScreen() {
                                                 <MaterialCommunityIcons
                                                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={20}
-                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                    color={selected ? theme.onPrimary : theme.textSecondary}
                                                 />
                                                 <ThemedText
                                                     type="smallBold"
                                                     style={[
                                                         styles.workHoursMethodLabel,
-                                                        { color: selected ? theme.primaryText : theme.text },
+                                                        { color: selected ? theme.onPrimary : theme.text },
                                                     ]}
                                                 >
                                                     {option.label}
@@ -542,13 +543,15 @@ export default function InsuranceDaysEntitlementScreen() {
                                                 disabled={normalizedActualWorkedHours <= 0}
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                                                 ]}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="کاهش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                             <NumericInputField
                                                 mode="decimal"
@@ -569,7 +572,7 @@ export default function InsuranceDaysEntitlementScreen() {
                                                 }
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     maximumAllowedWorkHours !== null
                                                     && normalizedActualWorkedHours >= maximumAllowedWorkHours
                                                     && styles.workHoursStepperButtonDisabled,
@@ -577,7 +580,9 @@ export default function InsuranceDaysEntitlementScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="افزایش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                         </View>
                                         {workedHoursError ? (
@@ -666,7 +671,7 @@ export default function InsuranceDaysEntitlementScreen() {
                                             <View style={styles.breakdownGrid}>
                                                 {result.breakdown.map((item) => (
                                                     <View key={`${item.year}-${item.periodIndex}`} style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                        <View style={styles.breakdownItemHeaderRow}>
+                                                        <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                             <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>
                                                                 {`سال ${toPersianDigits(String(item.year))} · ماه ${toPersianDigits(String(item.periodIndex))} (${formatMonthName(item.periodIndex)})`}
                                                             </ThemedText>
@@ -792,13 +797,13 @@ const styles = StyleSheet.create({
     },
     pageTitle: {
         display: 'none',
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     pageDescription: {
-        lineHeight: 20,
-        fontSize: 13,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.compact,
     },
     formulaBox: {
         borderRadius: Radius.md,
@@ -808,11 +813,11 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     formulaLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     formulaValue: {
-        lineHeight: 20,
-        fontSize: 12,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.footnote,
     },
     metricsRow: {
         flexDirection: 'row',
@@ -826,7 +831,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     sectionLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     workHoursSection: {
         gap: Spacing.two,
@@ -848,7 +853,7 @@ const styles = StyleSheet.create({
     },
     workHoursMethodLabel: {
         flexShrink: 1,
-        lineHeight: 20,
+        lineHeight: Typography.lineHeight.body,
     },
     workHoursDivider: {
         height: StyleSheet.hairlineWidth,
@@ -862,12 +867,12 @@ const styles = StyleSheet.create({
         minHeight: 48,
         paddingVertical: 0,
         fontFamily: 'AppFont-Bold',
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
         writingDirection: 'ltr',
     },
     workHoursHint: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     workHoursStepper: {
         minHeight: 54,
@@ -899,7 +904,7 @@ const styles = StyleSheet.create({
         borderWidth: StyleSheet.hairlineWidth,
     },
     fieldValue: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         flex: 1,
     },
     actionsGroup: {
@@ -912,7 +917,7 @@ const styles = StyleSheet.create({
     },
     actionLabel: {
         fontFamily: 'AppFont-Bold',
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     breakdownCard: {
         borderRadius: Radius.md,
@@ -938,11 +943,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     summaryLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     amountValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     breakdownSectionHeader: {
@@ -954,7 +959,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     breakdownSectionTitle: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     toggleButton: {
         flexDirection: 'row',
@@ -966,7 +971,7 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
     },
     toggleButtonLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     breakdownGrid: {
         gap: Spacing.two,
@@ -985,10 +990,9 @@ const styles = StyleSheet.create({
         paddingBottom: 2,
         marginBottom: 2,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0, 0, 0, 0.12)',
     },
     breakdownItemTitle: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     breakdownDetailGrid: {
         gap: Spacing.one,
@@ -1001,11 +1005,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     detailLabel: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     detailValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
 });

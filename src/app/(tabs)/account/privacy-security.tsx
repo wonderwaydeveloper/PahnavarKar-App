@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
@@ -378,14 +379,14 @@ export default function PrivacySecurityScreen() {
     const confirmationMessage = confirmationAction?.type === 'delete-account'
         ? 'با تأیید، حساب شما به‌صورت دائمی حذف خواهد شد:'
         : confirmationAction?.type === 'enable-inactivity-deletion'
-        ? `با فعال‌سازی این گزینه و رسیدن مدت بی‌فعالیتی به ${confirmationAction.period} ماه، حذف حساب پس از هشدار پیامکی و مهلت ۳۰روزه انجام خواهد شد:`
-        : confirmationAction?.type === 'sign-out-all'
-            ? 'نشست شما در همهٔ دستگاه‌ها لغو می‌شود و برای استفادهٔ دوباره باید وارد شوید.'
-            : confirmationAction?.type === 'sign-out-current'
-                ? 'از این دستگاه خارج می‌شوید. برای استفادهٔ دوباره باید وارد حساب شوید.'
-                : confirmationAction?.type === 'revoke-device'
-                    ? `دسترسی ${confirmationAction.device.device_name || platformLabel(confirmationAction.device.platform)} فوراً لغو می‌شود.`
-                    : '';
+            ? `با فعال‌سازی این گزینه و رسیدن مدت بی‌فعالیتی به ${confirmationAction.period} ماه، حذف حساب پس از هشدار پیامکی و مهلت ۳۰روزه انجام خواهد شد:`
+            : confirmationAction?.type === 'sign-out-all'
+                ? 'نشست شما در همهٔ دستگاه‌ها لغو می‌شود و برای استفادهٔ دوباره باید وارد شوید.'
+                : confirmationAction?.type === 'sign-out-current'
+                    ? 'از این دستگاه خارج می‌شوید. برای استفادهٔ دوباره باید وارد حساب شوید.'
+                    : confirmationAction?.type === 'revoke-device'
+                        ? `دسترسی ${confirmationAction.device.device_name || platformLabel(confirmationAction.device.platform)} فوراً لغو می‌شود.`
+                        : '';
     const confirmationMessageItems = confirmationAction?.type === 'delete-account'
         ? [
             'ماندهٔ کیف پول و دسترسی به اشتراک فعال و مزایای آن از دسترس شما خارج می‌شود.',
@@ -402,23 +403,23 @@ export default function PrivacySecurityScreen() {
         ? 'حذف دائمی'
         : confirmationAction?.type === 'enable-inactivity-deletion'
             ? 'فعال‌سازی'
-        : confirmationAction?.type === 'sign-out-all'
-            ? 'خروج از همه'
-            : confirmationAction?.type === 'sign-out-current'
-                ? 'خروج'
-                : 'لغو نشست';
+            : confirmationAction?.type === 'sign-out-all'
+                ? 'خروج از همه'
+                : confirmationAction?.type === 'sign-out-current'
+                    ? 'خروج'
+                    : 'لغو نشست';
     const confirmationIcon = confirmationAction?.type === 'delete-account'
         ? 'delete-outline'
         : confirmationAction?.type === 'enable-inactivity-deletion'
             ? 'timer-alert-outline'
-        : 'logout';
+            : 'logout';
 
     return (
         <ThemedView style={styles.container}>
             <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                 <View style={[styles.introCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={[styles.introIcon, { backgroundColor: theme.primaryContainer }]}>
-                        <MaterialCommunityIcons name="shield-lock-outline" size={25} color={theme.primaryText} />
+                    <View style={[styles.introIcon, { backgroundColor: theme.primary }]}>
+                        <MaterialCommunityIcons name="shield-lock-outline" size={25} color={theme.onPrimary} />
                     </View>
                     <ThemedText type="subtitle" style={styles.introTitle}>امنیت حساب شما</ThemedText>
                     <ThemedText type="small" style={[styles.introText, { color: theme.textSecondary }]}>
@@ -466,7 +467,7 @@ export default function PrivacySecurityScreen() {
                                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
                                         این کلید را در برنامهٔ احراز هویت خود وارد کنید. راه‌اندازی تا ۱۰ دقیقه معتبر است.
                                     </ThemedText>
-                                    <ThemedText selectable type="code" style={[styles.twoFactorSecret, { color: theme.text }]}>
+                                    <ThemedText selectable type="code" style={[styles.twoFactorSecret, { color: theme.text, backgroundColor: theme.surfaceContainerHigh }]}>
                                         {twoFactorEnrollment.secret}
                                     </ThemedText>
                                     <Pressable
@@ -476,14 +477,14 @@ export default function PrivacySecurityScreen() {
                                         style={({ pressed }) => [
                                             styles.copySecretButton,
                                             {
-                                                backgroundColor: theme.primaryContainer,
+                                                backgroundColor: theme.primary,
                                                 borderColor: theme.border,
                                                 opacity: pressed ? 0.7 : 1,
                                             },
                                         ]}
                                     >
-                                        <MaterialCommunityIcons name="content-copy" size={18} color={theme.primaryText} />
-                                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>کپی کلید</ThemedText>
+                                        <MaterialCommunityIcons name="content-copy" size={18} color={theme.onPrimary} />
+                                        <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>کپی کلید</ThemedText>
                                     </Pressable>
                                     <OtpCodeInput
                                         accessibilityLabel="کد برنامه برای فعال‌سازی تأیید دومرحله‌ای"
@@ -535,8 +536,8 @@ export default function PrivacySecurityScreen() {
                     {devices.map((device) => (
                         <View key={device.id} style={[styles.deviceCard, { backgroundColor: theme.surfaceVariant }]}>
                             <View style={styles.deviceHeader}>
-                                <View style={[styles.devicePlatformIcon, { backgroundColor: theme.primaryContainer }]}>
-                                    <MaterialCommunityIcons name={platformIcon(device.platform)} size={20} color={theme.primaryText} />
+                                <View style={[styles.devicePlatformIcon, { backgroundColor: theme.primary }]}>
+                                    <MaterialCommunityIcons name={platformIcon(device.platform)} size={20} color={theme.onPrimary} />
                                 </View>
                                 <View style={styles.deviceText}>
                                     <ThemedText type="smallBold">
@@ -565,12 +566,12 @@ export default function PrivacySecurityScreen() {
                                             styles.revokeDeviceButton,
                                             {
                                                 borderColor: theme.border,
-                                                backgroundColor: theme.primaryContainer,
+                                                backgroundColor: theme.primary,
                                                 opacity: pressed || busy ? 0.72 : 1,
                                             },
                                         ]}
                                     >
-                                        <MaterialCommunityIcons name="logout" size={19} color={theme.primaryText} />
+                                        <MaterialCommunityIcons name="logout" size={19} color={theme.onPrimary} />
                                     </Pressable>
                                 ) : null}
                             </View>
@@ -646,16 +647,16 @@ export default function PrivacySecurityScreen() {
                 </Section>
 
                 <Section title="داده‌ها و حریم خصوصی" icon="database-lock-outline" theme={theme}>
-                    <View style={[styles.noticeCard, { backgroundColor: theme.primaryContainer }]}>
-                        <MaterialCommunityIcons name="information-outline" size={20} color={theme.primaryText} />
-                        <ThemedText type="small" style={[styles.noticeText, { color: theme.text }]}>
+                    <View style={[styles.noticeCard, { backgroundColor: theme.primary }]}>
+                        <MaterialCommunityIcons name="information-outline" size={20} color={theme.onPrimary} />
+                        <ThemedText type="small" style={[styles.noticeText, { color: theme.onPrimary }]}>
                             اطلاعات پروفایل شما فقط در حساب خودتان نمایش داده می‌شود و نمایهٔ عمومی کاربران فعال نیست.
                         </ThemedText>
                     </View>
                     <View style={[styles.divider, { backgroundColor: theme.border }]} />
                     <View style={styles.inactivityHeader}>
-                        <View style={[styles.inactivityIcon, { backgroundColor: theme.primaryContainer }]}>
-                            <MaterialCommunityIcons name="timer-sand" size={20} color={theme.primaryText} />
+                        <View style={[styles.inactivityIcon, { backgroundColor: theme.primary }]}>
+                            <MaterialCommunityIcons name="timer-sand" size={20} color={theme.onPrimary} />
                         </View>
                         <View style={styles.inactivityHeaderText}>
                             <ThemedText type="smallBold">حذف خودکار حساب</ThemedText>
@@ -839,8 +840,8 @@ function Section({
     return (
         <View style={styles.section}>
             <View style={styles.sectionHeading}>
-                <View style={[styles.sectionIcon, { backgroundColor: theme.primaryContainer }]}>
-                    <MaterialCommunityIcons name={icon} size={20} color={theme.primaryText} />
+                <View style={[styles.sectionIcon, { backgroundColor: theme.primary }]}>
+                    <MaterialCommunityIcons name={icon} size={20} color={theme.onPrimary} />
                 </View>
                 <ThemedText type="smallBold">{title}</ThemedText>
             </View>
@@ -866,7 +867,7 @@ function ActionButton({
     onPress: () => void;
     theme: ReturnType<typeof useTheme>;
 }) {
-    const color = theme.primaryText;
+    const color = theme.onPrimary;
 
     return (
         <Pressable
@@ -876,7 +877,7 @@ function ActionButton({
             style={({ pressed }) => [
                 styles.actionButton,
                 {
-                    backgroundColor: theme.primaryContainer,
+                    backgroundColor: theme.primary,
                     borderColor: theme.border,
                     opacity: pressed || busy || disabled ? 0.72 : 1,
                 },
@@ -926,7 +927,7 @@ const styles = StyleSheet.create({
     sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginHorizontal: Spacing.one },
     sectionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
     sectionBody: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two },
-    twoFactorSecret: { borderRadius: Radius.md, padding: Spacing.three, backgroundColor: '#0000000D', textAlign: 'center', letterSpacing: 2 },
+    twoFactorSecret: { borderRadius: Radius.md, padding: Spacing.three, textAlign: 'center', letterSpacing: 2 },
     copySecretButton: {
         minHeight: 44,
         alignSelf: 'flex-start',
@@ -939,7 +940,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.three,
     },
     recoveryCodes: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two },
-    profileInput: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 16 },
+    profileInput: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: Typography.fontSize.bodyLarge },
     actionButton: { minHeight: 52, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.two },
     actionChevron: { marginLeft: 'auto' },
     divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.one },

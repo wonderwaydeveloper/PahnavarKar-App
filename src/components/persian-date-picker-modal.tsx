@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { isLeapJalaaliYear, isValidJalaaliDate, toJalaali } from 'jalaali-js';
 import { useMemo, useState } from 'react';
@@ -182,12 +183,12 @@ export function PersianDatePickerModal({
 
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable style={[styles.overlay, { backgroundColor: theme.overlay }]} onPress={onClose}>
         <Pressable
           style={[styles.modalContent, { backgroundColor: theme.surfaceElevated, paddingBottom: Spacing.three + insets.bottom }]}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={styles.handle} />
+          <View style={[styles.handle, { backgroundColor: theme.borderStrong }]} />
 
           <View style={styles.header}>
             <View style={styles.headerTextBlock}>
@@ -231,7 +232,7 @@ export function PersianDatePickerModal({
                     >
                       <ThemedText
                         type="smallBold"
-                        style={{ color: isSelected ? theme.surface : theme.text }}
+                        style={{ color: isSelected ? theme.onPrimary : theme.text }}
                       >
                         {formatPersianNumber(d)}
                       </ThemedText>
@@ -268,7 +269,7 @@ export function PersianDatePickerModal({
                     >
                       <ThemedText
                         type="smallBold"
-                        style={{ color: isSelected ? theme.surface : theme.text }}
+                        style={{ color: isSelected ? theme.onPrimary : theme.text }}
                       >
                         {formatPersianMonthName(m)}
                       </ThemedText>
@@ -305,7 +306,7 @@ export function PersianDatePickerModal({
                     >
                       <ThemedText
                         type="smallBold"
-                        style={{ color: isSelected ? theme.surface : theme.text }}
+                        style={{ color: isSelected ? theme.onPrimary : theme.text }}
                       >
                         {formatPersianNumber(y)}
                       </ThemedText>
@@ -379,7 +380,6 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   modalContent: {
     borderTopLeftRadius: Radius.xl,
@@ -395,7 +395,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 5,
     borderRadius: 999,
-    backgroundColor: '#ccc',
     alignSelf: 'center',
     marginBottom: Spacing.three,
   },
@@ -411,7 +410,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   title: {
-    fontSize: 16,
+    fontSize: Typography.fontSize.bodyLarge,
   },
   pickerRow: {
     flexDirection: 'row',
@@ -487,7 +486,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   actionLabel: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: Typography.fontSize.footnote,
+    lineHeight: Typography.lineHeight.tight,
   },
 });

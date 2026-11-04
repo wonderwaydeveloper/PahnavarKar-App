@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -448,7 +449,7 @@ export default function BaseSalaryScreen() {
                                                 style={[
                                                     styles.workHoursMethodOption,
                                                     {
-                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: selected ? theme.primary : theme.surface,
                                                         borderColor: selected ? theme.primary : theme.border,
                                                         borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                                                     },
@@ -457,13 +458,13 @@ export default function BaseSalaryScreen() {
                                                 <MaterialCommunityIcons
                                                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={20}
-                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                    color={selected ? theme.onPrimary : theme.textSecondary}
                                                 />
                                                 <ThemedText
                                                     type="smallBold"
                                                     style={[
                                                         styles.workHoursMethodLabel,
-                                                        { color: selected ? theme.primaryText : theme.text },
+                                                        { color: selected ? theme.onPrimary : theme.text },
                                                     ]}
                                                 >
                                                     {option.label}
@@ -502,13 +503,15 @@ export default function BaseSalaryScreen() {
                                                 disabled={normalizedActualWorkedHours <= 0}
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                                                 ]}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="کاهش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                             <NumericInputField
                                                 mode="decimal"
@@ -529,7 +532,7 @@ export default function BaseSalaryScreen() {
                                                 }
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     maximumAllowedWorkHours !== null
                                                     && normalizedActualWorkedHours >= maximumAllowedWorkHours
                                                     && styles.workHoursStepperButtonDisabled,
@@ -537,7 +540,9 @@ export default function BaseSalaryScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="افزایش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                         </View>
                                         {workedHoursError ? (
@@ -551,9 +556,9 @@ export default function BaseSalaryScreen() {
                                                 : `${toPersianDigits(requiredWorkHours.toFixed(2))} ساعت`}
                                         </ThemedText>
                                         {maximumAllowedWorkHours !== null ? (
-                                        <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
-                                            • حداکثر ساعات قابل ورود: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
-                                        </ThemedText>
+                                            <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
+                                                • حداکثر ساعات قابل ورود: {toPersianDigits(maximumAllowedWorkHours.toFixed(2))} ساعت
+                                            </ThemedText>
                                         ) : null}
                                         <ThemedText type="small" style={[styles.workHoursHint, { color: theme.textSecondary }]}>
                                             • نسبت کارکرد = ساعات کارکرد کارگر ÷ ساعات موظفی کارگر
@@ -602,7 +607,7 @@ export default function BaseSalaryScreen() {
                                     color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
-                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
+                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                                         مشمول معافیت از پرداخت سهم بیمه ی کارگر هستم
                                     </ThemedText>
                                     <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
@@ -657,7 +662,7 @@ export default function BaseSalaryScreen() {
                             {result && result.breakdown.length > 0 ? (
                                 <Card style={[styles.breakdownCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                     <Card.Content style={styles.breakdownContent}>
-                                        <View style={[styles.resultHeading, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                        <View style={[styles.resultHeading, { backgroundColor: theme.surfaceVariant, borderColor: theme.border, shadowColor: theme.shadow }]}>
                                             <ThemedText type="smallBold" style={[styles.breakdownSectionTitle, { color: theme.textSecondary }]}>
                                                 نتیجه ی محاسبه
                                             </ThemedText>
@@ -688,29 +693,29 @@ export default function BaseSalaryScreen() {
                                                         {toPersianDigits(formatCurrency(employerInsuranceAmount))}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                         حقوق پایه پس از کسر سهم بیمهٔ کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                         {toPersianDigits(formatCurrency(finalClaimAmount))}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                         حقوق پایه پس از کسر مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                         {remainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : toPersianDigits(formatCurrency(remainingClaimAmount))}
                                                     </ThemedText>
                                                 </View>
-                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                                <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                         حقوق پایه پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده به کارگر
                                                     </ThemedText>
-                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                    <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                         {finalRemainingClaimAmount === null
                                                             ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                             : toPersianDigits(formatCurrency(finalRemainingClaimAmount))}
@@ -758,7 +763,7 @@ export default function BaseSalaryScreen() {
                                                             },
                                                         ]}
                                                     >
-                                                        <View style={styles.breakdownItemHeaderRow}>
+                                                        <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                             <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>
                                                                 {`سال ${toPersianDigits(String(item.year))}${(periodBuckets.find((bucket) => bucket.year === item.year)?.periods.length ?? 0) > 1 ? ` · دوره ${toPersianDigits(String(item.periodIndex))}` : ''}`}
                                                             </ThemedText>
@@ -893,20 +898,20 @@ const styles = StyleSheet.create({
     },
     insuranceSummaryLabel: {
         textAlign: 'center',
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     insuranceSummaryValue: {
         textAlign: 'center',
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     insuranceSummaryEmphasisLabel: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     insuranceSummaryEmphasisValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     paidAmountSection: {
@@ -928,7 +933,7 @@ const styles = StyleSheet.create({
         gap: Spacing.half,
     },
     insuranceExemptionDescription: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     insuranceLegalBasis: {
         gap: Spacing.one,
@@ -937,8 +942,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
     insuranceLegalSummary: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     insuranceLegalToggle: {
         flexDirection: 'row',
@@ -948,11 +953,11 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.half,
     },
     insuranceLegalToggleLabel: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     insuranceLegalText: {
-        fontSize: 12,
-        lineHeight: 20,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.body,
     },
     metricsRow: {
         flexDirection: 'row',
@@ -986,7 +991,7 @@ const styles = StyleSheet.create({
     },
     actionLabel: {
         fontFamily: 'AppFont-Bold',
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     breakdownCard: {
         borderRadius: Radius.md,
@@ -1009,7 +1014,6 @@ const styles = StyleSheet.create({
         marginHorizontal: -Spacing.two,
         paddingHorizontal: Spacing.two,
         paddingVertical: Spacing.two,
-        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.12,
         shadowRadius: 3,
@@ -1023,7 +1027,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     breakdownSectionTitle: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         fontFamily: 'AppFont-Bold',
     },
     toggleButton: {
@@ -1036,7 +1040,7 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
     },
     toggleButtonLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     breakdownGrid: {
         gap: Spacing.two,
@@ -1052,7 +1056,6 @@ const styles = StyleSheet.create({
         paddingBottom: 2,
         marginBottom: 2,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0, 0, 0, 0.12)',
     },
     breakdownDetailGrid: {
         gap: Spacing.one,
@@ -1066,13 +1069,13 @@ const styles = StyleSheet.create({
     },
     pageTitle: {
         display: 'none',
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     pageDescription: {
-        lineHeight: 20,
-        fontSize: 13,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.compact,
     },
     workHoursSection: {
         gap: Spacing.two,
@@ -1094,7 +1097,7 @@ const styles = StyleSheet.create({
     },
     workHoursMethodLabel: {
         flexShrink: 1,
-        lineHeight: 20,
+        lineHeight: Typography.lineHeight.body,
     },
     workHoursDivider: {
         height: StyleSheet.hairlineWidth,
@@ -1108,12 +1111,12 @@ const styles = StyleSheet.create({
         minHeight: 48,
         paddingVertical: 0,
         fontFamily: 'AppFont-Bold',
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
         writingDirection: 'ltr',
     },
     workHoursHint: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     workHoursStepper: {
         minHeight: 54,
@@ -1135,27 +1138,27 @@ const styles = StyleSheet.create({
         opacity: 0.4,
     },
     sectionLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
         fontWeight: '500',
     },
     helpText: {
-        fontSize: 11,
-        lineHeight: 20,
+        fontSize: Typography.fontSize.caption,
+        lineHeight: Typography.lineHeight.body,
         fontFamily: 'AppFont-Regular',
     },
     fieldValue: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         flex: 1,
     },
     breakdownItemTitle: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     detailLabel: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     detailValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
 });

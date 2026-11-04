@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -262,13 +263,15 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                         disabled={Number(normalizeDigits(workerCount || '1')) <= 1}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                             Number(normalizeDigits(workerCount || '1')) <= 1 && styles.stepperButtonDisabled,
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش تعداد کارگران غیرمجاز"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
 
                                     <NumericInputField
@@ -293,12 +296,14 @@ export default function IllegalForeignWorkerPenaltyScreen() {
                                         onPress={() => changeWorkerCount(1)}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش تعداد کارگران غیرمجاز"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                 </View>
                             </View>
@@ -427,14 +432,14 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    formulaLabel: { fontSize: 11 },
-    formulaText: { fontSize: 12, lineHeight: 21 },
+    formulaLabel: { fontSize: Typography.fontSize.caption },
+    formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
     metricsRow: { flexDirection: 'row', gap: Spacing.two },
     metricBox: { flex: 1, borderRadius: 14, padding: Spacing.two, gap: Spacing.one },
-    sectionLabel: { fontSize: 11 },
+    sectionLabel: { fontSize: Typography.fontSize.caption },
     dateInput: {
         minHeight: 42,
         flexDirection: 'row',
@@ -449,10 +454,10 @@ const styles = StyleSheet.create({
     stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: 14, paddingVertical: 0 },
+    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall, paddingVertical: 0 },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBox: {
@@ -463,8 +468,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
     },
-    summaryLabel: { fontSize: 11 },
-    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    summaryLabel: { fontSize: Typography.fontSize.caption },
+    amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     breakdownHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -473,7 +478,7 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
         gap: Spacing.one,
     },
-    breakdownSectionTitle: { fontSize: 13, fontFamily: 'AppFont-Bold' },
+    breakdownSectionTitle: { fontSize: Typography.fontSize.compact, fontFamily: 'AppFont-Bold' },
     toggleButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -483,13 +488,13 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: StyleSheet.hairlineWidth,
     },
-    toggleButtonLabel: { fontSize: 11 },
+    toggleButtonLabel: { fontSize: Typography.fontSize.caption },
     breakdownGrid: { gap: Spacing.two },
     breakdownItemCard: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.two, gap: Spacing.one },
     breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },
-    breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' },
+    breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' },
     detailGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 },
-    detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    detailLabel: { fontSize: Typography.fontSize.footnote },
+    detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { StyleSheet, type TextProps } from 'react-native';
 
 import { AppText } from '@/components/app-text';
@@ -38,68 +39,68 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
 
 const styles = StyleSheet.create({
   small: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Typography.fontSize.bodySmall,
+    lineHeight: Typography.lineHeight.body,
     fontFamily: 'AppFont-Regular',
   },
   smallBold: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Typography.fontSize.bodySmall,
+    lineHeight: Typography.lineHeight.body,
     fontFamily: 'AppFont-Bold',
   },
   default: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: Typography.fontSize.bodyLarge,
+    lineHeight: Typography.lineHeight.comfortable,
     fontFamily: 'AppFont-Regular',
   },
   title: {
-    fontSize: 48,
-    lineHeight: 52,
+    fontSize: Typography.fontSize.hero,
+    lineHeight: Typography.lineHeight.hero,
     fontFamily: 'AppFont-Bold',
   },
   subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
+    fontSize: Typography.fontSize.displaySmall,
+    lineHeight: Typography.lineHeight.display,
     fontFamily: 'AppFont-SemiBold',
   },
   link: {
-    lineHeight: 30,
-    fontSize: 14,
+    lineHeight: Typography.lineHeight.title,
+    fontSize: Typography.fontSize.bodySmall,
     fontFamily: 'AppFont-Regular',
   },
   linkPrimary: {
-    lineHeight: 30,
-    fontSize: 14,
+    lineHeight: Typography.lineHeight.title,
+    fontSize: Typography.fontSize.bodySmall,
     fontFamily: 'AppFont-SemiBold',
   },
   code: {
     fontFamily: 'AppFont-SemiBold',
-    fontSize: 12,
+    fontSize: Typography.fontSize.footnote,
   },
   largeTitle: {
-    fontSize: 24,
-    lineHeight: 32,
+    fontSize: Typography.fontSize.titleLarge,
+    lineHeight: Typography.lineHeight.titleLarge,
     fontFamily: 'AppFont-Bold',
   },
   description: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Typography.fontSize.bodySmall,
+    lineHeight: Typography.lineHeight.body,
     fontFamily: 'AppFont-Regular',
     opacity: 0.7,
   },
   body: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: Typography.fontSize.bodyLarge,
+    lineHeight: Typography.lineHeight.comfortable,
     fontFamily: 'AppFont-Regular',
   },
   bodyBold: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: Typography.fontSize.bodyLarge,
+    lineHeight: Typography.lineHeight.comfortable,
     fontFamily: 'AppFont-Bold',
   },
   labelBold: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: Typography.fontSize.body,
+    lineHeight: Typography.lineHeight.label,
     fontFamily: 'AppFont-Bold',
   },
 });

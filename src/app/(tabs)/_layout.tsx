@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { ColorValue } from 'react-native';
@@ -42,7 +43,7 @@ function getTabBarLabel(name: 'home' | 'search' | 'account') {
 
 export default function TabsLayout() {
     const theme = useTheme();
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
     const insets = useSafeAreaInsets();
 
     return (
@@ -58,8 +59,12 @@ export default function TabsLayout() {
                 tabBarActiveTintColor: theme.primary,
                 tabBarInactiveTintColor: theme.textSecondary,
                 tabBarLabelStyle: {
-                    ...getAppFontStyle({ fontFamily: 'AppFont-Medium' }, fontPreference),
-                    fontSize: 12,
+                    ...getAppFontStyle(
+                        { fontFamily: 'AppFont-Medium', fontSize: Typography.fontSize.footnote },
+                        fontPreference,
+                        undefined,
+                        fontSizePreference,
+                    ),
                 },
                 tabBarIcon: ({ color, size }) =>
                     getTabBarIcon(route.name as 'home' | 'search' | 'account', color, theme, size),

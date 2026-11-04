@@ -4,6 +4,7 @@ export {
     type CurrencyPreference,
     type CalculationSound,
     type FontPreference,
+    type FontSizePreference,
     type ThemePreference,
     type ThemeType,
 } from './app.context';

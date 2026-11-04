@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
@@ -292,6 +293,7 @@ export default function HomeTabScreen() {
                         styles.groupCalculationButton,
                         {
                             backgroundColor: theme.primary,
+                            shadowColor: theme.shadow,
                             bottom: Spacing.two,
                             opacity: pressed ? 0.82 : 1,
                         },
@@ -321,7 +323,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.three,
         borderRadius: 24,
         elevation: 5,
-        shadowColor: '#000',
         shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.24,
         shadowRadius: 4,
@@ -329,7 +330,7 @@ const styles = StyleSheet.create({
     tabBar: { borderBottomWidth: StyleSheet.hairlineWidth },
     tabBarContent: { flexDirection: 'row' },
     tabItem: { minWidth: 88, minHeight: 54, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.three, position: 'relative' },
-    tabLabel: { fontFamily: 'AppFont-Medium', fontSize: 12, textTransform: 'none' },
+    tabLabel: { fontFamily: 'AppFont-Medium', fontSize: Typography.fontSize.footnote, textTransform: 'none' },
     tabIndicator: { position: 'absolute', left: Spacing.two, right: Spacing.two, bottom: 0, height: 4, borderRadius: 999, overflow: 'hidden' },
     sceneScroll: { flex: 1 },
     sceneContent: { flexGrow: 1 },

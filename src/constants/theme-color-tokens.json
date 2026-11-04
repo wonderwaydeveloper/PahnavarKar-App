@@ -1,0 +1,55 @@
+{
+  "materialSeeds": {
+    "default": "#00FFFF",
+    "skyBlue": "#0061A4",
+    "emerald": "#006B54",
+    "amber": "#8A5A00",
+    "ruby": "#B3261E",
+    "softPurple": "#7D5260",
+    "purple": "#6750A4",
+    "indigo": "#3F51B5",
+    "deepTeal": "#006A60",
+    "burntOrange": "#B54708",
+    "dustyRose": "#AD1457",
+    "brown": "#795548",
+    "slateBlue": "#456179",
+    "lightPurple": "#7E57C2",
+    "olive": "#687F00",
+    "tealBlue": "#006874"
+  },
+  "semanticSeeds": {
+    "success": "#2E7D32",
+    "warning": "#8A5700",
+    "info": "#175CD3"
+  },
+  "overlayOpacity": {
+    "light": 0.16,
+    "dark": 0.48
+  },
+  "product": {
+    "planTierColors": {
+      "free": { "light": "#16794B", "dark": "#72D4A5" },
+      "bronze": { "light": "#A44E20", "dark": "#F0A676" },
+      "silver": { "light": "#586575", "dark": "#C5D0DC" },
+      "gold": { "light": "#956900", "dark": "#F5D46A" }
+    },
+    "planTierLogoBackgrounds": {
+      "free": { "light": "#DCFCE7", "dark": "#173B2A" },
+      "bronze": { "light": "#915B27", "dark": "#CE8946" },
+      "silver": { "light": "#6D6D6D", "dark": "#C4C4C4" },
+      "gold": { "light": "#FFEA00", "dark": "#FFDD00" }
+    },
+    "planTierLogoForeground": {
+      "dark": "#102A39",
+      "light": "#FFFFFF"
+    },
+    "pdfCanvas": "#FFFFFF"
+  },
+  "native": {
+    "adaptiveIconBackground": "#FFFFFF",
+    "splashBackground": {
+      "light": "#F3F7F9",
+      "dark": "#041E28"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants, { AppOwnership } from 'expo-constants';
 import * as Device from 'expo-device';
@@ -75,10 +76,10 @@ const notificationFilters: {
     icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
     showUnreadCount?: boolean;
 }[] = [
-    { key: 'all', label: 'همه', icon: 'view-grid-outline' },
-    { key: 'unread', label: 'خوانده‌نشده', icon: 'email-mark-as-unread', showUnreadCount: true },
-    ...categories,
-];
+        { key: 'all', label: 'همه', icon: 'view-grid-outline' },
+        { key: 'unread', label: 'خوانده‌نشده', icon: 'email-mark-as-unread', showUnreadCount: true },
+        ...categories,
+    ];
 
 type NotificationRoute = (typeof notificationFilters)[number];
 const NOTIFICATION_ROUTES: NotificationRoute[] = notificationFilters;
@@ -202,8 +203,8 @@ const NotificationFilterTab = memo(function NotificationFilterTab({
                 {filter.label}
             </ThemedText>
             {filter.showUnreadCount ? (
-                <View style={[styles.filterCount, { backgroundColor: isActive ? theme.primaryContainer : theme.backgroundElement }]}>
-                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                <View style={[styles.filterCount, { backgroundColor: isActive ? theme.primary : theme.backgroundElement }]}>
+                    <ThemedText type="smallBold" style={{ color: isActive ? theme.onPrimary : theme.text }}>
                         {new Intl.NumberFormat('fa-IR').format(unreadCount)}
                     </ThemedText>
                 </View>
@@ -348,8 +349,8 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                 <View style={styles.timelineHeading}>
                     <ThemedText type="bodyBold" style={{ color: theme.text }}>صندوق اعلان‌ها</ThemedText>
                     <View style={styles.headerActions}>
-                        <View style={[styles.unreadCount, { backgroundColor: theme.primaryContainer }]}>
-                            <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                        <View style={[styles.unreadCount, { backgroundColor: theme.primary }]}>
+                            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
                                 {new Intl.NumberFormat('fa-IR').format(unreadCount)} خوانده‌نشده
                             </ThemedText>
                         </View>
@@ -370,180 +371,180 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                 {visibleErrorMessage ? (
                     <ErrorNoticeCard message={visibleErrorMessage} onRetry={onRetry} />
                 ) : null}
-                    {queryError && items.length > 0 ? (
-                        <ErrorNoticeCard message={queryError} onRetry={() => void query.refetch()} />
-                    ) : null}
+                {queryError && items.length > 0 ? (
+                    <ErrorNoticeCard message={queryError} onRetry={() => void query.refetch()} />
+                ) : null}
             </View>
             <FlatList
                 data={items}
                 keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={[
-                styles.listContent,
-                { paddingBottom: bottomInset + Spacing.four + (undoBarVisible ? 88 : 0) },
-            ]}
-            onRefresh={() => {
-                void Promise.all([query.refetch(), onRefreshCounts()]);
-            }}
-            refreshing={query.isRefetching}
-            onEndReached={() => {
-                if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
-            }}
-            onEndReachedThreshold={0.4}
-            ListEmptyComponent={loading ? (
-                <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <ActivityIndicator color={theme.primary} />
-                    <ThemedText type="small" style={{ color: theme.textSecondary }}>در حال دریافت پیام‌ها…</ThemedText>
-                </View>
-            ) : queryError ? (
-                <ErrorNoticeCard
-                    title="دریافت اعلان‌ها انجام نشد"
-                    message={queryError}
-                    onRetry={() => void query.refetch()}
-                />
-            ) : (
-                <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={[styles.emptyIcon, { backgroundColor: theme.primaryContainer }]}>
-                        <MaterialCommunityIcons name="bell-check-outline" size={31} color={theme.primaryText} />
+                contentContainerStyle={[
+                    styles.listContent,
+                    { paddingBottom: bottomInset + Spacing.four + (undoBarVisible ? 88 : 0) },
+                ]}
+                onRefresh={() => {
+                    void Promise.all([query.refetch(), onRefreshCounts()]);
+                }}
+                refreshing={query.isRefetching}
+                onEndReached={() => {
+                    if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+                }}
+                onEndReachedThreshold={0.4}
+                ListEmptyComponent={loading ? (
+                    <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <ActivityIndicator color={theme.primary} />
+                        <ThemedText type="small" style={{ color: theme.textSecondary }}>در حال دریافت پیام‌ها…</ThemedText>
                     </View>
-                    <ThemedText type="smallBold" style={{ color: theme.text }}>
-                        {unreadOnly ? 'پیام خوانده‌نشده‌ای ندارید' : 'هنوز پیامی ندارید'}
-                    </ThemedText>
-                    <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center' }}>
-                        {category
-                            ? `در دستهٔ «${activeCategory?.label}» پیامی برای نمایش نیست.`
-                            : 'اعلان‌های حساب و خدمات برنامه در اینجا نمایش داده می‌شوند.'}
-                    </ThemedText>
-                </View>
-            )}
-            ListFooterComponent={query.isFetchingNextPage
-                ? <ActivityIndicator color={theme.primary} style={styles.footerLoader} />
-                : undefined}
-            renderItem={({ item, index }) => {
-                const selectedCategory = categories.find((entry) => entry.key === item.category);
-                const previousItem = items[index - 1];
-                const nextItem = items[index + 1];
-                const startsDay = index === 0 || notificationDayKey(previousItem?.created_at ?? '') !== notificationDayKey(item.created_at);
-                const endsDay = !nextItem || notificationDayKey(nextItem.created_at) !== notificationDayKey(item.created_at);
-                const hasLongBody = item.body.length > LONG_NOTIFICATION_BODY_LENGTH;
-                const isBodyExpanded = expandedNotificationIds.has(item.id);
+                ) : queryError ? (
+                    <ErrorNoticeCard
+                        title="دریافت اعلان‌ها انجام نشد"
+                        message={queryError}
+                        onRetry={() => void query.refetch()}
+                    />
+                ) : (
+                    <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <View style={[styles.emptyIcon, { backgroundColor: theme.primary }]}>
+                            <MaterialCommunityIcons name="bell-check-outline" size={31} color={theme.onPrimary} />
+                        </View>
+                        <ThemedText type="smallBold" style={{ color: theme.text }}>
+                            {unreadOnly ? 'پیام خوانده‌نشده‌ای ندارید' : 'هنوز پیامی ندارید'}
+                        </ThemedText>
+                        <ThemedText type="small" style={{ color: theme.textSecondary, textAlign: 'center' }}>
+                            {category
+                                ? `در دستهٔ «${activeCategory?.label}» پیامی برای نمایش نیست.`
+                                : 'اعلان‌های حساب و خدمات برنامه در اینجا نمایش داده می‌شوند.'}
+                        </ThemedText>
+                    </View>
+                )}
+                ListFooterComponent={query.isFetchingNextPage
+                    ? <ActivityIndicator color={theme.primary} style={styles.footerLoader} />
+                    : undefined}
+                renderItem={({ item, index }) => {
+                    const selectedCategory = categories.find((entry) => entry.key === item.category);
+                    const previousItem = items[index - 1];
+                    const nextItem = items[index + 1];
+                    const startsDay = index === 0 || notificationDayKey(previousItem?.created_at ?? '') !== notificationDayKey(item.created_at);
+                    const endsDay = !nextItem || notificationDayKey(nextItem.created_at) !== notificationDayKey(item.created_at);
+                    const hasLongBody = item.body.length > LONG_NOTIFICATION_BODY_LENGTH;
+                    const isBodyExpanded = expandedNotificationIds.has(item.id);
 
-                return (
-                    <>
-                        {startsDay ? (
-                            <View style={styles.dayHeading}>
-                                <View style={[styles.dayRule, { backgroundColor: theme.border }]} />
-                                <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>
-                                    {notificationDayTitle(item.created_at)}
-                                </ThemedText>
-                                <View style={[styles.dayRule, { backgroundColor: theme.border }]} />
-                            </View>
-                        ) : null}
-                        <View
-                            style={[
-                                styles.timelineItem,
-                                { backgroundColor: theme.surface },
-                            ]}
-                        >
-                            <View style={styles.timelineRail}>
-                                <View style={[styles.categoryIcon, { backgroundColor: item.read_at ? theme.surfaceVariant : theme.primaryContainer }]}>
-                                    <MaterialCommunityIcons
-                                        name={selectedCategory?.icon ?? 'bell-outline'}
-                                        size={19}
-                                        color={item.read_at ? theme.textSecondary : theme.primaryText}
-                                    />
-                                </View>
-                                {!endsDay ? <View style={[styles.timelineConnector, { backgroundColor: theme.border }]} /> : null}
-                            </View>
-                            <View style={styles.timelineBody}>
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityLabel={`${item.title}، ${item.read_at ? 'خوانده‌شده' : 'خوانده‌نشده'}${item.priority !== 'normal' ? `، ${priorityLabels[item.priority]}` : ''}`}
-                                    accessibilityHint={item.read_at ? undefined : 'برای ثبت به‌عنوان خوانده‌شده لمس کنید.'}
-                                    disabled={Boolean(item.read_at)}
-                                    onPress={() => onOpenNotification(item)}
-                                    style={({ pressed }) => [
-                                        styles.notificationContent,
-                                        { opacity: pressed && !item.read_at ? 0.76 : 1 },
-                                    ]}
-                                >
-                                    <View style={styles.cardHeader}>
-                                        <View style={[styles.categoryPill, { backgroundColor: theme.surfaceVariant }]}>
-                                            <ThemedText type="small" numberOfLines={1} style={{ color: theme.textSecondary }}>
-                                                {selectedCategory?.label ?? 'خدمات سامانه'}
-                                            </ThemedText>
-                                        </View>
-                                        <View style={styles.metaDot} />
-                                        <ThemedText type="small" style={{ color: theme.textMuted }}>
-                                            {notificationTime(item.created_at)}
-                                        </ThemedText>
-                                        {item.priority !== 'normal' ? (
-                                            <View style={[
-                                                styles.priorityMetaPill,
-                                                { backgroundColor: item.priority === 'urgent' ? theme.errorFill : theme.warningFill },
-                                            ]}>
-                                                <ThemedText
-                                                    type="smallBold"
-                                                    style={{ color: item.priority === 'urgent' ? theme.onError : theme.onWarning }}
-                                                >
-                                                    {priorityLabels[item.priority]}
-                                                </ThemedText>
-                                            </View>
-                                        ) : null}
-                                        {!item.read_at ? <View style={[styles.unreadMarker, { backgroundColor: theme.primary }]} /> : null}
-                                    </View>
-                                    <ThemedText type="smallBold" style={{ color: theme.text }}>{item.title}</ThemedText>
-                                    <ThemedText
-                                        type="small"
-                                        numberOfLines={hasLongBody && !isBodyExpanded ? NOTIFICATION_BODY_PREVIEW_LINES : undefined}
-                                        style={[styles.bodyText, { color: theme.textSecondary }]}
-                                    >
-                                        {item.body}
+                    return (
+                        <>
+                            {startsDay ? (
+                                <View style={styles.dayHeading}>
+                                    <View style={[styles.dayRule, { backgroundColor: theme.border }]} />
+                                    <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>
+                                        {notificationDayTitle(item.created_at)}
                                     </ThemedText>
-                                </Pressable>
-                                <View style={styles.cardFooter}>
-                                    <View style={styles.cardFooterActions}>
-                                        {hasLongBody ? (
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                accessibilityLabel={`${isBodyExpanded ? 'جمع‌کردن متن' : 'نمایش متن کامل'} اعلان ${item.title}`}
-                                                accessibilityState={{ expanded: isBodyExpanded }}
-                                                onPress={() => onToggleExpanded(item.id)}
-                                                style={({ pressed }) => [
-                                                    styles.detailsLink,
-                                                    { opacity: pressed ? 0.65 : 1 },
-                                                ]}
-                                            >
-                                                <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
-                                                    {isBodyExpanded ? 'نمایش کمتر' : 'نمایش متن کامل'}
-                                                </ThemedText>
-                                            </Pressable>
-                                        ) : null}
+                                    <View style={[styles.dayRule, { backgroundColor: theme.border }]} />
+                                </View>
+                            ) : null}
+                            <View
+                                style={[
+                                    styles.timelineItem,
+                                    { backgroundColor: theme.surface },
+                                ]}
+                            >
+                                <View style={styles.timelineRail}>
+                                    <View style={[styles.categoryIcon, { backgroundColor: item.read_at ? theme.surfaceVariant : theme.primary }]}>
+                                        <MaterialCommunityIcons
+                                            name={selectedCategory?.icon ?? 'bell-outline'}
+                                            size={19}
+                                            color={item.read_at ? theme.textSecondary : theme.onPrimary}
+                                        />
                                     </View>
+                                    {!endsDay ? <View style={[styles.timelineConnector, { backgroundColor: theme.border }]} /> : null}
+                                </View>
+                                <View style={styles.timelineBody}>
                                     <Pressable
                                         accessibilityRole="button"
-                                        accessibilityLabel={`حذف اعلان ${item.title}`}
-                                        disabled={deletingNotificationId !== null || deletingReadNotifications || undoBusy}
-                                        accessibilityState={{ disabled: deletingNotificationId !== null || deletingReadNotifications || undoBusy }}
-                                        onPress={() => onRequestDelete(item)}
+                                        accessibilityLabel={`${item.title}، ${item.read_at ? 'خوانده‌شده' : 'خوانده‌نشده'}${item.priority !== 'normal' ? `، ${priorityLabels[item.priority]}` : ''}`}
+                                        accessibilityHint={item.read_at ? undefined : 'برای ثبت به‌عنوان خوانده‌شده لمس کنید.'}
+                                        disabled={Boolean(item.read_at)}
+                                        onPress={() => onOpenNotification(item)}
                                         style={({ pressed }) => [
-                                            styles.deleteButton,
-                                            { backgroundColor: pressed ? theme.errorFill : theme.surfaceVariant },
-                                            { opacity: deletingNotificationId !== null || deletingReadNotifications || undoBusy ? 0.55 : 1 },
+                                            styles.notificationContent,
+                                            { opacity: pressed && !item.read_at ? 0.76 : 1 },
                                         ]}
                                     >
-                                        {deletingNotificationId === item.id
-                                            ? <ActivityIndicator size="small" color={theme.error} />
-                                            : <MaterialCommunityIcons name="delete-outline" size={18} color={theme.error} />}
+                                        <View style={styles.cardHeader}>
+                                            <View style={[styles.categoryPill, { backgroundColor: theme.surfaceVariant }]}>
+                                                <ThemedText type="small" numberOfLines={1} style={{ color: theme.textSecondary }}>
+                                                    {selectedCategory?.label ?? 'خدمات سامانه'}
+                                                </ThemedText>
+                                            </View>
+                                            <View style={[styles.metaDot, { backgroundColor: theme.textMuted }]} />
+                                            <ThemedText type="small" style={{ color: theme.textMuted }}>
+                                                {notificationTime(item.created_at)}
+                                            </ThemedText>
+                                            {item.priority !== 'normal' ? (
+                                                <View style={[
+                                                    styles.priorityMetaPill,
+                                                    { backgroundColor: item.priority === 'urgent' ? theme.errorFill : theme.warningFill },
+                                                ]}>
+                                                    <ThemedText
+                                                        type="smallBold"
+                                                        style={{ color: item.priority === 'urgent' ? theme.onErrorFill : theme.onWarning }}
+                                                    >
+                                                        {priorityLabels[item.priority]}
+                                                    </ThemedText>
+                                                </View>
+                                            ) : null}
+                                            {!item.read_at ? <View style={[styles.unreadMarker, { backgroundColor: theme.primary }]} /> : null}
+                                        </View>
+                                        <ThemedText type="smallBold" style={{ color: theme.text }}>{item.title}</ThemedText>
+                                        <ThemedText
+                                            type="small"
+                                            numberOfLines={hasLongBody && !isBodyExpanded ? NOTIFICATION_BODY_PREVIEW_LINES : undefined}
+                                            style={[styles.bodyText, { color: theme.textSecondary }]}
+                                        >
+                                            {item.body}
+                                        </ThemedText>
                                     </Pressable>
+                                    <View style={styles.cardFooter}>
+                                        <View style={styles.cardFooterActions}>
+                                            {hasLongBody ? (
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    accessibilityLabel={`${isBodyExpanded ? 'جمع‌کردن متن' : 'نمایش متن کامل'} اعلان ${item.title}`}
+                                                    accessibilityState={{ expanded: isBodyExpanded }}
+                                                    onPress={() => onToggleExpanded(item.id)}
+                                                    style={({ pressed }) => [
+                                                        styles.detailsLink,
+                                                        { opacity: pressed ? 0.65 : 1 },
+                                                    ]}
+                                                >
+                                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                                        {isBodyExpanded ? 'نمایش کمتر' : 'نمایش متن کامل'}
+                                                    </ThemedText>
+                                                </Pressable>
+                                            ) : null}
+                                        </View>
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`حذف اعلان ${item.title}`}
+                                            disabled={deletingNotificationId !== null || deletingReadNotifications || undoBusy}
+                                            accessibilityState={{ disabled: deletingNotificationId !== null || deletingReadNotifications || undoBusy }}
+                                            onPress={() => onRequestDelete(item)}
+                                            style={({ pressed }) => [
+                                                styles.deleteButton,
+                                                { backgroundColor: pressed ? theme.errorFill : theme.surfaceVariant },
+                                                { opacity: deletingNotificationId !== null || deletingReadNotifications || undoBusy ? 0.55 : 1 },
+                                            ]}
+                                        >
+                                            {deletingNotificationId === item.id
+                                                ? <ActivityIndicator size="small" color={theme.error} />
+                                                : <MaterialCommunityIcons name="delete-outline" size={18} color={theme.error} />}
+                                        </Pressable>
+                                    </View>
                                 </View>
                             </View>
-                        </View>
-                        {!endsDay ? (
-                            <View style={[styles.notificationSeparator, { backgroundColor: theme.border }]} />
-                        ) : null}
-                    </>
-                );
-            }}
+                            {!endsDay ? (
+                                <View style={[styles.notificationSeparator, { backgroundColor: theme.border }]} />
+                            ) : null}
+                        </>
+                    );
+                }}
             />
         </View>
     );
@@ -1237,7 +1238,7 @@ export default function NotificationsScreen() {
                 wrapperStyle={{ bottom: activeUndoOperations.length > 0 ? 88 : 0 }}
                 style={{ backgroundColor: pushMessageKind === 'error' ? theme.errorFill : theme.successFill }}
             >
-                <ThemedText type="small" style={{ color: pushMessageKind === 'error' ? theme.onError : theme.onSuccess }}>
+                <ThemedText type="small" style={{ color: pushMessageKind === 'error' ? theme.onErrorFill : theme.onSuccess }}>
                     {pushMessage}
                 </ThemedText>
             </Snackbar>
@@ -1371,9 +1372,9 @@ const styles = StyleSheet.create({
     cardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
     categoryIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
     categoryPill: { maxWidth: '65%', borderRadius: 999, paddingHorizontal: Spacing.one, paddingVertical: 3 },
-    metaDot: { width: 3, height: 3, borderRadius: 2, backgroundColor: '#9CA3AF' },
+    metaDot: { width: 3, height: 3, borderRadius: 2 },
     unreadMarker: { width: 8, height: 8, borderRadius: 4, marginStart: 'auto' },
-    bodyText: { lineHeight: 22 },
+    bodyText: { lineHeight: Typography.lineHeight.label },
     cardFooter: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
     cardFooterActions: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.one },
     priorityMetaPill: { borderRadius: 999, paddingHorizontal: Spacing.one, paddingVertical: 2 },

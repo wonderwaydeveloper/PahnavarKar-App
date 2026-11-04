@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -102,8 +103,8 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     sectionLabel: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
         fontFamily: 'AppFont-Medium',
     },
     dateInput: {
@@ -131,13 +132,13 @@ const styles = StyleSheet.create({
     fieldValue: {
         flexShrink: 1,
         fontFamily: 'AppFont-Bold',
-        fontSize: 13,
-        lineHeight: 19,
+        fontSize: Typography.fontSize.compact,
+        lineHeight: Typography.lineHeight.bodyCompact,
         textAlign: 'right',
     },
     helperText: {
-        fontSize: 10,
-        lineHeight: 16,
+        fontSize: Typography.fontSize.tiny,
+        lineHeight: Typography.lineHeight.tight,
         fontFamily: 'AppFont-Regular',
     },
 });

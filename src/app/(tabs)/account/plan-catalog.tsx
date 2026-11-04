@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
@@ -11,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text';
 import { ErrorNoticeCard } from '@/components/error-notice-card';
+import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -142,8 +144,8 @@ function PlanTierTab({ label, isActive, isCurrent, theme, disabled, onPress }: P
                     {label}
                 </ThemedText>
                 {isCurrent ? (
-                    <View style={[styles.currentTierBadge, { backgroundColor: theme.primaryContainer }]}>
-                        <ThemedText type="smallBold" style={{ color: theme.primaryText, fontSize: 9, lineHeight: 13 }}>فعلی</ThemedText>
+                    <View style={[styles.currentTierBadge, { backgroundColor: theme.primary }]}>
+                        <ThemedText type="smallBold" style={{ color: theme.onPrimary, fontSize: Typography.fontSize.micro, lineHeight: Typography.lineHeight.compact }}>فعلی</ThemedText>
                     </View>
                 ) : null}
             </View>
@@ -300,6 +302,28 @@ export default function PlanCatalogScreen() {
         || catalogQuery.data?.offlineCacheSavedAt !== undefined
         || walletQuery.data?.offlineCacheSavedAt !== undefined
         || pendingSubscriptionOrderQuery.data?.offlineCacheSavedAt !== undefined;
+    const purchaseInformationSources = [
+        {
+            label: 'کاتالوگ پلن‌ها',
+            savedAt: catalogQuery.data?.offlineCacheSavedAt,
+            receivedAt: catalogQuery.data ? catalogQuery.dataUpdatedAt : undefined,
+        },
+        {
+            label: 'موجودی کیف پول',
+            savedAt: walletQuery.data?.offlineCacheSavedAt,
+            receivedAt: walletQuery.data ? walletQuery.dataUpdatedAt : undefined,
+        },
+        {
+            label: 'وضعیت سفارش',
+            savedAt: pendingSubscriptionOrderQuery.data?.offlineCacheSavedAt,
+            receivedAt: pendingSubscriptionOrderQuery.data ? pendingSubscriptionOrderQuery.dataUpdatedAt : undefined,
+        },
+    ].flatMap((source) => {
+        const timestamp = source.savedAt ?? source.receivedAt;
+        return timestamp === undefined || timestamp <= 0
+            ? []
+            : [{ label: source.label, timestamp, kind: source.savedAt !== undefined ? 'saved' as const : 'received' as const }];
+    });
     const pendingOrderLookupFailed = userId !== null && pendingSubscriptionOrderQuery.isError;
     const currentPurchaseAttempt = pendingPurchaseAttempt?.userId === userId
         ? pendingPurchaseAttempt.value
@@ -1191,26 +1215,26 @@ export default function PlanCatalogScreen() {
             description: string;
             disabled: boolean;
         }[] = [
-            {
-                key: 'wallet',
-                label: 'کیف پول',
-                description: 'پرداخت کامل از موجودی کیف پول',
-                disabled: !quote || quoteWalletBalance < quote.payable_amount,
-            },
-            {
-                key: 'combined',
-                label: 'ترکیبی',
-                description: 'استفاده از موجودی کیف پول و پرداخت باقی‌مانده از درگاه',
-                disabled: !quote
-                    || quoteWalletBalance <= 0,
-            },
-            {
-                key: 'gateway',
-                label: 'درگاه پرداخت',
-                description: 'پرداخت کامل از طریق درگاه',
-                disabled: false,
-            },
-        ];
+                {
+                    key: 'wallet',
+                    label: 'کیف پول',
+                    description: 'پرداخت کامل از موجودی کیف پول',
+                    disabled: !quote || quoteWalletBalance < quote.payable_amount,
+                },
+                {
+                    key: 'combined',
+                    label: 'ترکیبی',
+                    description: 'استفاده از موجودی کیف پول و پرداخت باقی‌مانده از درگاه',
+                    disabled: !quote
+                        || quoteWalletBalance <= 0,
+                },
+                {
+                    key: 'gateway',
+                    label: 'درگاه پرداخت',
+                    description: 'پرداخت کامل از طریق درگاه',
+                    disabled: false,
+                },
+            ];
 
         return (
             <ScrollView
@@ -1234,16 +1258,16 @@ export default function PlanCatalogScreen() {
                     />
                 ) : null}
                 {purchaseUnavailableOffline ? (
-                    <View style={[styles.pendingOrderCard, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
-                        <ThemedText type="smallBold" style={{ color: theme.warning }}>
-                            {catalogQuery.data?.offlineCacheSavedAt !== undefined
-                                ? `نمایش آخرین کاتالوگ ذخیره‌شده در ${new Date(catalogQuery.data.offlineCacheSavedAt).toLocaleString('fa-IR')}؛ قیمت و وضعیت سفارش زنده نیست.`
-                                : 'اطلاعات ذخیره‌شده فقط برای مشاهده است؛ قیمت‌گذاری، استعلام سفارش و خرید به پاسخ زندهٔ سرور نیاز دارد.'}
-                        </ThemedText>
-                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                            خرید و دریافت قیمت نهایی تا اتصال و به‌روزرسانی اطلاعات غیرفعال است.
-                        </ThemedText>
-                    </View>
+                    <OfflineDataNotice
+                        theme={theme}
+                        title="اطلاعات خرید به‌صورت زنده تأیید نشده است"
+                        description={purchaseInformationSources.length > 0
+                            ? 'اطلاعات زیر ممکن است به‌روز نباشند:'
+                            : undefined}
+                        sources={purchaseInformationSources}
+                        emptyMessage="برای دریافت قیمت نهایی و بررسی وضعیت سفارش، اتصال زنده لازم است."
+                        actionMessage="قیمت‌گیری نهایی، بررسی سفارش و خرید پس از اتصال و دریافت پاسخ زنده فعال می‌شوند."
+                    />
                 ) : null}
                 {purchaseAttemptLoadError?.userId === userId ? (
                     <ErrorNoticeCard
@@ -1473,12 +1497,12 @@ export default function PlanCatalogScreen() {
                                         }}
                                         style={[
                                             styles.durationChip,
-                                            { borderColor: selected ? theme.primary : theme.border, backgroundColor: selected ? theme.primaryContainer : theme.surface },
+                                            { borderColor: selected ? theme.primary : theme.border, backgroundColor: selected ? theme.primary : theme.surface },
                                             !offer?.is_available && styles.disabledChip,
                                         ]}
                                     >
-                                        <ThemedText type="smallBold" style={selected ? { color: theme.primaryText } : undefined}>{duration.name}</ThemedText>
-                                        <ThemedText type="small" themeColor="textSecondary">{offer ? priceLabels(offer) : 'ناموجود'}</ThemedText>
+                                        <ThemedText type="smallBold" style={selected ? { color: theme.onPrimary } : undefined}>{duration.name}</ThemedText>
+                                        <ThemedText type="small" themeColor={selected ? 'onPrimary' : 'textSecondary'}>{offer ? priceLabels(offer) : 'ناموجود'}</ThemedText>
                                     </Pressable>
                                 );
                             })}
@@ -1522,7 +1546,7 @@ export default function PlanCatalogScreen() {
                                 style={[
                                     styles.discountAction,
                                     (loadingQuote || purchasing || Boolean(pendingOrderId) || pendingOrderUnavailable || purchaseUnavailableOffline)
-                                        && styles.disabledButton,
+                                    && styles.disabledButton,
                                 ]}
                             >
                                 <ThemedText type="smallBold" themeColor="primaryText">{loadingQuote ? 'بررسی…' : 'اعمال کد'}</ThemedText>
@@ -1594,7 +1618,7 @@ export default function PlanCatalogScreen() {
                                     </ThemedText>
                                 ) : null}
                                 <View style={[styles.quoteDivider, { backgroundColor: theme.border }]} />
-                                <View style={[styles.payableAmountCard, { backgroundColor: theme.primaryContainer }]}>
+                                <View style={[styles.payableAmountCard, { backgroundColor: theme.primary }]}>
                                     <PriceLine
                                         label="مبلغ قابل پرداخت"
                                         value={money(quote.payable_amount)}
@@ -1605,73 +1629,81 @@ export default function PlanCatalogScreen() {
                                 {quote.payable_amount > 0 && wallet ? (
                                     <>
                                         <View style={styles.paymentMethodSection}>
-                                                <ThemedText type="smallBold">روش پرداخت</ThemedText>
-                                                <View style={styles.paymentMethodOptions}>
-                                                    {paymentMethodOptions.map((option) => {
-                                                        const selected = selectedPaymentMethod === option.key;
-                                                        return (
-                                                            <Pressable
-                                                                key={option.key}
-                                                                accessibilityRole="radio"
-                                                                accessibilityState={{
-                                                                    checked: selected,
-                                                                    disabled: option.disabled || loadingQuote || purchasing || purchaseUnavailableOffline,
-                                                                }}
-                                                                disabled={option.disabled || loadingQuote || purchasing || purchaseUnavailableOffline}
-                                                                onPress={() => {
-                                                                    setSelectedPaymentMethod(option.key);
-                                                                    void loadQuote(discountCode, option.key);
-                                                                }}
-                                                                style={[
-                                                                    styles.paymentMethodOption,
-                                                                    {
-                                                                        borderColor: selected ? theme.primary : theme.border,
-                                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
-                                                                    },
-                                                                    (option.disabled || loadingQuote || purchasing || purchaseUnavailableOffline) && styles.disabledPaymentMethod,
-                                                                ]}
-                                                            >
-                                                                <MaterialCommunityIcons
-                                                                    name={selected ? 'radiobox-marked' : 'radiobox-blank'}
-                                                                    size={20}
-                                                                    color={selected ? theme.primaryText : theme.textSecondary}
-                                                                />
-                                                                <View style={styles.flex}>
-                                                                    <ThemedText type="smallBold">{option.label}</ThemedText>
-                                                                    <ThemedText type="small" themeColor="textSecondary">
-                                                                        {option.description}
-                                                                    </ThemedText>
-                                                                </View>
-                                                            </Pressable>
-                                                        );
-                                                    })}
-                                                </View>
+                                            <ThemedText type="smallBold">روش پرداخت</ThemedText>
+                                            <View style={styles.paymentMethodOptions}>
+                                                {paymentMethodOptions.map((option) => {
+                                                    const selected = selectedPaymentMethod === option.key;
+                                                    return (
+                                                        <Pressable
+                                                            key={option.key}
+                                                            accessibilityRole="radio"
+                                                            accessibilityState={{
+                                                                checked: selected,
+                                                                disabled: option.disabled || loadingQuote || purchasing || purchaseUnavailableOffline,
+                                                            }}
+                                                            disabled={option.disabled || loadingQuote || purchasing || purchaseUnavailableOffline}
+                                                            onPress={() => {
+                                                                setSelectedPaymentMethod(option.key);
+                                                                void loadQuote(discountCode, option.key);
+                                                            }}
+                                                            style={[
+                                                                styles.paymentMethodOption,
+                                                                {
+                                                                    borderColor: selected ? theme.primary : theme.border,
+                                                                    backgroundColor: selected ? theme.primary : theme.surface,
+                                                                },
+                                                                (option.disabled || loadingQuote || purchasing || purchaseUnavailableOffline) && styles.disabledPaymentMethod,
+                                                            ]}
+                                                        >
+                                                            <MaterialCommunityIcons
+                                                                name={selected ? 'radiobox-marked' : 'radiobox-blank'}
+                                                                size={20}
+                                                                color={selected ? theme.onPrimary : theme.textSecondary}
+                                                            />
+                                                            <View style={styles.flex}>
+                                                                <ThemedText
+                                                                    type="smallBold"
+                                                                    themeColor={selected ? 'onPrimary' : 'text'}
+                                                                >
+                                                                    {option.label}
+                                                                </ThemedText>
+                                                                <ThemedText
+                                                                    type="small"
+                                                                    themeColor={selected ? 'onPrimary' : 'textSecondary'}
+                                                                >
+                                                                    {option.description}
+                                                                </ThemedText>
+                                                            </View>
+                                                        </Pressable>
+                                                    );
+                                                })}
+                                            </View>
                                         </View>
                                         <View style={[styles.paymentSplit, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                <ThemedText type="smallBold">سهم پرداخت</ThemedText>
-                                                <PriceLine
-                                                    label="از کیف پول"
-                                                    value={money(quote.wallet_amount)}
-                                                    theme={theme}
-                                                    tone={quote.wallet_amount > 0 ? 'success' : 'default'}
-                                                />
-                                                <PriceLine
-                                                    label="از درگاه"
-                                                    value={money(quote.gateway_amount)}
-                                                    theme={theme}
-                                                    tone={quote.gateway_amount > 0 ? 'primary' : 'default'}
-                                                />
+                                            <ThemedText type="smallBold">سهم پرداخت</ThemedText>
+                                            <PriceLine
+                                                label="از کیف پول"
+                                                value={money(quote.wallet_amount)}
+                                                theme={theme}
+                                                tone={quote.wallet_amount > 0 ? 'success' : 'default'}
+                                            />
+                                            <PriceLine
+                                                label="از درگاه"
+                                                value={money(quote.gateway_amount)}
+                                                theme={theme}
+                                                tone={quote.gateway_amount > 0 ? 'primary' : 'default'}
+                                            />
                                         </View>
                                     </>
                                 ) : null}
                                 <View style={styles.quoteList}>
                                     <QuoteListItem
                                         text={quote.payment_method === 'wallet'
-                                                ? 'مبلغ کامل از موجودی کیف پول پرداخت می‌شود.'
-                                                : quote.payment_method === 'combined'
-                                                    ? quote.gateway_amount > 0
-                                                        ? 'موجودی کیف پول برای بخشی از مبلغ استفاده می‌شود و باقی‌مانده از درگاه پرداخت خواهد شد.'
-                                                        : 'مبلغ از موجودی کیف پول پرداخت می‌شود و موجودی اضافه در کیف پول باقی می‌ماند.'
+                                            ? 'مبلغ کامل از موجودی کیف پول پرداخت می‌شود.'
+                                            : quote.payment_method === 'combined'
+                                                ? quote.gateway_amount > 0
+                                                    ? 'موجودی کیف پول برای بخشی از مبلغ استفاده می‌شود و باقی‌مانده از درگاه پرداخت خواهد شد.'
+                                                    : 'مبلغ از موجودی کیف پول پرداخت می‌شود و موجودی اضافه در کیف پول باقی می‌ماند.'
                                                 : 'مبلغ کامل از درگاه پرداخت می‌شود و موجودی کیف پول شما حفظ خواهد شد.'}
                                     />
                                     <QuoteListItem text={getChangeDescription(quote)} />
@@ -1704,8 +1736,8 @@ export default function PlanCatalogScreen() {
                                 styles.purchaseButton,
                                 { backgroundColor: theme.primary, opacity: pressed ? 0.86 : 1 },
                                 !tierPurchaseCompleted
-                                    && (financialRestricted || !tierOffer?.is_available || purchasing || loadingQuote || Boolean(pendingOrderId) || pendingOrderUnavailable || purchaseUnavailableOffline || purchaseAttemptUnavailable || Boolean(currentPurchaseAttempt))
-                                    && styles.disabledButton,
+                                && (financialRestricted || !tierOffer?.is_available || purchasing || loadingQuote || Boolean(pendingOrderId) || pendingOrderUnavailable || purchaseUnavailableOffline || purchaseAttemptUnavailable || Boolean(currentPurchaseAttempt))
+                                && styles.disabledButton,
                             ]}
                         >
                             {purchasing ? <ActivityIndicator color={theme.onPrimary} /> : (
@@ -1714,51 +1746,51 @@ export default function PlanCatalogScreen() {
                                         name={tierPurchaseCompleted
                                             ? 'crown-outline'
                                             : !user
-                                            ? 'login'
-                                            : pendingOrderId
-                                                ? 'progress-clock'
-                                                : pendingOrderUnavailable
+                                                ? 'login'
+                                                : pendingOrderId
+                                                    ? 'progress-clock'
+                                                    : pendingOrderUnavailable
                                                         ? pendingOrderLookupFailed ? 'cloud-question-outline' : 'progress-clock'
-                                                    : purchaseAttemptUnavailable || currentPurchaseAttempt
-                                                        ? 'progress-clock'
-                                                    : !tierOffer?.is_available
-                                                        ? 'calendar-remove-outline'
-                                            : !tierHasCurrentQuote
-                                                ? 'calculator-variant-outline'
-                                                : quote?.change_type === 'upgrade'
-                                                    ? 'arrow-up-bold-circle-outline'
-                                                    : quote?.change_type === 'scheduled'
-                                                        ? 'calendar-check-outline'
-                                                        : 'check-circle-outline'}
+                                                        : purchaseAttemptUnavailable || currentPurchaseAttempt
+                                                            ? 'progress-clock'
+                                                            : !tierOffer?.is_available
+                                                                ? 'calendar-remove-outline'
+                                                                : !tierHasCurrentQuote
+                                                                    ? 'calculator-variant-outline'
+                                                                    : quote?.change_type === 'upgrade'
+                                                                        ? 'arrow-up-bold-circle-outline'
+                                                                        : quote?.change_type === 'scheduled'
+                                                                            ? 'calendar-check-outline'
+                                                                            : 'check-circle-outline'}
                                         size={19}
                                         color={theme.onPrimary}
                                     />
-                                    <ThemedText type="smallBold" style={{ color: theme.onPrimary, fontSize: 15 }}>
+                                    <ThemedText type="smallBold" style={{ color: theme.onPrimary, fontSize: Typography.fontSize.body }}>
                                         {tierPurchaseCompleted
                                             ? 'مشاهدهٔ پلن‌های من'
                                             : financialRestricted
-                                            ? 'خرید به‌دلیل محدودیت مالی غیرفعال است'
-                                            : pendingOrderId
-                                                ? 'ابتدا سفارش در جریان را تعیین تکلیف کنید'
-                                            : pendingOrderUnavailable
-                                                ? pendingOrderLookupFailed
-                                                    ? 'بررسی سفارش قبلی ناموفق بود'
-                                                    : 'در حال بررسی سفارش قبلی…'
-                                            : purchaseAttemptUnavailable
-                                                ? 'در حال بررسی تلاش قبلی خرید…'
-                                            : currentPurchaseAttempt
-                                                ? 'ابتدا تلاش قبلی خرید را تعیین تکلیف کنید'
-                                            : !user
-                                                ? 'ورود برای خرید'
-                                                : !tierOffer?.is_available
-                                                    ? 'این دوره فعلاً در دسترس نیست'
-                                                : !tierHasCurrentQuote
-                                                    ? 'محاسبه مبلغ نهایی'
-                                                    : quote?.change_type === 'upgrade'
-                                                        ? 'تأیید و ارتقا'
-                                                        : quote?.change_type === 'scheduled'
-                                                            ? 'تأیید پلن بعدی'
-                                                            : 'تأیید و خرید'}
+                                                ? 'خرید به‌دلیل محدودیت مالی غیرفعال است'
+                                                : pendingOrderId
+                                                    ? 'ابتدا سفارش در جریان را تعیین تکلیف کنید'
+                                                    : pendingOrderUnavailable
+                                                        ? pendingOrderLookupFailed
+                                                            ? 'بررسی سفارش قبلی ناموفق بود'
+                                                            : 'در حال بررسی سفارش قبلی…'
+                                                        : purchaseAttemptUnavailable
+                                                            ? 'در حال بررسی تلاش قبلی خرید…'
+                                                            : currentPurchaseAttempt
+                                                                ? 'ابتدا تلاش قبلی خرید را تعیین تکلیف کنید'
+                                                                : !user
+                                                                    ? 'ورود برای خرید'
+                                                                    : !tierOffer?.is_available
+                                                                        ? 'این دوره فعلاً در دسترس نیست'
+                                                                        : !tierHasCurrentQuote
+                                                                            ? 'محاسبه مبلغ نهایی'
+                                                                            : quote?.change_type === 'upgrade'
+                                                                                ? 'تأیید و ارتقا'
+                                                                                : quote?.change_type === 'scheduled'
+                                                                                    ? 'تأیید پلن بعدی'
+                                                                                    : 'تأیید و خرید'}
                                     </ThemedText>
                                 </View>
                             )}
@@ -1834,24 +1866,28 @@ function PriceLine({
     strong?: boolean;
     tone?: 'default' | 'success' | 'primary';
 }) {
-    const valueColor = tone === 'success'
-        ? theme.success
-        : tone === 'primary' || strong
-            ? theme.primaryText
-            : theme.text;
+    const valueColor = strong
+        ? theme.onPrimary
+        : tone === 'success'
+            ? theme.success
+            : tone === 'primary'
+                ? theme.primaryText
+                : theme.text;
 
     return (
         <View style={styles.priceLine}>
-            <ThemedText type={strong ? 'smallBold' : 'small'} themeColor={strong ? 'text' : 'textSecondary'}>{label}</ThemedText>
+            <ThemedText type={strong ? 'smallBold' : 'small'} themeColor={strong ? 'onPrimary' : 'textSecondary'}>{label}</ThemedText>
             <ThemedText type={strong ? 'bodyBold' : 'smallBold'} style={{ color: valueColor }}>{value}</ThemedText>
         </View>
     );
 }
 
 function QuoteListItem({ text }: { text: string }) {
+    const theme = useTheme();
+
     return (
         <View style={styles.quoteListItem}>
-            <View style={styles.quoteListBullet} />
+            <View style={[styles.quoteListBullet, { backgroundColor: theme.textMuted }]} />
             <ThemedText type="small" themeColor="textSecondary" style={styles.quoteListText}>
                 {text}
             </ThemedText>
@@ -1879,13 +1915,13 @@ const styles = StyleSheet.create({
     featureTimelineGroup: { gap: Spacing.two },
     featureGroupHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two, marginBottom: Spacing.half },
     featureGroupDivider: { flex: 1, height: StyleSheet.hairlineWidth, opacity: 0.5 },
-    featureGroupTitle: { lineHeight: 20, textAlign: 'center' },
+    featureGroupTitle: { lineHeight: Typography.lineHeight.body, textAlign: 'center' },
     featureRow: { minHeight: 58, flexDirection: 'row', alignItems: 'stretch', gap: Spacing.two },
     featureTimelineRail: { width: 18, alignItems: 'center', position: 'relative' },
     featureTimelineLine: { position: 'absolute', top: 8, bottom: -Spacing.two, width: 2 },
     featureTimelineDot: { width: 10, height: 10, borderWidth: 2, borderRadius: 5, marginTop: 4, zIndex: 1 },
     featureCopy: { flex: 1, gap: Spacing.half, paddingBottom: Spacing.two },
-    featureDescription: { lineHeight: 21 },
+    featureDescription: { lineHeight: Typography.lineHeight.bodyLarge },
     expandFeaturesButton: { minHeight: 36, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: Spacing.one, paddingHorizontal: Spacing.one },
     selectionPanel: { borderWidth: 1, borderRadius: Radius.xl, padding: Spacing.three, gap: Spacing.two },
     sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
@@ -1894,15 +1930,15 @@ const styles = StyleSheet.create({
     disabledChip: { opacity: 0.45 },
     inputLabel: { marginTop: Spacing.one },
     discountInputWrap: { minHeight: 52, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.two, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-    discountInput: { flex: 1, minHeight: 48, fontSize: 15, textAlign: 'left', writingDirection: 'ltr' },
+    discountInput: { flex: 1, minHeight: 48, fontSize: Typography.fontSize.body, textAlign: 'left', writingDirection: 'ltr' },
     discountAction: { minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: Spacing.two },
     discountActionSeparator: { minHeight: 32, borderStartWidth: StyleSheet.hairlineWidth, paddingStart: Spacing.two },
-    quoteInfo: { lineHeight: 22 },
-    quoteFeedback: { lineHeight: 21 },
+    quoteInfo: { lineHeight: Typography.lineHeight.label },
+    quoteFeedback: { lineHeight: Typography.lineHeight.bodyLarge },
     quoteList: { gap: Spacing.one, marginTop: Spacing.one },
     quoteListItem: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.one },
-    quoteListBullet: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#698D94', marginTop: 8 },
-    quoteListText: { flex: 1, lineHeight: 22 },
+    quoteListBullet: { width: 5, height: 5, borderRadius: 3, marginTop: 8 },
+    quoteListText: { flex: 1, lineHeight: Typography.lineHeight.label },
     paymentMethodSection: { gap: Spacing.one },
     paymentMethodOptions: { gap: Spacing.one },
     paymentMethodOption: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
@@ -1916,7 +1952,6 @@ const styles = StyleSheet.create({
     purchaseButton: { minHeight: 52, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', marginTop: Spacing.one },
     purchaseButtonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.one },
     disabledButton: { opacity: 0.5 },
-    pendingBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#9AAAB4', paddingTop: Spacing.two, gap: Spacing.two, alignItems: 'center' },
     completionCard: { borderWidth: 1, borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two, flexDirection: 'row', alignItems: 'flex-start' },
     pendingOrderCard: { borderWidth: 1, borderRadius: 20, padding: Spacing.three, gap: Spacing.three },
     pendingOrderHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },

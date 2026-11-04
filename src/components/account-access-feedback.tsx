@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
@@ -99,7 +100,7 @@ export function AccountSuspensionOverlay() {
         >
             <View style={[styles.suspensionCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <View style={[styles.suspensionIcon, { backgroundColor: theme.errorFill }]}>
-                    <MaterialCommunityIcons name="account-cancel-outline" size={34} color={theme.onError} />
+                    <MaterialCommunityIcons name="account-cancel-outline" size={34} color={theme.onErrorFill} />
                 </View>
                 <ThemedText accessibilityRole="header" type="largeTitle" style={[styles.title, { color: theme.text }]}>
                     حساب شما در حالت تعلیق است
@@ -180,15 +181,15 @@ const styles = StyleSheet.create({
         borderRadius: 22,
     },
     title: { textAlign: 'center' },
-    description: { textAlign: 'center', lineHeight: 25 },
+    description: { textAlign: 'center', lineHeight: Typography.lineHeight.spacious },
     detail: {
         width: '100%',
         gap: Spacing.one,
         borderRadius: 14,
         padding: Spacing.three,
     },
-    detailText: { lineHeight: 22 },
-    actionError: { width: '100%', lineHeight: 22, textAlign: 'center' },
+    detailText: { lineHeight: Typography.lineHeight.label },
+    actionError: { width: '100%', lineHeight: Typography.lineHeight.label, textAlign: 'center' },
     primaryButton: {
         width: '100%',
         minHeight: 48,

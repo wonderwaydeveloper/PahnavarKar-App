@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -263,14 +264,14 @@ export default function SearchTabScreen() {
                     compactIcon
                     titleContent={renderHighlightedText(item.action.title, {
                         color: theme.text,
-                        fontSize: 14,
-                        lineHeight: 20,
+                        fontSize: Typography.fontSize.bodySmall,
+                        lineHeight: Typography.lineHeight.body,
                         fontFamily: 'AppFont-Bold',
                     })}
                     detailContent={renderHighlightedText(item.action.detail, {
                         color: theme.textSecondary,
-                        fontSize: 13,
-                        lineHeight: 19,
+                        fontSize: Typography.fontSize.compact,
+                        lineHeight: Typography.lineHeight.bodyCompact,
                         fontFamily: 'AppFont-Regular',
                     })}
                 />
@@ -305,19 +306,19 @@ export default function SearchTabScreen() {
                     index < section.data.length - 1 && styles.withBottomBorder,
                 ]}
             >
-                <View style={[styles.legalResultIcon, { backgroundColor: theme.primaryContainer }]}>
-                    <MaterialCommunityIcons name={iconByType[item.result.type]} size={22} color={theme.primaryText} />
+                <View style={[styles.legalResultIcon, { backgroundColor: theme.primary }]}>
+                    <MaterialCommunityIcons name={iconByType[item.result.type]} size={22} color={theme.onPrimary} />
                 </View>
                 <View style={styles.legalResultText}>
                     <ThemedText type="smallBold" style={{ color: theme.text }}>{item.result.title}</ThemedText>
-                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19 }}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                         {item.result.subtitle}
                     </ThemedText>
                 </View>
                 <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
             </Pressable>
         );
-    }, [renderHighlightedText, router, theme.primaryContainer, theme.primaryText, theme.surface, theme.surfaceVariant, theme.text, theme.textSecondary, theme.textMuted, theme.border]);
+    }, [renderHighlightedText, router, theme.primary, theme.onPrimary, theme.surface, theme.surfaceVariant, theme.text, theme.textSecondary, theme.textMuted, theme.border]);
 
     const renderSectionHeader = useCallback(({ section }: { section: SearchSection }) => (
         section.data.length > 0 ? (
@@ -337,7 +338,7 @@ export default function SearchTabScreen() {
         return (
             <View style={styles.listHeader}>
                 <View style={styles.filterBar}>
-                {filters.map((filter) => {
+                    {filters.map((filter) => {
                         const selected = scope === filter.key;
                         return (
                             <Pressable
@@ -348,14 +349,14 @@ export default function SearchTabScreen() {
                                 style={[
                                     styles.filterChip,
                                     {
-                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                        backgroundColor: selected ? theme.primary : theme.surface,
                                         borderColor: selected ? theme.primary : theme.border,
                                     },
                                 ]}
                             >
                                 <ThemedText
                                     type={selected ? 'smallBold' : 'small'}
-                                    style={{ color: selected ? theme.primaryText : theme.textSecondary }}
+                                    style={{ color: selected ? theme.onPrimary : theme.textSecondary }}
                                 >
                                     {filter.title}
                                 </ThemedText>
@@ -391,7 +392,7 @@ export default function SearchTabScreen() {
                 ) : null}
             </View>
         );
-    }, [hasLegalSearch, hasResolvedAccess, legalAccess, legalSearchError, legalSearchLoading, planAccessError, planAccessLoading, refreshPlanAccess, scope, theme.border, theme.primary, theme.primaryContainer, theme.primaryText, theme.surface, theme.textSecondary]);
+    }, [hasLegalSearch, hasResolvedAccess, legalAccess, legalSearchError, legalSearchLoading, planAccessError, planAccessLoading, refreshPlanAccess, scope, theme.border, theme.primary, theme.onPrimary, theme.surface, theme.textSecondary]);
 
     const emptyState = useMemo(() => (
         <View style={[styles.emptyState, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -400,20 +401,20 @@ export default function SearchTabScreen() {
                 {planAccessLoading
                     ? 'در حال بررسی دسترسی پلن…'
                     : planAccessError
-                    ? 'برای نمایش نتایج، ابتدا دسترسی پلن را بررسی کنید'
-                    : !hasResolvedAccess
-                    ? 'دسترسی پلن هنوز تأیید نشده است'
-                    : scope === 'laws' && !legalAccess
-                    ? 'دسترسی به قوانین و مقررات در پلن فعلی فعال نیست'
-                    : legalSearchLoading && scope === 'laws'
-                    ? 'در حال جست‌وجو در قوانین و مقررات…'
-                    : !normalizedQuery
-                        ? 'عبارتی برای جست‌وجو وارد کنید'
-                        : scope === 'laws'
-                        ? 'موردی در قوانین و مقررات پیدا نشد'
-                        : scope === 'calculations'
-                            ? 'کارت محاسباتی پیدا نشد'
-                            : 'نتیجه‌ای پیدا نشد'}
+                        ? 'برای نمایش نتایج، ابتدا دسترسی پلن را بررسی کنید'
+                        : !hasResolvedAccess
+                            ? 'دسترسی پلن هنوز تأیید نشده است'
+                            : scope === 'laws' && !legalAccess
+                                ? 'دسترسی به قوانین و مقررات در پلن فعلی فعال نیست'
+                                : legalSearchLoading && scope === 'laws'
+                                    ? 'در حال جست‌وجو در قوانین و مقررات…'
+                                    : !normalizedQuery
+                                        ? 'عبارتی برای جست‌وجو وارد کنید'
+                                        : scope === 'laws'
+                                            ? 'موردی در قوانین و مقررات پیدا نشد'
+                                            : scope === 'calculations'
+                                                ? 'کارت محاسباتی پیدا نشد'
+                                                : 'نتیجه‌ای پیدا نشد'}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
                 {planAccessLoading
@@ -422,13 +423,13 @@ export default function SearchTabScreen() {
                         ? 'پس از برقراری ارتباط، دسترسی را دوباره بررسی کنید.'
                         : !hasResolvedAccess
                             ? 'برای نمایش نتایج، دسترسی پلن را دوباره بررسی کنید.'
-                        : !normalizedQuery
-                    ? scope === 'laws'
-                        ? 'نام قانون، ماده یا عبارت موردنظر را بنویسید.'
-                        : scope === 'calculations'
-                            ? 'نام کارت محاسباتی موردنظر را بنویسید.'
-                            : 'برای جست‌وجوی کارت‌های محاسباتی یا قوانین، عبارت موردنظر را بنویسید.'
-                    : 'عبارت دیگری را جست‌وجو کنید.'}
+                            : !normalizedQuery
+                                ? scope === 'laws'
+                                    ? 'نام قانون، ماده یا عبارت موردنظر را بنویسید.'
+                                    : scope === 'calculations'
+                                        ? 'نام کارت محاسباتی موردنظر را بنویسید.'
+                                        : 'برای جست‌وجوی کارت‌های محاسباتی یا قوانین، عبارت موردنظر را بنویسید.'
+                                : 'عبارت دیگری را جست‌وجو کنید.'}
             </ThemedText>
         </View>
     ), [hasResolvedAccess, legalAccess, legalSearchLoading, normalizedQuery, planAccessError, planAccessLoading, scope, theme.border, theme.surface, theme.textMuted]);
@@ -468,7 +469,7 @@ const styles = StyleSheet.create({
     resultsList: { flex: 1 },
     content: { flexGrow: 1 },
     searchBox: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth },
-    searchInput: { flex: 1, minHeight: 42, paddingVertical: 0, fontFamily: 'AppFont-Regular', fontSize: 15, textAlign: 'right' },
+    searchInput: { flex: 1, minHeight: 42, paddingVertical: 0, fontFamily: 'AppFont-Regular', fontSize: Typography.fontSize.body, textAlign: 'right' },
     listHeader: { gap: Spacing.two },
     filterBar: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingTop: Spacing.three, paddingBottom: Spacing.two },
     filterChip: { minHeight: 38, justifyContent: 'center', paddingHorizontal: Spacing.three, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth },

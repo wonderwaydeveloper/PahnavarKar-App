@@ -1,439 +1,203 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * This palette now exposes semantic tokens for surfaces, borders, and state colors to keep the UI more consistent.
+ * Figma Colors examples provide the hue seeds; Material 3 generates app roles and tonal palettes.
  */
 
+import {
+  argbFromHex,
+  hexFromArgb,
+  themeFromSourceColor,
+} from '@material/material-color-utilities';
 import '@/global.css';
+import colorTokens from './theme-color-tokens.json';
 
 import { Platform } from 'react-native';
 
+export { PRODUCT_COLOR_TOKENS } from './product-color-tokens';
+export const MATERIAL_COLOR_SEEDS = colorTokens.materialSeeds;
+
+export type ThemePalette = keyof typeof MATERIAL_COLOR_SEEDS;
+type ColorMode = 'light' | 'dark';
+
+export interface AppColorPalette {
+  text: string;
+  textSecondary: string;
+  textMuted: string;
+  background: string;
+  surface: string;
+  surfaceVariant: string;
+  surfaceElevated: string;
+  surfaceDim: string;
+  surfaceBright: string;
+  surfaceContainerLowest: string;
+  surfaceContainerLow: string;
+  surfaceContainer: string;
+  surfaceContainerHigh: string;
+  surfaceContainerHighest: string;
+  border: string;
+  borderStrong: string;
+  primary: string;
+  primaryText: string;
+  onPrimary: string;
+  primaryContainer: string;
+  onPrimaryContainer: string;
+  secondary: string;
+  onSecondary: string;
+  secondaryContainer: string;
+  onSecondaryContainer: string;
+  tertiary: string;
+  onTertiary: string;
+  tertiaryContainer: string;
+  onTertiaryContainer: string;
+  error: string;
+  onError: string;
+  errorFill: string;
+  onErrorFill: string;
+  success: string;
+  onSuccess: string;
+  successFill: string;
+  warning: string;
+  onWarning: string;
+  warningFill: string;
+  info: string;
+  onInfo: string;
+  infoFill: string;
+  onStatus: string;
+  inverseSurface: string;
+  inverseOnSurface: string;
+  inversePrimary: string;
+  surfaceTint: string;
+  shadow: string;
+  scrim: string;
+  overlay: string;
+  backgroundElement: string;
+  backgroundSelected: string;
+}
+
+export type ThemeColor = keyof AppColorPalette;
+
+export const MATERIAL_TONES = Object.freeze(Array.from({ length: 101 }, (_, tone) => tone));
+
+const generatedThemes = Object.fromEntries(
+  Object.entries(MATERIAL_COLOR_SEEDS).map(([palette, seed]) => [
+    palette,
+    themeFromSourceColor(argbFromHex(seed)),
+  ]),
+) as Record<ThemePalette, ReturnType<typeof themeFromSourceColor>>;
+
+const STATUS_THEMES = {
+  success: themeFromSourceColor(argbFromHex(colorTokens.semanticSeeds.success)),
+  warning: themeFromSourceColor(argbFromHex(colorTokens.semanticSeeds.warning)),
+  info: themeFromSourceColor(argbFromHex(colorTokens.semanticSeeds.info)),
+};
+
+function toHex(color: number): string {
+  return hexFromArgb(color).toUpperCase();
+}
+
+export function getColorPaletteTone(palette: ThemePalette, tone: number): string {
+  if (!Number.isInteger(tone) || tone < 0 || tone > 100) {
+    throw new RangeError('Material 3 color tone must be an integer from 0 to 100.');
+  }
+  return toHex(generatedThemes[palette].palettes.primary.tone(tone));
+}
+
+function createPalette(seed: ThemePalette, mode: ColorMode): AppColorPalette {
+  const generated = generatedThemes[seed];
+  const scheme = generated.schemes[mode];
+  const neutral = generated.palettes.neutral;
+  const tone = (value: number) => toHex(neutral.tone(value));
+  const successScheme = STATUS_THEMES.success.schemes[mode];
+  const warningScheme = STATUS_THEMES.warning.schemes[mode];
+  const infoScheme = STATUS_THEMES.info.schemes[mode];
+
+  return {
+    text: toHex(scheme.onSurface),
+    textSecondary: toHex(scheme.onSurfaceVariant),
+    textMuted: toHex(scheme.outline),
+    background: toHex(scheme.background),
+    surface: toHex(scheme.surface),
+    surfaceVariant: toHex(scheme.surfaceVariant),
+    surfaceElevated: tone(mode === 'light' ? 94 : 12),
+    surfaceDim: tone(mode === 'light' ? 87 : 6),
+    surfaceBright: tone(mode === 'light' ? 98 : 24),
+    surfaceContainerLowest: tone(mode === 'light' ? 100 : 4),
+    surfaceContainerLow: tone(mode === 'light' ? 96 : 10),
+    surfaceContainer: tone(mode === 'light' ? 94 : 12),
+    surfaceContainerHigh: tone(mode === 'light' ? 92 : 17),
+    surfaceContainerHighest: tone(mode === 'light' ? 90 : 22),
+    border: toHex(scheme.outlineVariant),
+    borderStrong: toHex(scheme.outline),
+    primary: toHex(scheme.primary),
+    primaryText: toHex(scheme.primary),
+    onPrimary: toHex(scheme.onPrimary),
+    primaryContainer: toHex(scheme.primaryContainer),
+    onPrimaryContainer: toHex(scheme.onPrimaryContainer),
+    secondary: toHex(scheme.secondary),
+    onSecondary: toHex(scheme.onSecondary),
+    secondaryContainer: toHex(scheme.secondaryContainer),
+    onSecondaryContainer: toHex(scheme.onSecondaryContainer),
+    tertiary: toHex(scheme.tertiary),
+    onTertiary: toHex(scheme.onTertiary),
+    tertiaryContainer: toHex(scheme.tertiaryContainer),
+    onTertiaryContainer: toHex(scheme.onTertiaryContainer),
+    error: toHex(scheme.error),
+    onError: toHex(scheme.onError),
+    errorFill: toHex(scheme.errorContainer),
+    onErrorFill: toHex(scheme.onErrorContainer),
+    success: toHex(successScheme.primary),
+    onSuccess: toHex(successScheme.onPrimaryContainer),
+    successFill: toHex(successScheme.primaryContainer),
+    warning: toHex(warningScheme.primary),
+    onWarning: toHex(warningScheme.onPrimaryContainer),
+    warningFill: toHex(warningScheme.primaryContainer),
+    info: toHex(infoScheme.primary),
+    onInfo: toHex(infoScheme.onPrimaryContainer),
+    infoFill: toHex(infoScheme.primaryContainer),
+    onStatus: tone(mode === 'light' ? 10 : 90),
+    inverseSurface: toHex(scheme.inverseSurface),
+    inverseOnSurface: toHex(scheme.inverseOnSurface),
+    inversePrimary: toHex(scheme.inversePrimary),
+    surfaceTint: toHex(scheme.primary),
+    shadow: toHex(scheme.shadow),
+    scrim: toHex(scheme.scrim),
+    overlay: `rgba(0, 0, 0, ${colorTokens.overlayOpacity[mode]})`,
+    backgroundElement: tone(mode === 'light' ? 96 : 12),
+    backgroundSelected: toHex(scheme.primaryContainer),
+  };
+}
+
 export const Colors = {
-  light: {
-    text: '#102A39',
-    textSecondary: '#4B6275',
-    textMuted: '#536B79',
-    background: '#EFF8FA',
-    surface: '#FFFFFF',
-    surfaceVariant: '#D9EFF2',
-    surfaceElevated: '#F5FBFC',
-    border: '#BBD9DE',
-    borderStrong: '#698D94',
-    primary: '#26C6DA',
-    primaryText: '#006B78',
-    onPrimary: '#00363F',
-    primaryContainer: '#D2F1F4',
-    secondary: '#2F6D8A',
-    onSecondary: '#FFFFFF',
-    success: '#18794E',
-    warning: '#8A5700',
-    error: '#B42318',
-    info: '#175CD3',
-    successFill: '#18794E',
-    onSuccess: '#FFFFFF',
-    warningFill: '#8A5700',
-    onWarning: '#FFFFFF',
-    errorFill: '#B42318',
-    onError: '#FFFFFF',
-    infoFill: '#175CD3',
-    onInfo: '#FFFFFF',
-    onStatus: '#FFFFFF',
-    overlay: 'rgba(7, 24, 33, 0.16)',
-    backgroundElement: '#D9EFF2',
-    backgroundSelected: '#C5E7EB',
-  },
-  dark: {
-    text: '#F4FAFF',
-    textSecondary: '#B7D4E1',
-    textMuted: '#A7C4D0',
-    background: '#041E28',
-    surface: '#082933',
-    surfaceVariant: '#0D2E3F',
-    surfaceElevated: '#103C4A',
-    border: '#244A57',
-    borderStrong: '#5D8795',
-    primary: '#4BD1E0',
-    primaryText: '#4BD1E0',
-    onPrimary: '#00363F',
-    primaryContainer: '#005763',
-    secondary: '#82C6E4',
-    onSecondary: '#07212A',
-    success: '#4FDA66',
-    warning: '#FFB84D',
-    error: '#FFA9A9',
-    info: '#88C5FF',
-    successFill: '#14532D',
-    onSuccess: '#DCFCE7',
-    warningFill: '#713F12',
-    onWarning: '#FEF3C7',
-    errorFill: '#7F1D1D',
-    onError: '#FEE2E2',
-    infoFill: '#1E3A8A',
-    onInfo: '#DBEAFE',
-    onStatus: '#F8FAFC',
-    overlay: 'rgba(2, 12, 19, 0.45)',
-    backgroundElement: '#0D2E3F',
-    backgroundSelected: '#164655',
-  },
-} as const;
+  light: createPalette('default', 'light'),
+  dark: createPalette('default', 'dark'),
+};
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-export type ThemePalette = 'default' | 'blue' | 'green' | 'yellow' | 'red' | 'pink';
-export type AppColorPalette = Record<ThemeColor, string>;
-
-export const ColorPalettes: Record<ThemePalette, Record<keyof typeof Colors, AppColorPalette>> = {
+export const ColorPalettes: Record<ThemePalette, Record<ColorMode, AppColorPalette>> = {
   default: Colors,
-  blue: {
-    light: {
-      text: '#142B45',
-      textSecondary: '#4D647D',
-      textMuted: '#536A82',
-      background: '#EFF5FC',
-      surface: '#FFFFFF',
-      surfaceVariant: '#DCE9F8',
-      surfaceElevated: '#F5F9FE',
-      border: '#BDD1E9',
-      borderStrong: '#6F86A5',
-      primary: '#2563EB',
-      primaryText: '#1D4ED8',
-      onPrimary: '#FFFFFF',
-      primaryContainer: '#DBEAFE',
-      secondary: '#1D4ED8',
-      onSecondary: '#FFFFFF',
-      success: '#18774D',
-      warning: '#8A5700',
-      error: '#B42318',
-      info: '#175CD3',
-      successFill: '#18794E',
-      onSuccess: '#FFFFFF',
-      warningFill: '#8A5700',
-      onWarning: '#FFFFFF',
-      errorFill: '#B42318',
-      onError: '#FFFFFF',
-      infoFill: '#175CD3',
-      onInfo: '#FFFFFF',
-      onStatus: '#FFFFFF',
-      overlay: 'rgba(10, 27, 48, 0.16)',
-      backgroundElement: '#DCE9F8',
-      backgroundSelected: '#BFDBFE',
-    },
-    dark: {
-      text: '#F2F6FC',
-      textSecondary: '#B8CBE1',
-      textMuted: '#97AFCC',
-      background: '#101C2B',
-      surface: '#17263A',
-      surfaceVariant: '#20354F',
-      surfaceElevated: '#294361',
-      border: '#344E6D',
-      borderStrong: '#748EAE',
-      primary: '#60A5FA',
-      primaryText: '#73B0FB',
-      onPrimary: '#102B45',
-      primaryContainer: '#1E3A5F',
-      secondary: '#93C5FD',
-      onSecondary: '#102B45',
-      success: '#4CD964',
-      warning: '#FFB84D',
-      error: '#FF8B8B',
-      info: '#73B0FB',
-      successFill: '#14532D',
-      onSuccess: '#DCFCE7',
-      warningFill: '#713F12',
-      onWarning: '#FEF3C7',
-      errorFill: '#7F1D1D',
-      onError: '#FEE2E2',
-      infoFill: '#1E3A8A',
-      onInfo: '#DBEAFE',
-      onStatus: '#F8FAFC',
-      overlay: 'rgba(4, 12, 24, 0.48)',
-      backgroundElement: '#20354F',
-      backgroundSelected: '#2A4666',
-    },
-  },
-  green: {
-    light: {
-      text: '#17352B',
-      textSecondary: '#506C5F',
-      textMuted: '#536F60',
-      background: '#EFF8F2',
-      surface: '#FFFFFF',
-      surfaceVariant: '#DCEFE3',
-      surfaceElevated: '#F5FBF7',
-      border: '#BEDAC9',
-      borderStrong: '#6D8E7B',
-      primary: '#15803D',
-      primaryText: '#166534',
-      onPrimary: '#FFFFFF',
-      primaryContainer: '#DCFCE7',
-      secondary: '#166534',
-      onSecondary: '#FFFFFF',
-      success: '#18794E',
-      warning: '#8A5700',
-      error: '#B42318',
-      info: '#175CD3',
-      successFill: '#18794E',
-      onSuccess: '#FFFFFF',
-      warningFill: '#8A5700',
-      onWarning: '#FFFFFF',
-      errorFill: '#B42318',
-      onError: '#FFFFFF',
-      infoFill: '#175CD3',
-      onInfo: '#FFFFFF',
-      onStatus: '#FFFFFF',
-      overlay: 'rgba(12, 31, 21, 0.16)',
-      backgroundElement: '#DCEFE3',
-      backgroundSelected: '#BBF7D0',
-    },
-    dark: {
-      text: '#F1FAF4',
-      textSecondary: '#B9D6C4',
-      textMuted: '#9FBEAC',
-      background: '#0B2118',
-      surface: '#102D20',
-      surfaceVariant: '#183B2B',
-      surfaceElevated: '#214A36',
-      border: '#315642',
-      borderStrong: '#729580',
-      primary: '#4ADE80',
-      primaryText: '#4ADE80',
-      onPrimary: '#052E16',
-      primaryContainer: '#14532D',
-      secondary: '#86EFAC',
-      onSecondary: '#052E16',
-      success: '#4CD964',
-      warning: '#FFB84D',
-      error: '#FF9B9B',
-      info: '#4ADE80',
-      successFill: '#14532D',
-      onSuccess: '#DCFCE7',
-      warningFill: '#713F12',
-      onWarning: '#FEF3C7',
-      errorFill: '#7F1D1D',
-      onError: '#FEE2E2',
-      infoFill: '#1E3A8A',
-      onInfo: '#DBEAFE',
-      onStatus: '#F8FAFC',
-      overlay: 'rgba(3, 16, 10, 0.48)',
-      backgroundElement: '#183B2B',
-      backgroundSelected: '#22523A',
-    },
-  },
-  yellow: {
-    light: {
-      text: '#3B3018',
-      textSecondary: '#6D5E2A',
-      textMuted: '#71652D',
-      background: '#FFFAE0',
-      surface: '#FFFFFF',
-      surfaceVariant: '#FFF1B8',
-      surfaceElevated: '#FFFCF0',
-      border: '#E9D88D',
-      borderStrong: '#A08A00',
-      primary: '#D6BC00',
-      primaryText: '#6B5E00',
-      onPrimary: '#332D00',
-      primaryContainer: '#FFF2A8',
-      secondary: '#766500',
-      onSecondary: '#FFFFFF',
-      success: '#18794E',
-      warning: '#8A5700',
-      error: '#B42318',
-      info: '#175CD3',
-      successFill: '#18794E',
-      onSuccess: '#FFFFFF',
-      warningFill: '#8A5700',
-      onWarning: '#FFFFFF',
-      errorFill: '#B42318',
-      onError: '#FFFFFF',
-      infoFill: '#175CD3',
-      onInfo: '#FFFFFF',
-      onStatus: '#FFFFFF',
-      overlay: 'rgba(38, 29, 8, 0.16)',
-      backgroundElement: '#FFF1B8',
-      backgroundSelected: '#FFE76A',
-    },
-    dark: {
-      text: '#FFF9E9',
-      textSecondary: '#E6DCA9',
-      textMuted: '#DBD4A6',
-      background: '#211E0A',
-      surface: '#2E290C',
-      surfaceVariant: '#403812',
-      surfaceElevated: '#514716',
-      border: '#61551E',
-      borderStrong: '#A09355',
-      primary: '#FFDE3D',
-      primaryText: '#FFDE3D',
-      onPrimary: '#332D00',
-      primaryContainer: '#665C00',
-      secondary: '#F0DF4A',
-      onSecondary: '#332D00',
-      success: '#8CE79C',
-      warning: '#FFD84D',
-      error: '#FFC5C2',
-      info: '#ACDAEE',
-      successFill: '#14532D',
-      onSuccess: '#DCFCE7',
-      warningFill: '#713F12',
-      onWarning: '#FEF3C7',
-      errorFill: '#7F1D1D',
-      onError: '#FEE2E2',
-      infoFill: '#1E3A8A',
-      onInfo: '#DBEAFE',
-      onStatus: '#F8FAFC',
-      overlay: 'rgba(15, 11, 3, 0.48)',
-      backgroundElement: '#403812',
-      backgroundSelected: '#5A5112',
-    },
-  },
-  red: {
-    light: {
-      text: '#3D2024',
-      textSecondary: '#70474C',
-      textMuted: '#755158',
-      background: '#FCF2F3',
-      surface: '#FFFFFF',
-      surfaceVariant: '#F6E0E3',
-      surfaceElevated: '#FEF8F8',
-      border: '#E8C2C8',
-      borderStrong: '#AC737B',
-      primary: '#DC2626',
-      primaryText: '#B91C1C',
-      onPrimary: '#FFFFFF',
-      primaryContainer: '#FEE2E2',
-      secondary: '#B91C1C',
-      onSecondary: '#FFFFFF',
-      success: '#17754C',
-      warning: '#8A5700',
-      error: '#B42318',
-      info: '#175CD3',
-      successFill: '#18794E',
-      onSuccess: '#FFFFFF',
-      warningFill: '#8A5700',
-      onWarning: '#FFFFFF',
-      errorFill: '#B42318',
-      onError: '#FFFFFF',
-      infoFill: '#175CD3',
-      onInfo: '#FFFFFF',
-      onStatus: '#FFFFFF',
-      overlay: 'rgba(38, 9, 14, 0.16)',
-      backgroundElement: '#F6E0E3',
-      backgroundSelected: '#FECACA',
-    },
-    dark: {
-      text: '#FFF4F4',
-      textSecondary: '#E2BEC2',
-      textMuted: '#C39AA0',
-      background: '#271316',
-      surface: '#35191D',
-      surfaceVariant: '#472127',
-      surfaceElevated: '#582A32',
-      border: '#63353D',
-      borderStrong: '#A7747C',
-      primary: '#FB7185',
-      primaryText: '#FB7B8E',
-      onPrimary: '#4C0519',
-      primaryContainer: '#6B1D2E',
-      secondary: '#FDA4AF',
-      onSecondary: '#4C0519',
-      success: '#4CD964',
-      warning: '#FFB84D',
-      error: '#FB7B8E',
-      info: '#7CC4E5',
-      successFill: '#14532D',
-      onSuccess: '#DCFCE7',
-      warningFill: '#713F12',
-      onWarning: '#FEF3C7',
-      errorFill: '#7F1D1D',
-      onError: '#FEE2E2',
-      infoFill: '#1E3A8A',
-      onInfo: '#DBEAFE',
-      onStatus: '#F8FAFC',
-      overlay: 'rgba(16, 4, 6, 0.48)',
-      backgroundElement: '#472127',
-      backgroundSelected: '#5B2B34',
-    },
-  },
-  pink: {
-    light: {
-      text: '#3B2433',
-      textSecondary: '#6B4A5D',
-      textMuted: '#705363',
-      background: '#FCF3F8',
-      surface: '#FFFFFF',
-      surfaceVariant: '#F5E4ED',
-      surfaceElevated: '#FEF8FB',
-      border: '#E6C6D7',
-      borderStrong: '#A97891',
-      primary: '#C0266D',
-      primaryText: '#A61E5D',
-      onPrimary: '#FFFFFF',
-      primaryContainer: '#FCE7F3',
-      secondary: '#9D174D',
-      onSecondary: '#FFFFFF',
-      success: '#17754C',
-      warning: '#8A5700',
-      error: '#B42318',
-      info: '#175CD3',
-      successFill: '#18794E',
-      onSuccess: '#FFFFFF',
-      warningFill: '#8A5700',
-      onWarning: '#FFFFFF',
-      errorFill: '#B42318',
-      onError: '#FFFFFF',
-      infoFill: '#175CD3',
-      onInfo: '#FFFFFF',
-      onStatus: '#FFFFFF',
-      overlay: 'rgba(38, 10, 25, 0.16)',
-      backgroundElement: '#F5E4ED',
-      backgroundSelected: '#FBCFE8',
-    },
-    dark: {
-      text: '#FFF4FA',
-      textSecondary: '#E4C1D2',
-      textMuted: '#CBA5B8',
-      background: '#21131B',
-      surface: '#2F1B28',
-      surfaceVariant: '#402637',
-      surfaceElevated: '#4D2E40',
-      border: '#614154',
-      borderStrong: '#A77C94',
-      primary: '#F472B6',
-      primaryText: '#F9A8D4',
-      onPrimary: '#4A1030',
-      primaryContainer: '#632746',
-      secondary: '#F9A8D4',
-      onSecondary: '#4A1030',
-      success: '#4CD964',
-      warning: '#FFB84D',
-      error: '#FB7B8E',
-      info: '#7CC4E5',
-      successFill: '#14532D',
-      onSuccess: '#DCFCE7',
-      warningFill: '#713F12',
-      onWarning: '#FEF3C7',
-      errorFill: '#7F1D1D',
-      onError: '#FEE2E2',
-      infoFill: '#1E3A8A',
-      onInfo: '#DBEAFE',
-      onStatus: '#F8FAFC',
-      overlay: 'rgba(16, 4, 10, 0.48)',
-      backgroundElement: '#402637',
-      backgroundSelected: '#5B314B',
-    },
-  },
+  skyBlue: { light: createPalette('skyBlue', 'light'), dark: createPalette('skyBlue', 'dark') },
+  emerald: { light: createPalette('emerald', 'light'), dark: createPalette('emerald', 'dark') },
+  amber: { light: createPalette('amber', 'light'), dark: createPalette('amber', 'dark') },
+  ruby: { light: createPalette('ruby', 'light'), dark: createPalette('ruby', 'dark') },
+  softPurple: { light: createPalette('softPurple', 'light'), dark: createPalette('softPurple', 'dark') },
+  purple: { light: createPalette('purple', 'light'), dark: createPalette('purple', 'dark') },
+  indigo: { light: createPalette('indigo', 'light'), dark: createPalette('indigo', 'dark') },
+  deepTeal: { light: createPalette('deepTeal', 'light'), dark: createPalette('deepTeal', 'dark') },
+  burntOrange: { light: createPalette('burntOrange', 'light'), dark: createPalette('burntOrange', 'dark') },
+  dustyRose: { light: createPalette('dustyRose', 'light'), dark: createPalette('dustyRose', 'dark') },
+  brown: { light: createPalette('brown', 'light'), dark: createPalette('brown', 'dark') },
+  slateBlue: { light: createPalette('slateBlue', 'light'), dark: createPalette('slateBlue', 'dark') },
+  lightPurple: { light: createPalette('lightPurple', 'light'), dark: createPalette('lightPurple', 'dark') },
+  olive: { light: createPalette('olive', 'light'), dark: createPalette('olive', 'dark') },
+  tealBlue: { light: createPalette('tealBlue', 'light'), dark: createPalette('tealBlue', 'dark') },
 };
 
 export const Fonts = Platform.select({
   ios: {
-    /** IRANSansX فونت‌ها */
     sans: 'AppFont-Regular',
     serif: 'AppFont-Light',
     rounded: 'AppFont-Medium',
     mono: 'AppFont-SemiBold',
   },
   android: {
-    /** IRANSansX فونت‌ها */
     sans: 'AppFont-Regular',
     serif: 'AppFont-Light',
     rounded: 'AppFont-Medium',

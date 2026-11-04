@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -63,13 +64,15 @@ export function CurrencyAmountInput({
                 disabled={!amountIsValid || amount <= 0}
                 style={({ pressed }) => [
                     styles.stepperButton,
-                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                     (!amountIsValid || amount <= 0) && styles.stepperButtonDisabled,
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="کاهش مبلغ پرداخت‌شده"
             >
-                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                {({ pressed }) => (
+                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                )}
             </Pressable>
             <NumericInputField
                 value={isFocused ? value : formatAmount(value)}
@@ -89,13 +92,15 @@ export function CurrencyAmountInput({
                 disabled={!amountIsValid || amount > maximumAmount - AMOUNT_STEP}
                 style={({ pressed }) => [
                     styles.stepperButton,
-                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                     (!amountIsValid || amount > maximumAmount - AMOUNT_STEP) && styles.stepperButtonDisabled,
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="افزایش مبلغ پرداخت‌شده"
             >
-                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                {({ pressed }) => (
+                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                )}
             </Pressable>
         </View>
     );
@@ -126,6 +131,6 @@ const styles = StyleSheet.create({
         minHeight: 42,
         paddingVertical: 0,
         fontFamily: 'AppFont-Bold',
-        fontSize: 14,
+        fontSize: Typography.fontSize.bodySmall,
     },
 });

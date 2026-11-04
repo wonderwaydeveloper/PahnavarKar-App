@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import * as Clipboard from 'expo-clipboard';
@@ -6,13 +7,14 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInput, TextInputInstance, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInputInstance, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text';
 import { BankAmountInput } from '@/components/bank-amount-input';
 import { ErrorNoticeCard } from '@/components/error-notice-card';
+import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -747,16 +749,25 @@ export default function WalletScreen() {
                 )}
             >
                 {financialOperationsUnavailable ? (
-                    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
-                        <ThemedText type="smallBold" style={{ color: theme.warning }}>
-                            {offlineCacheSavedAt !== undefined
-                                ? `نمایش آخرین اطلاعات ذخیره‌شده در ${new Date(offlineCacheSavedAt).toLocaleString('fa-IR')}؛ این اطلاعات زنده نیست.`
-                                : 'اطلاعات کیف پول ممکن است به‌روز نباشد؛ برای عملیات مالی اتصال اینترنت و پاسخ زندهٔ سرور لازم است.'}
-                        </ThemedText>
-                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                            شارژ، برداشت، ذخیرهٔ شبا و استعلام پرداخت تا دریافت اطلاعات زنده غیرفعال هستند.
-                        </ThemedText>
-                    </View>
+                    <OfflineDataNotice
+                        theme={theme}
+                        title={offlineCacheSavedAt !== undefined
+                            ? 'اطلاعات ذخیره‌شده نمایش داده می‌شود'
+                            : 'اتصال زنده به سرور در دسترس نیست'}
+                        description={offlineCacheSavedAt !== undefined
+                            ? 'این اطلاعات ممکن است به‌روز نباشد.'
+                            : 'وضعیت کیف پول تا دریافت پاسخ زندهٔ سرور قابل تأیید نیست.'}
+                        sources={[
+                            ...(walletQuery.data?.offlineCacheSavedAt !== undefined
+                                ? [{ label: 'موجودی کیف پول', timestamp: walletQuery.data.offlineCacheSavedAt, kind: 'saved' as const }]
+                                : []),
+                            ...(pendingTopUpQuery.data?.offlineCacheSavedAt !== undefined
+                                ? [{ label: 'وضعیت شارژ در انتظار', timestamp: pendingTopUpQuery.data.offlineCacheSavedAt, kind: 'saved' as const }]
+                                : []),
+                        ]}
+                        emptyMessage="اطلاعات ذخیره‌شدهٔ قابل‌نمایشی برای کیف پول در دسترس نیست."
+                        actionMessage="شارژ، برداشت، ذخیرهٔ شبا و استعلام پرداخت فقط با اتصال و اطلاعات زنده فعال می‌شوند."
+                    />
                 ) : null}
                 {walletError && !wallet ? (
                     <ErrorNoticeCard
@@ -787,13 +798,13 @@ export default function WalletScreen() {
                 ) : null}
                 {wallet ? (
                     <>
-                        <View style={[styles.balanceCard, { backgroundColor: theme.primaryContainer, borderColor: theme.border }]}>
+                        <View style={[styles.balanceCard, { backgroundColor: theme.primary, borderColor: theme.border }]}>
                             <View style={styles.balanceHeader}>
-                                <MaterialCommunityIcons name="wallet-outline" size={24} color={theme.primaryText} />
-                                <ThemedText type="bodyBold" themeColor="primaryText">موجودی کیف پول</ThemedText>
+                                <MaterialCommunityIcons name="wallet-outline" size={24} color={theme.onPrimary} />
+                                <ThemedText type="bodyBold" themeColor="onPrimary">موجودی کیف پول</ThemedText>
                             </View>
-                            <ThemedText type="subtitle">{money(wallet.balance)}</ThemedText>
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                            <ThemedText type="subtitle" themeColor="onPrimary">{money(wallet.balance)}</ThemedText>
+                            <ThemedText type="small" style={{ color: theme.onPrimary }}>
                                 مبلغ‌های رزروشدهٔ درخواست‌های برداشت از موجودی آزاد کسر شده‌اند.
                             </ThemedText>
                         </View>
@@ -872,7 +883,7 @@ export default function WalletScreen() {
                                         style={[
                                             styles.walletTab,
                                             {
-                                                backgroundColor: selected ? theme.primaryContainer : 'transparent',
+                                                backgroundColor: selected ? theme.primary : 'transparent',
                                                 borderColor: selected ? theme.primary : 'transparent',
                                             },
                                         ]}
@@ -880,11 +891,11 @@ export default function WalletScreen() {
                                         <MaterialCommunityIcons
                                             name={tab.icon}
                                             size={19}
-                                            color={selected ? theme.primaryText : theme.textSecondary}
+                                            color={selected ? theme.onPrimary : theme.textSecondary}
                                         />
                                         <ThemedText
                                             type={selected ? 'smallBold' : 'small'}
-                                            style={{ color: selected ? theme.primaryText : theme.textSecondary }}
+                                            style={{ color: selected ? theme.onPrimary : theme.textSecondary }}
                                         >
                                             {tab.label}
                                         </ThemedText>
@@ -894,254 +905,254 @@ export default function WalletScreen() {
                         </View>
 
                         {activeWalletTab === 'top-up' ? (
-                        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                            <View style={styles.sectionHeader}>
-                                <MaterialCommunityIcons name="wallet-plus-outline" size={22} color={theme.primaryText} />
-                                <ThemedText type="bodyBold">شارژ کیف پول</ThemedText>
-                            </View>
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                حداقل شارژ {money(wallet.top_up_min_amount)} و سقف هر پرداخت {money(wallet.top_up_max_amount)} است.
-                            </ThemedText>
-                            {pendingTopUpQuery.isPending ? (
+                            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                <View style={styles.sectionHeader}>
+                                    <MaterialCommunityIcons name="wallet-plus-outline" size={22} color={theme.primaryText} />
+                                    <ThemedText type="bodyBold">شارژ کیف پول</ThemedText>
+                                </View>
                                 <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                    در حال بررسی وضعیت شارژهای قبلی…
+                                    حداقل شارژ {money(wallet.top_up_min_amount)} و سقف هر پرداخت {money(wallet.top_up_max_amount)} است.
                                 </ThemedText>
-                            ) : null}
-                            <BankAmountInput
-                                accessibilityLabel="مبلغ شارژ به تومان"
-                                editable={
-                                    !topUpDisabled
-                                }
-                                onChangeText={setTopUpAmount}
-                                value={topUpAmount}
-                            />
-                            <Pressable
-                                accessibilityRole="button"
-                                disabled={topUpDisabled}
-                                onPress={() => void handleTopUp()}
-                                style={[styles.primaryButton, {
-                                    backgroundColor: theme.primary,
-                                    opacity: topUpDisabled ? 0.6 : 1,
-                                }]}
-                            >
-                                {activeFinancialAction === 'top-up'
-                                    ? <ActivityIndicator color={theme.onPrimary} />
-                                    : null}
-                                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>ادامه به درگاه پرداخت</ThemedText>
-                            </Pressable>
-                        </View>
+                                {pendingTopUpQuery.isPending ? (
+                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                        در حال بررسی وضعیت شارژهای قبلی…
+                                    </ThemedText>
+                                ) : null}
+                                <BankAmountInput
+                                    accessibilityLabel="مبلغ شارژ به تومان"
+                                    editable={
+                                        !topUpDisabled
+                                    }
+                                    onChangeText={setTopUpAmount}
+                                    value={topUpAmount}
+                                />
+                                <Pressable
+                                    accessibilityRole="button"
+                                    disabled={topUpDisabled}
+                                    onPress={() => void handleTopUp()}
+                                    style={[styles.primaryButton, {
+                                        backgroundColor: theme.primary,
+                                        opacity: topUpDisabled ? 0.6 : 1,
+                                    }]}
+                                >
+                                    {activeFinancialAction === 'top-up'
+                                        ? <ActivityIndicator color={theme.onPrimary} />
+                                        : null}
+                                    <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>ادامه به درگاه پرداخت</ThemedText>
+                                </Pressable>
+                            </View>
                         ) : (
                             <>
-                        {currentWithdrawalAttemptLoadError ? (
-                            <ErrorNoticeCard
-                                message={currentWithdrawalAttemptLoadError}
-                                onRetry={() => {
-                                    if (userId !== null) void loadPendingWithdrawalAttempt(userId);
-                                }}
-                                retryLabel="بررسی دوباره"
-                            />
-                        ) : loadedWithdrawalAttemptUserId !== userId ? (
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                در حال بررسی وضعیت تلاش‌های قبلی برداشت…
-                            </ThemedText>
-                        ) : currentPendingWithdrawalAttempt ? (
-                            <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
-                                <ThemedText type="smallBold" style={{ color: theme.warning }}>
-                                    نتیجهٔ یک درخواست برداشت قبلی مشخص نیست. برای جلوگیری از ثبت دوباره، فقط با همان مبلغ و روش مقصد، و در روش کارت با همان شماره کارت، می‌توان تلاش کرد. شمارهٔ کارت قبلی روی دستگاه ذخیره نشده است.
-                                </ThemedText>
-                            </View>
-                        ) : null}
-                        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                            <View style={styles.sectionHeader}>
-                                <MaterialCommunityIcons name="bank-outline" size={22} color={theme.primaryText} />
-                                <ThemedText type="bodyBold">شماره شبای برداشت</ThemedText>
-                            </View>
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                فقط شماره شبای حساب بانکی متعلق به خودتان را ثبت کنید. هنگام ثبت درخواست می‌توانید از این شبا یا یک شماره کارت بانکی استفاده کنید.
-                            </ThemedText>
-                            {wallet.bank_account_iban_masked ? (
-                                <>
-                                    <ThemedText type="smallBold" style={{ color: theme.success }}>
-                                        شبای ثبت‌شده: {wallet.bank_account_iban_masked}
+                                {currentWithdrawalAttemptLoadError ? (
+                                    <ErrorNoticeCard
+                                        message={currentWithdrawalAttemptLoadError}
+                                        onRetry={() => {
+                                            if (userId !== null) void loadPendingWithdrawalAttempt(userId);
+                                        }}
+                                        retryLabel="بررسی دوباره"
+                                    />
+                                ) : loadedWithdrawalAttemptUserId !== userId ? (
+                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                        در حال بررسی وضعیت تلاش‌های قبلی برداشت…
                                     </ThemedText>
+                                ) : currentPendingWithdrawalAttempt ? (
+                                    <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
+                                        <ThemedText type="smallBold" style={{ color: theme.warning }}>
+                                            نتیجهٔ یک درخواست برداشت قبلی مشخص نیست. برای جلوگیری از ثبت دوباره، فقط با همان مبلغ و روش مقصد، و در روش کارت با همان شماره کارت، می‌توان تلاش کرد. شمارهٔ کارت قبلی روی دستگاه ذخیره نشده است.
+                                        </ThemedText>
+                                    </View>
+                                ) : null}
+                                <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                    <View style={styles.sectionHeader}>
+                                        <MaterialCommunityIcons name="bank-outline" size={22} color={theme.primaryText} />
+                                        <ThemedText type="bodyBold">شماره شبای برداشت</ThemedText>
+                                    </View>
+                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                        فقط شماره شبای حساب بانکی متعلق به خودتان را ثبت کنید. هنگام ثبت درخواست می‌توانید از این شبا یا یک شماره کارت بانکی استفاده کنید.
+                                    </ThemedText>
+                                    {wallet.bank_account_iban_masked ? (
+                                        <>
+                                            <ThemedText type="smallBold" style={{ color: theme.success }}>
+                                                شبای ثبت‌شده: {wallet.bank_account_iban_masked}
+                                            </ThemedText>
+                                            <Pressable
+                                                accessibilityLabel="کپی شبای کامل ثبت‌شده"
+                                                accessibilityRole="button"
+                                                disabled={copyingIban || financialOperationsUnavailable}
+                                                onPress={() => void handleCopyIban()}
+                                                style={[styles.secondaryButton, { borderColor: theme.border, flexDirection: 'row', gap: Spacing.two, opacity: copyingIban || financialOperationsUnavailable ? 0.6 : 1 }]}
+                                            >
+                                                {copyingIban
+                                                    ? <ActivityIndicator color={theme.primaryText} />
+                                                    : <MaterialCommunityIcons name="content-copy" size={18} color={theme.primaryText} />}
+                                                <ThemedText type="smallBold" themeColor="primaryText">
+                                                    {copyingIban ? 'در حال دریافت شماره شبا…' : 'کپی شبای کامل'}
+                                                </ThemedText>
+                                            </Pressable>
+                                        </>
+                                    ) : (
+                                        <ThemedText type="smallBold" style={{ color: theme.warning }}>هنوز شماره شبایی ثبت نشده است.</ThemedText>
+                                    )}
+                                    <View style={[styles.ibanInputWrap, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                                        <ThemedText type="smallBold" style={[styles.ibanPrefix, { color: theme.textSecondary, borderRightColor: theme.border }]}>
+                                            IR
+                                        </ThemedText>
+                                        <AppTextInput
+                                            accessibilityLabel="۲۴ رقم شماره شبا پس از پیشوند IR"
+                                            autoCapitalize="none"
+                                            autoCorrect={false}
+                                            editable={!financialRestricted}
+                                            keyboardType="number-pad"
+                                            onChangeText={handleIbanChange}
+                                            onSelectionChange={(event) => {
+                                                ibanSelectionRef.current = event.nativeEvent.selection;
+                                            }}
+                                            placeholder="0000 0000 0000 0000 0000 0000"
+                                            placeholderTextColor={theme.textMuted}
+                                            ref={ibanInputRef}
+                                            value={formatIbanInput(ibanInput)}
+                                            style={[styles.ibanInput, { color: theme.text }]}
+                                        />
+                                    </View>
                                     <Pressable
-                                        accessibilityLabel="کپی شبای کامل ثبت‌شده"
                                         accessibilityRole="button"
-                                        disabled={copyingIban || financialOperationsUnavailable}
-                                        onPress={() => void handleCopyIban()}
-                                        style={[styles.secondaryButton, { borderColor: theme.border, flexDirection: 'row', gap: Spacing.two, opacity: copyingIban || financialOperationsUnavailable ? 0.6 : 1 }]}
+                                        disabled={financialOperationsUnavailable || financialActionInProgress || financialRestricted || ibanInput.length !== 24}
+                                        onPress={() => {
+                                            const actionId = beginFinancialAction('save-iban');
+                                            if (actionId === null) return;
+                                            const actionUserId = userId;
+                                            void handleSaveIban()
+                                                .catch((error: unknown) => {
+                                                    if (currentUserIdRef.current === actionUserId) {
+                                                        showError(error, 'ذخیره شماره شبا ناموفق بود.');
+                                                    }
+                                                })
+                                                .finally(() => finishFinancialAction('save-iban', actionId));
+                                        }}
+                                        style={[styles.secondaryButton, { borderColor: theme.border, flexDirection: 'row', gap: Spacing.two, opacity: financialOperationsUnavailable || financialActionInProgress || financialRestricted || ibanInput.length !== 24 ? 0.55 : 1 }]}
                                     >
-                                        {copyingIban
+                                        {activeFinancialAction === 'save-iban'
                                             ? <ActivityIndicator color={theme.primaryText} />
-                                            : <MaterialCommunityIcons name="content-copy" size={18} color={theme.primaryText} />}
+                                            : null}
                                         <ThemedText type="smallBold" themeColor="primaryText">
-                                            {copyingIban ? 'در حال دریافت شماره شبا…' : 'کپی شبای کامل'}
+                                            {activeFinancialAction === 'save-iban' ? 'در حال ذخیره…' : 'ذخیره شماره شبا'}
                                         </ThemedText>
                                     </Pressable>
-                                </>
-                            ) : (
-                                <ThemedText type="smallBold" style={{ color: theme.warning }}>هنوز شماره شبایی ثبت نشده است.</ThemedText>
-                            )}
-                            <View style={[styles.ibanInputWrap, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-                                <ThemedText type="smallBold" style={[styles.ibanPrefix, { color: theme.textSecondary, borderRightColor: theme.border }]}>
-                                    IR
-                                </ThemedText>
-                                <AppTextInput
-                                    accessibilityLabel="۲۴ رقم شماره شبا پس از پیشوند IR"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    editable={!financialRestricted}
-                                    keyboardType="number-pad"
-                                    onChangeText={handleIbanChange}
-                                    onSelectionChange={(event) => {
-                                        ibanSelectionRef.current = event.nativeEvent.selection;
-                                    }}
-                                    placeholder="0000 0000 0000 0000 0000 0000"
-                                    placeholderTextColor={theme.textMuted}
-                                    ref={ibanInputRef}
-                                    value={formatIbanInput(ibanInput)}
-                                    style={[styles.ibanInput, { color: theme.text }]}
-                                />
-                            </View>
-                            <Pressable
-                                accessibilityRole="button"
-                                disabled={financialOperationsUnavailable || financialActionInProgress || financialRestricted || ibanInput.length !== 24}
-                                onPress={() => {
-                                    const actionId = beginFinancialAction('save-iban');
-                                    if (actionId === null) return;
-                                    const actionUserId = userId;
-                                    void handleSaveIban()
-                                        .catch((error: unknown) => {
-                                            if (currentUserIdRef.current === actionUserId) {
-                                                showError(error, 'ذخیره شماره شبا ناموفق بود.');
-                                            }
-                                        })
-                                        .finally(() => finishFinancialAction('save-iban', actionId));
-                                }}
-                                style={[styles.secondaryButton, { borderColor: theme.border, flexDirection: 'row', gap: Spacing.two, opacity: financialOperationsUnavailable || financialActionInProgress || financialRestricted || ibanInput.length !== 24 ? 0.55 : 1 }]}
-                            >
-                                {activeFinancialAction === 'save-iban'
-                                    ? <ActivityIndicator color={theme.primaryText} />
-                                    : null}
-                                <ThemedText type="smallBold" themeColor="primaryText">
-                                    {activeFinancialAction === 'save-iban' ? 'در حال ذخیره…' : 'ذخیره شماره شبا'}
-                                </ThemedText>
-                            </Pressable>
-                        </View>
+                                </View>
 
-                        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                            <View style={styles.sectionHeader}>
-                                <MaterialCommunityIcons name="bank-transfer-out" size={22} color={theme.primaryText} />
-                                <ThemedText type="bodyBold">درخواست برداشت</ThemedText>
-                            </View>
-                            {wallet.withdrawals.enabled ? (
-                                <>
-                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                        سقف هر درخواست {money(wallet.withdrawals.max_per_request)} است. مبلغ تا بررسی درخواست از موجودی آزاد کسر می‌شود.
-                                    </ThemedText>
-                                    <ThemedText type="smallBold">روش واریز</ThemedText>
-                                    <View accessibilityRole="radiogroup" style={styles.payoutMethodChoices}>
-                                        <Pressable
-                                            accessibilityRole="radio"
-                                            accessibilityState={{ selected: withdrawalPayoutMethod === 'iban' }}
-                                            disabled={financialActionInProgress || financialRestricted}
-                                            onPress={() => setWithdrawalPayoutMethod('iban')}
-                                            style={[
-                                                styles.payoutMethodChoice,
-                                                {
-                                                    backgroundColor: withdrawalPayoutMethod === 'iban' ? theme.primaryContainer : theme.surfaceElevated,
-                                                    borderColor: withdrawalPayoutMethod === 'iban' ? theme.primary : theme.border,
-                                                    opacity: financialActionInProgress || financialRestricted ? 0.6 : 1,
-                                                },
-                                            ]}
-                                        >
-                                            <MaterialCommunityIcons
-                                                name="bank-outline"
-                                                size={18}
-                                                color={withdrawalPayoutMethod === 'iban' ? theme.primaryText : theme.textSecondary}
-                                            />
-                                            <ThemedText type="smallBold" themeColor={withdrawalPayoutMethod === 'iban' ? 'primaryText' : 'textSecondary'}>
-                                                شماره شبا
-                                            </ThemedText>
-                                        </Pressable>
-                                        <Pressable
-                                            accessibilityRole="radio"
-                                            accessibilityState={{ selected: withdrawalPayoutMethod === 'card' }}
-                                            disabled={financialActionInProgress || financialRestricted}
-                                            onPress={() => setWithdrawalPayoutMethod('card')}
-                                            style={[
-                                                styles.payoutMethodChoice,
-                                                {
-                                                    backgroundColor: withdrawalPayoutMethod === 'card' ? theme.primaryContainer : theme.surfaceElevated,
-                                                    borderColor: withdrawalPayoutMethod === 'card' ? theme.primary : theme.border,
-                                                    opacity: financialActionInProgress || financialRestricted ? 0.6 : 1,
-                                                },
-                                            ]}
-                                        >
-                                            <MaterialCommunityIcons
-                                                name="credit-card-outline"
-                                                size={18}
-                                                color={withdrawalPayoutMethod === 'card' ? theme.primaryText : theme.textSecondary}
-                                            />
-                                            <ThemedText type="smallBold" themeColor={withdrawalPayoutMethod === 'card' ? 'primaryText' : 'textSecondary'}>
-                                                شماره کارت
-                                            </ThemedText>
-                                        </Pressable>
+                                <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                    <View style={styles.sectionHeader}>
+                                        <MaterialCommunityIcons name="bank-transfer-out" size={22} color={theme.primaryText} />
+                                        <ThemedText type="bodyBold">درخواست برداشت</ThemedText>
                                     </View>
-                                    {withdrawalPayoutMethod === 'iban' ? (
-                                        <ThemedText type="small" style={{ color: wallet.bank_account_iban_masked ? theme.textSecondary : theme.warning }}>
-                                            {wallet.bank_account_iban_masked
-                                                ? `مقصد ثبت‌شده: ${wallet.bank_account_iban_masked}`
-                                                : 'ابتدا شبای مقصد را در بخش بالا ثبت کنید.'}
-                                        </ThemedText>
-                                    ) : (
+                                    {wallet.withdrawals.enabled ? (
                                         <>
                                             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                شماره کارت ۱۶ رقمی متعلق به خودتان را وارد کنید. اطلاعات فقط برای همین درخواست ثبت و به‌صورت رمزگذاری‌شده نگهداری می‌شود؛ رمز دوم، CVV2 و تاریخ انقضا را وارد نکنید.
+                                                سقف هر درخواست {money(wallet.withdrawals.max_per_request)} است. مبلغ تا بررسی درخواست از موجودی آزاد کسر می‌شود.
                                             </ThemedText>
-                                            <TextInput
-                                                accessibilityLabel="شماره کارت مقصد برداشت"
+                                            <ThemedText type="smallBold">روش واریز</ThemedText>
+                                            <View accessibilityRole="radiogroup" style={styles.payoutMethodChoices}>
+                                                <Pressable
+                                                    accessibilityRole="radio"
+                                                    accessibilityState={{ selected: withdrawalPayoutMethod === 'iban' }}
+                                                    disabled={financialActionInProgress || financialRestricted}
+                                                    onPress={() => setWithdrawalPayoutMethod('iban')}
+                                                    style={[
+                                                        styles.payoutMethodChoice,
+                                                        {
+                                                            backgroundColor: withdrawalPayoutMethod === 'iban' ? theme.primary : theme.surfaceElevated,
+                                                            borderColor: withdrawalPayoutMethod === 'iban' ? theme.primary : theme.border,
+                                                            opacity: financialActionInProgress || financialRestricted ? 0.6 : 1,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <MaterialCommunityIcons
+                                                        name="bank-outline"
+                                                        size={18}
+                                                        color={withdrawalPayoutMethod === 'iban' ? theme.onPrimary : theme.textSecondary}
+                                                    />
+                                                    <ThemedText type="smallBold" themeColor={withdrawalPayoutMethod === 'iban' ? 'onPrimary' : 'textSecondary'}>
+                                                        شماره شبا
+                                                    </ThemedText>
+                                                </Pressable>
+                                                <Pressable
+                                                    accessibilityRole="radio"
+                                                    accessibilityState={{ selected: withdrawalPayoutMethod === 'card' }}
+                                                    disabled={financialActionInProgress || financialRestricted}
+                                                    onPress={() => setWithdrawalPayoutMethod('card')}
+                                                    style={[
+                                                        styles.payoutMethodChoice,
+                                                        {
+                                                            backgroundColor: withdrawalPayoutMethod === 'card' ? theme.primary : theme.surfaceElevated,
+                                                            borderColor: withdrawalPayoutMethod === 'card' ? theme.primary : theme.border,
+                                                            opacity: financialActionInProgress || financialRestricted ? 0.6 : 1,
+                                                        },
+                                                    ]}
+                                                >
+                                                    <MaterialCommunityIcons
+                                                        name="credit-card-outline"
+                                                        size={18}
+                                                        color={withdrawalPayoutMethod === 'card' ? theme.onPrimary : theme.textSecondary}
+                                                    />
+                                                    <ThemedText type="smallBold" themeColor={withdrawalPayoutMethod === 'card' ? 'onPrimary' : 'textSecondary'}>
+                                                        شماره کارت
+                                                    </ThemedText>
+                                                </Pressable>
+                                            </View>
+                                            {withdrawalPayoutMethod === 'iban' ? (
+                                                <ThemedText type="small" style={{ color: wallet.bank_account_iban_masked ? theme.textSecondary : theme.warning }}>
+                                                    {wallet.bank_account_iban_masked
+                                                        ? `مقصد ثبت‌شده: ${wallet.bank_account_iban_masked}`
+                                                        : 'ابتدا شبای مقصد را در بخش بالا ثبت کنید.'}
+                                                </ThemedText>
+                                            ) : (
+                                                <>
+                                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                        شماره کارت ۱۶ رقمی متعلق به خودتان را وارد کنید. اطلاعات فقط برای همین درخواست ثبت و به‌صورت رمزگذاری‌شده نگهداری می‌شود؛ رمز دوم، CVV2 و تاریخ انقضا را وارد نکنید.
+                                                    </ThemedText>
+                                                    <AppTextInput
+                                                        accessibilityLabel="شماره کارت مقصد برداشت"
+                                                        editable={!financialRestricted && !financialActionInProgress}
+                                                        keyboardType="number-pad"
+                                                        onChangeText={(value) => setWithdrawalCardNumber(normalizeDigits(value).slice(0, 16))}
+                                                        placeholder="شماره کارت ۱۶ رقمی"
+                                                        placeholderTextColor={theme.textMuted}
+                                                        value={withdrawalCardNumber}
+                                                        style={[styles.input, styles.cardNumberInput, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, color: theme.text }]}
+                                                    />
+                                                </>
+                                            )}
+                                            <BankAmountInput
+                                                accessibilityLabel="مبلغ برداشت به تومان"
                                                 editable={!financialRestricted && !financialActionInProgress}
-                                                keyboardType="number-pad"
-                                                onChangeText={(value) => setWithdrawalCardNumber(normalizeDigits(value).slice(0, 16))}
-                                                placeholder="شماره کارت ۱۶ رقمی"
-                                                placeholderTextColor={theme.textMuted}
-                                                value={withdrawalCardNumber}
-                                                style={[styles.input, styles.cardNumberInput, { backgroundColor: theme.surfaceElevated, borderColor: theme.border, color: theme.text }]}
+                                                onChangeText={setWithdrawalAmount}
+                                                value={withdrawalAmount}
                                             />
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                disabled={
+                                                    withdrawalDisabled
+                                                }
+                                                onPress={() => void handleWithdrawal()}
+                                                style={[styles.primaryButton, {
+                                                    backgroundColor: theme.secondary,
+                                                    opacity: withdrawalDisabled ? 0.6 : 1,
+                                                }]}
+                                            >
+                                                {activeFinancialAction === 'withdrawal'
+                                                    ? <ActivityIndicator color={theme.onSecondary} />
+                                                    : null}
+                                                <ThemedText type="smallBold" style={{ color: theme.onSecondary }}>
+                                                    {currentPendingWithdrawalAttempt ? 'تلاش دوباره برای ثبت همان درخواست' : 'ثبت درخواست برداشت'}
+                                                </ThemedText>
+                                            </Pressable>
                                         </>
-                                    )}
-                                    <BankAmountInput
-                                        accessibilityLabel="مبلغ برداشت به تومان"
-                                        editable={!financialRestricted && !financialActionInProgress}
-                                        onChangeText={setWithdrawalAmount}
-                                        value={withdrawalAmount}
-                                    />
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        disabled={
-                                            withdrawalDisabled
-                                        }
-                                        onPress={() => void handleWithdrawal()}
-                                        style={[styles.primaryButton, {
-                                            backgroundColor: theme.secondary,
-                                            opacity: withdrawalDisabled ? 0.6 : 1,
-                                        }]}
-                                    >
-                                        {activeFinancialAction === 'withdrawal'
-                                            ? <ActivityIndicator color={theme.onSecondary} />
-                                            : null}
-                                        <ThemedText type="smallBold" style={{ color: theme.onSecondary }}>
-                                            {currentPendingWithdrawalAttempt ? 'تلاش دوباره برای ثبت همان درخواست' : 'ثبت درخواست برداشت'}
+                                    ) : (
+                                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                            درخواست برداشت در حال حاضر از سوی سامانه غیرفعال است.
                                         </ThemedText>
-                                    </Pressable>
-                                </>
-                            ) : (
-                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                    درخواست برداشت در حال حاضر از سوی سامانه غیرفعال است.
-                                </ThemedText>
-                            )}
-                        </View>
+                                    )}
+                                </View>
                             </>
                         )}
 
@@ -1195,10 +1206,10 @@ const styles = StyleSheet.create({
     },
     card: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.four, gap: Spacing.two },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-    input: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: 15, fontFamily: 'AppFont-Regular' },
+    input: { minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: Typography.fontSize.body, fontFamily: 'AppFont-Regular' },
     ibanInputWrap: { minHeight: 52, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.two, flexDirection: 'row', alignItems: 'center', direction: 'ltr' },
     ibanPrefix: { minHeight: 32, textAlignVertical: 'center', paddingRight: Spacing.two, marginRight: Spacing.two, borderRightWidth: StyleSheet.hairlineWidth },
-    ibanInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontSize: 15, textAlign: 'left', writingDirection: 'ltr' },
+    ibanInput: { flex: 1, minHeight: 48, paddingVertical: 0, fontSize: Typography.fontSize.body, textAlign: 'left', writingDirection: 'ltr' },
     payoutMethodChoices: { flexDirection: 'row', gap: Spacing.two },
     payoutMethodChoice: { flex: 1, minHeight: 48, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.two, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.one },
     cardNumberInput: { textAlign: 'left', writingDirection: 'ltr' },

@@ -14,7 +14,6 @@
     "android": {
       "package": "com.cleverlife.pahnavarkar",
       "adaptiveIcon": {
-        "backgroundColor": "#FFFFFF",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -31,10 +30,6 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F3F7F9",
-          "dark": {
-            "backgroundColor": "#041E28"
-          },
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200
         }

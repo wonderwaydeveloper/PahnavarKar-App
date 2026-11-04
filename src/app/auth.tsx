@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -365,8 +366,8 @@ export default function AuthScreen() {
         return (
             <ThemedView style={styles.sessionRestore}>
                 <View style={[styles.sessionRestoreCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <View style={[styles.sessionRestoreIcon, { backgroundColor: theme.primaryContainer }]}>
-                        <MaterialCommunityIcons name="shield-account-outline" size={36} color={theme.primaryText} />
+                    <View style={[styles.sessionRestoreIcon, { backgroundColor: theme.primary }]}>
+                        <MaterialCommunityIcons name="shield-account-outline" size={36} color={theme.onPrimary} />
                     </View>
                     <ThemedText type="bodyBold" style={styles.sessionRestoreTitle}>
                         در حال بررسی حساب شما
@@ -717,7 +718,7 @@ const styles = StyleSheet.create({
     sessionRestoreDescription: {
         maxWidth: 320,
         textAlign: 'center',
-        lineHeight: 24,
+        lineHeight: Typography.lineHeight.comfortable,
     },
     sessionRestoreProgress: {
         width: '100%',
@@ -741,7 +742,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     appBarTitle: {
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
         fontFamily: 'AppFont-Bold',
         textAlign: 'right',
     },
@@ -796,7 +797,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: Radius.md,
         paddingHorizontal: Spacing.three,
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
     },
     photoCard: {
         borderWidth: 1,

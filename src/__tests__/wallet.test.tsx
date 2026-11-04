@@ -43,8 +43,8 @@ jest.mock('expo-web-browser', () => ({ openAuthSessionAsync: jest.fn() }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('@/services/account-offline-cache', () => ({
     ACCOUNT_OFFLINE_CACHE: {
-        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 86400000 },
-        pendingTopUp: { namespace: 'account-wallet-v1', key: 'pending-top-up', maxAgeMs: 86400000 },
+        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 2592000000 },
+        pendingTopUp: { namespace: 'account-wallet-v1', key: 'pending-top-up', maxAgeMs: 2592000000 },
     },
     fetchWithOfflineFallback: jest.fn(async (_userId: number, _cache: unknown, fetcher: () => Promise<unknown>) => ({
         value: await fetcher(),
@@ -133,6 +133,8 @@ jest.mock('@/hooks/use-theme', () => ({
         onSecondary: '#FFFFFF',
         success: '#18794E',
         warning: '#8A5700',
+        warningFill: '#8A5700',
+        onWarning: '#FFFFFF',
         error: '#B42318',
     }),
 }));
@@ -227,6 +229,9 @@ describe('wallet screen', () => {
         await waitFor(() => {
             expect(view.getByText('Network unavailable')).toBeTruthy();
         });
+        expect(view.getByText('اتصال زنده به سرور در دسترس نیست')).toBeTruthy();
+        expect(view.getByText('وضعیت کیف پول تا دریافت پاسخ زندهٔ سرور قابل تأیید نیست.')).toBeTruthy();
+        expect(view.getByText('اطلاعات ذخیره‌شدهٔ قابل‌نمایشی برای کیف پول در دسترس نیست.')).toBeTruthy();
         expect(fetchWalletOverview).toHaveBeenCalledTimes(1);
         expect(fetchPendingWalletTopUp).toHaveBeenCalledTimes(1);
 
@@ -240,11 +245,17 @@ describe('wallet screen', () => {
     it('labels cached wallet data and disables financial actions', async () => {
         const savedAt = Date.now() - 60_000;
         queryClient.setQueryData(['wallet-overview', user.id], { ...wallet, offlineCacheSavedAt: savedAt });
-        queryClient.setQueryData(['wallet-pending-top-up', user.id], { payment: null });
+        queryClient.setQueryData(['wallet-pending-top-up', user.id], {
+            payment: null,
+            offlineCacheSavedAt: savedAt - 30_000,
+        });
 
         const view = await renderWallet();
 
-        expect(view.getByText(new RegExp(`ذخیره‌شده در ${new Date(savedAt).toLocaleString('fa-IR')}`))).toBeTruthy();
+        expect(view.getByText('اطلاعات ذخیره‌شده نمایش داده می‌شود')).toBeTruthy();
+        expect(view.getByText(new RegExp(`آخرین ذخیره‌سازی: ${new Date(savedAt).toLocaleString('fa-IR')}`))).toBeTruthy();
+        expect(view.getByText(/وضعیت شارژ در انتظار · آخرین ذخیره‌سازی:/)).toBeTruthy();
+        expect(view.getByText(/شارژ، برداشت، ذخیرهٔ شبا و استعلام پرداخت فقط با اتصال/)).toBeTruthy();
         const topUpButton = view.getByRole('button', { name: 'ادامه به درگاه پرداخت' });
         expect(topUpButton.props.accessibilityState?.disabled).toBe(true);
         fireEvent.press(topUpButton);

@@ -52,11 +52,11 @@ export default function PlansScreen() {
                             },
                         ]}
                     >
-                        <View style={[styles.iconWrap, { backgroundColor: theme.primaryContainer }]}>
+                        <View style={[styles.iconWrap, { backgroundColor: destination.key === 'plan-catalog' ? theme.onPrimary : theme.primary }]}>
                             <MaterialCommunityIcons
                                 name={destination.icon}
                                 size={23}
-                                color={theme.primaryText}
+                                color={destination.key === 'plan-catalog' ? theme.primary : theme.onPrimary}
                             />
                         </View>
                         <View style={styles.copy}>

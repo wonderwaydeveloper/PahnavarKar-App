@@ -19,6 +19,7 @@ export function CalculationDescriptionBox({ children }: CalculationDescriptionBo
                 {
                     backgroundColor: theme.surfaceVariant,
                     borderColor: theme.border,
+                    shadowColor: theme.shadow,
                 },
             ]}
         >
@@ -45,6 +46,7 @@ export function CalculationResultHeading({ topRadius = Radius.md }: CalculationR
                 {
                     backgroundColor: theme.surfaceVariant,
                     borderColor: theme.border,
+                    shadowColor: theme.shadow,
                 },
             ]}
         >
@@ -68,7 +70,6 @@ const styles = StyleSheet.create({
         marginHorizontal: -Spacing.three,
         paddingHorizontal: Spacing.three,
         paddingVertical: Spacing.two,
-        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.12,
         shadowRadius: 3,
@@ -82,7 +83,6 @@ const styles = StyleSheet.create({
         marginHorizontal: -Spacing.two,
         paddingHorizontal: Spacing.two,
         paddingVertical: Spacing.two,
-        shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.12,
         shadowRadius: 3,

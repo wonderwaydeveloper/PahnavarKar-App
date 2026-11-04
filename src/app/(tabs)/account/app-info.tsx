@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -48,8 +49,8 @@ export default function AppInfoScreen() {
                                 { borderTopColor: theme.border },
                             ]}
                         >
-                            <View style={[styles.infoIcon, { backgroundColor: theme.primaryContainer }]}>
-                                <MaterialCommunityIcons name={item.icon} size={19} color={theme.primaryText} />
+                            <View style={[styles.infoIcon, { backgroundColor: theme.primary }]}>
+                                <MaterialCommunityIcons name={item.icon} size={19} color={theme.onPrimary} />
                             </View>
                             <View style={styles.infoCopy}>
                                 <ThemedText type="small" style={{ color: theme.textSecondary }}>
@@ -83,7 +84,7 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         marginBottom: Spacing.one,
     },
-    introDescription: { lineHeight: 20, textAlign: 'center' },
+    introDescription: { lineHeight: Typography.lineHeight.body, textAlign: 'center' },
     infoCard: {
         borderWidth: 1,
         borderRadius: Radius.lg,

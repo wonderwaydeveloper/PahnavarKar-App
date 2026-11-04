@@ -9,25 +9,28 @@ import {
 } from 'react-native';
 
 import { useAppContext } from '@/hooks/use-app-context';
+import { Typography } from '@/constants/typography';
 import { getAppFontStyle } from '@/services/font-service';
 
 export const AppText = forwardRef<TextInstance, TextProps>(function AppText({ style, ...props }, ref) {
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
+    const textStyle = [{ fontSize: Typography.fontSize.bodySmall }, style];
 
-    return <Text ref={ref} {...props} style={getAppFontStyle(style, fontPreference, 'Regular')} />;
+    return <Text ref={ref} {...props} style={getAppFontStyle(textStyle, fontPreference, 'Regular', fontSizePreference)} />;
 });
 
 export const AppTextInput = forwardRef<TextInputInstance, TextInputProps>(function AppTextInput(
     { style, ...props },
     ref
 ) {
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
+    const inputStyle = [{ fontSize: Typography.fontSize.bodySmall }, style];
 
     return (
         <TextInput
             ref={ref}
             {...props}
-            style={getAppFontStyle(style, fontPreference, 'Regular')}
+            style={getAppFontStyle(inputStyle, fontPreference, 'Regular', fontSizePreference)}
         />
     );
 });

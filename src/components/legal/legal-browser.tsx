@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -37,7 +38,7 @@ export function LegalScreen({ loading, error, onRetry, children }: LegalScreenPr
                             onPress={onRetry}
                             style={({ pressed }) => [
                                 styles.retryButton,
-                                { backgroundColor: pressed ? theme.surfaceVariant : theme.primaryContainer },
+                                { backgroundColor: pressed ? theme.surfaceVariant : theme.primary },
                             ]}
                         >
                             <ThemedText type="smallBold" style={{ color: theme.primaryText }}>تلاش دوباره</ThemedText>
@@ -69,19 +70,19 @@ export function LegalListRow({ title, subtitle, icon, onPress, trailingLabel }: 
                 { backgroundColor: pressed ? theme.surfaceVariant : theme.surface },
             ]}
         >
-            <View style={[styles.rowIcon, { backgroundColor: theme.primaryContainer }]}>
-                <MaterialCommunityIcons name={icon} size={22} color={theme.primaryText} />
+            <View style={[styles.rowIcon, { backgroundColor: theme.primary }]}>
+                <MaterialCommunityIcons name={icon} size={22} color={theme.onPrimary} />
             </View>
             <View style={styles.rowText}>
                 <ThemedText type="smallBold" style={{ color: theme.text }}>{title}</ThemedText>
                 {subtitle ? (
-                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19 }}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                         {subtitle}
                     </ThemedText>
                 ) : null}
             </View>
             {trailingLabel ? (
-                <ThemedText type="small" style={{ color: theme.textMuted, fontSize: 12 }}>{trailingLabel}</ThemedText>
+                <ThemedText type="small" style={{ color: theme.textMuted, fontSize: Typography.fontSize.footnote }}>{trailingLabel}</ThemedText>
             ) : null}
             <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textMuted} />
         </Pressable>
@@ -116,9 +117,9 @@ export function LegalDescriptionCard({ children }: { children: ReactNode }) {
     const theme = useTheme();
 
     return (
-        <View style={[styles.descriptionCard, { backgroundColor: theme.primaryContainer, borderColor: theme.border }]}>
-            <MaterialCommunityIcons name="information-outline" size={20} color={theme.primaryText} />
-            <ThemedText type="small" style={{ color: theme.text, flex: 1 }}>
+        <View style={[styles.descriptionCard, { backgroundColor: theme.primary, borderColor: theme.border }]}>
+            <MaterialCommunityIcons name="information-outline" size={20} color={theme.onPrimary} />
+            <ThemedText type="small" style={{ color: theme.onPrimary, flex: 1 }}>
                 {children}
             </ThemedText>
         </View>

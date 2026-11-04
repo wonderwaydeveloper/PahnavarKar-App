@@ -1,7 +1,8 @@
 import { loadAsync } from 'expo-font';
-import { StyleSheet, type StyleProp, type TextStyle } from 'react-native';
+import { type StyleProp, type TextStyle } from 'react-native';
 
 import { ColorPalettes, type ThemePalette } from '@/constants/theme';
+import { getScaledTextStyle, type FontSizePreference } from '@/constants/font-scale';
 import type { FontPreference, ThemeType } from '@/context/app.context';
 import { darkTheme, lightTheme } from '@/constants/themes';
 
@@ -88,9 +89,10 @@ export async function loadAppFonts(preference: FontPreference): Promise<void> {
 export function getAppFontStyle(
     style: StyleProp<TextStyle>,
     preference: FontPreference,
-    fallbackWeight?: AppFontWeight
+    fallbackWeight?: AppFontWeight,
+    fontSizePreference: FontSizePreference = 'standard',
 ): StyleProp<TextStyle> {
-    const flattenedStyle = StyleSheet.flatten(style);
+    const flattenedStyle = getScaledTextStyle(style, fontSizePreference);
     const currentWeight = getAppFontWeight(flattenedStyle?.fontFamily);
     const declaredWeight = Number(flattenedStyle?.fontWeight);
     const weightFromFontWeight = declaredWeight >= 700
@@ -114,7 +116,7 @@ export function getAppFontStyle(
         };
     }
 
-    if (!fontWeight) return style;
+    if (!fontWeight) return flattenedStyle ?? style;
 
     return {
         ...flattenedStyle,
@@ -127,6 +129,7 @@ export function getAppPaperTheme(
     theme: ThemeType,
     preference: FontPreference,
     palette: ThemePalette = 'default',
+    fontSizePreference: FontSizePreference = 'standard',
 ) {
     const baseTheme = theme === 'dark' ? darkTheme : lightTheme;
     const colors = ColorPalettes[palette][theme];
@@ -135,39 +138,45 @@ export function getAppPaperTheme(
         primary: colors.primary,
         onPrimary: colors.onPrimary,
         primaryContainer: colors.primaryContainer,
-        onPrimaryContainer: palette === 'default'
-            ? theme === 'dark' ? '#E0F7FA' : '#002528'
-            : colors.text,
+        onPrimaryContainer: colors.onPrimaryContainer,
         secondary: colors.secondary,
         onSecondary: colors.onSecondary,
-        secondaryContainer: palette === 'default'
-            ? baseTheme.colors.secondaryContainer
-            : colors.primaryContainer,
-        onSecondaryContainer: palette === 'default'
-            ? baseTheme.colors.onSecondaryContainer
-            : colors.text,
+        secondaryContainer: colors.secondaryContainer,
+        onSecondaryContainer: colors.onSecondaryContainer,
+        tertiary: colors.tertiary,
+        onTertiary: colors.onTertiary,
+        tertiaryContainer: colors.tertiaryContainer,
+        onTertiaryContainer: colors.onTertiaryContainer,
         background: colors.background,
+        onBackground: colors.text,
         surface: colors.surface,
+        onSurface: colors.text,
         surfaceVariant: colors.surfaceVariant,
+        onSurfaceVariant: colors.textSecondary,
+        surfaceDim: colors.surfaceDim,
+        surfaceBright: colors.surfaceBright,
+        surfaceContainerLowest: colors.surfaceContainerLowest,
+        surfaceContainerLow: colors.surfaceContainerLow,
         surfaceContainer: colors.surfaceElevated,
+        surfaceContainerHigh: colors.surfaceContainerHigh,
+        surfaceContainerHighest: colors.surfaceContainerHighest,
         outline: colors.borderStrong,
         outlineVariant: colors.border,
         error: colors.error,
-        ...(palette !== 'default' && {
-            onBackground: colors.text,
-            onSurface: colors.text,
-            onSurfaceVariant: colors.textSecondary,
-            surfaceTint: colors.primary,
-            inversePrimary: colors.primary,
-            surfaceContainerLowest: colors.surface,
-            surfaceContainerLow: colors.surface,
-            surfaceContainerHigh: colors.surfaceElevated,
-            surfaceContainerHighest: colors.surfaceVariant,
-            backdrop: colors.overlay,
-        }),
+        onError: colors.onError,
+        errorContainer: colors.errorFill,
+        onErrorContainer: colors.onErrorFill,
+        inverseSurface: colors.inverseSurface,
+        inverseOnSurface: colors.inverseOnSurface,
+        inversePrimary: colors.inversePrimary,
+        surfaceTint: colors.surfaceTint,
+        shadow: colors.shadow,
+        scrim: colors.scrim,
+        backdrop: colors.overlay,
     };
     const fonts = Object.fromEntries(
-        Object.entries(baseTheme.fonts).map(([variant, font]) => {
+        Object.entries(baseTheme.fonts).map(([variant, baseFont]) => {
+            const font = getScaledTextStyle(baseFont, fontSizePreference) ?? baseFont;
             const weight = getAppFontWeight(font.fontFamily);
             return [
                 variant,

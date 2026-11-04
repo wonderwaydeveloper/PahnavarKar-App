@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -87,8 +88,16 @@ function PeriodCardLocal({
   };
 
   const getCompactTextStyle = (text: string, isValue = false, isTitle = false) => ({
-    fontSize: isTitle ? 13 : isValue ? 12 : 10,
-    lineHeight: isTitle ? 19 : isValue ? 18 : 16,
+    fontSize: isTitle
+      ? Typography.fontSize.compact
+      : isValue
+        ? Typography.fontSize.footnote
+        : Typography.fontSize.tiny,
+    lineHeight: isTitle
+      ? Typography.lineHeight.bodyCompact
+      : isValue
+        ? Typography.lineHeight.caption
+        : Typography.lineHeight.tight,
     textAlign: 'center' as const,
     fontFamily: isTitle || isValue ? 'AppFont-Bold' : 'AppFont-Medium',
   });
@@ -202,7 +211,7 @@ function PeriodCardLocal({
                 style={({ pressed }) => [
                   styles.nestedToggleButton,
                   {
-                    backgroundColor: pressed ? theme.primaryContainer : theme.primary,
+                    backgroundColor: pressed ? theme.primary : theme.primary,
                   },
                 ]}
               >
@@ -211,9 +220,9 @@ function PeriodCardLocal({
                     <MaterialCommunityIcons
                       name={seniorityGroupExpanded ? 'chevron-up' : 'chevron-down'}
                       size={16}
-                      color={pressed ? theme.primaryText : theme.onPrimary}
+                      color={theme.onPrimary}
                     />
-                    <ThemedText style={[styles.nestedToggleLabel, { color: pressed ? theme.primaryText : theme.onPrimary }]}>
+                    <ThemedText style={[styles.nestedToggleLabel, { color: theme.onPrimary }]}>
                       {seniorityGroupExpanded ? 'عدم نمایش' : 'نمایش جزئیات'}
                     </ThemedText>
                   </>
@@ -385,7 +394,7 @@ function PeriodCardLocal({
           style={({ pressed }) => [
             styles.actionButton,
             {
-              backgroundColor: pressed ? theme.primaryContainer : theme.primary,
+              backgroundColor: pressed ? theme.primary : theme.primary,
             },
           ]}
         >
@@ -394,9 +403,9 @@ function PeriodCardLocal({
               <MaterialCommunityIcons
                 name={isExpanded ? 'chevron-up' : 'chevron-down'}
                 size={18}
-                color={pressed ? theme.primaryText : theme.onPrimary}
+                color={theme.onPrimary}
               />
-              <ThemedText style={[styles.buttonLabel, { color: pressed ? theme.primaryText : theme.onPrimary }]}>
+              <ThemedText style={[styles.buttonLabel, { color: theme.onPrimary }]}>
                 {isExpanded ? 'عدم نمایش' : 'نمایش جزئیات'}
               </ThemedText>
             </>
@@ -622,8 +631,8 @@ export default function YearlyInfoScreen() {
               ) : periods.length === 0 ? (
                 <Card style={[styles.emptyStateCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                   <Card.Content style={styles.emptyStateContent}>
-                    <View style={[styles.emptyStateIcon, { backgroundColor: theme.primaryContainer }]}>
-                      <MaterialCommunityIcons name="calendar-blank" size={24} color={theme.primaryText} />
+                    <View style={[styles.emptyStateIcon, { backgroundColor: theme.primary }]}>
+                      <MaterialCommunityIcons name="calendar-blank" size={24} color={theme.onPrimary} />
                     </View>
                     <ThemedText type="smallBold" style={styles.emptyText}>برای این سال دوره‌ای ثبت نشده است</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary" style={styles.emptySubText}>
@@ -676,8 +685,8 @@ const styles = StyleSheet.create({
   },
   periodsSectionTitle: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: Typography.fontSize.bodySmall,
+    lineHeight: Typography.lineHeight.body,
     marginBottom: Spacing.two,
   },
   periodsGrid: {
@@ -724,13 +733,13 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: Typography.fontSize.bodyLarge,
+    lineHeight: Typography.lineHeight.label,
   },
   pageDescription: {
     fontFamily: 'AppFont-Regular',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.fontSize.footnote,
+    lineHeight: Typography.lineHeight.caption,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -744,8 +753,8 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   sectionLabel: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.fontSize.footnote,
+    lineHeight: Typography.lineHeight.caption,
     fontFamily: 'AppFont-Medium',
   },
   metricContent: {
@@ -755,8 +764,8 @@ const styles = StyleSheet.create({
   },
   fieldValue: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.fontSize.compact,
+    lineHeight: Typography.lineHeight.bodyCompact,
   },
   actionButton: {
     flexDirection: 'row',
@@ -769,8 +778,8 @@ const styles = StyleSheet.create({
   },
   buttonLabel: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.fontSize.compact,
+    lineHeight: Typography.lineHeight.bodyCompact,
   },
   expandedSection: {
     marginTop: Spacing.one,
@@ -814,16 +823,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
     textAlign: 'center',
     alignSelf: 'center',
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: Typography.fontSize.tiny,
+    lineHeight: Typography.lineHeight.tight,
     fontFamily: 'AppFont-Medium',
   },
   detailRowValue: {
     width: '100%',
     textAlign: 'center',
     alignSelf: 'center',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.fontSize.footnote,
+    lineHeight: Typography.lineHeight.caption,
     fontFamily: 'AppFont-Bold',
   },
   nestedToggleButton: {
@@ -838,8 +847,8 @@ const styles = StyleSheet.create({
   },
   nestedToggleLabel: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: Typography.fontSize.caption,
+    lineHeight: Typography.lineHeight.tight,
   },
   formulaValue: {
     direction: 'ltr',
@@ -863,8 +872,8 @@ const styles = StyleSheet.create({
   detailGroupTitle: {
     width: '100%',
     textAlign: 'center',
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: Typography.fontSize.tiny,
+    lineHeight: Typography.lineHeight.tight,
     fontWeight: '700',
     fontFamily: 'AppFont-Bold',
   },
@@ -886,16 +895,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
     textAlign: 'center',
     alignSelf: 'center',
-    fontSize: 10,
-    lineHeight: 16,
+    fontSize: Typography.fontSize.tiny,
+    lineHeight: Typography.lineHeight.tight,
     fontFamily: 'AppFont-Medium',
   },
   detailGroupItemValue: {
     width: '100%',
     textAlign: 'center',
     alignSelf: 'center',
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: Typography.fontSize.caption,
+    lineHeight: Typography.lineHeight.inputCompact,
     fontFamily: 'AppFont-Bold',
   },
 });

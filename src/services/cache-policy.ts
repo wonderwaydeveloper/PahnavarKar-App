@@ -1,8 +1,7 @@
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
-const OFFLINE_ACCESS_GRACE_PERIOD = 48 * HOUR;
+const DAY = 24 * 60 * MINUTE;
+const OFFLINE_ACCESS_GRACE_PERIOD = 30 * DAY;
 
 export const CACHE_POLICY = {
     query: {
@@ -30,12 +29,12 @@ export const CACHE_POLICY = {
             walletOverview: {
                 namespace: 'account-wallet-v1',
                 key: 'overview',
-                maxAgeMs: DAY,
+                maxAgeMs: 30 * DAY,
             },
             walletPendingTopUp: {
                 namespace: 'account-wallet-v1',
                 key: 'pending-top-up',
-                maxAgeMs: DAY,
+                maxAgeMs: 30 * DAY,
             },
             planCatalog: {
                 namespace: 'subscription-catalog-v1',
@@ -45,12 +44,12 @@ export const CACHE_POLICY = {
             currentPlan: {
                 namespace: 'subscription-account-v1',
                 key: 'current-plan',
-                maxAgeMs: DAY,
+                maxAgeMs: 30 * DAY,
             },
             pendingSubscriptionOrder: {
                 namespace: 'subscription-catalog-v1',
                 key: 'pending-order',
-                maxAgeMs: DAY,
+                maxAgeMs: 30 * DAY,
             },
             financialHistory: {
                 namespace: 'financial-history-v1',

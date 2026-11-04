@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -96,12 +97,12 @@ export function PersianTimePickerModal({
 
     return (
         <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-            <Pressable style={styles.overlay} onPress={onClose}>
+            <Pressable style={[styles.overlay, { backgroundColor: theme.overlay }]} onPress={onClose}>
                 <Pressable
                     style={[styles.modalContent, { backgroundColor: theme.surfaceElevated, paddingBottom: Spacing.three + insets.bottom }]}
                     onPress={(event) => event.stopPropagation()}
                 >
-                    <View style={styles.handle} />
+                    <View style={[styles.handle, { backgroundColor: theme.borderStrong }]} />
 
                     <View style={styles.header}>
                         <View style={styles.headerTextBlock}>
@@ -146,7 +147,7 @@ export function PersianTimePickerModal({
                                             <ThemedText
                                                 type="smallBold"
                                                 style={{
-                                                    color: isSelected ? theme.surface : theme.text,
+                                                    color: isSelected ? theme.onPrimary : theme.text,
                                                 }}
                                             >
                                                 {formatPersianNumber(option)}
@@ -185,7 +186,7 @@ export function PersianTimePickerModal({
                                             <ThemedText
                                                 type="smallBold"
                                                 style={{
-                                                    color: isSelected ? theme.surface : theme.text,
+                                                    color: isSelected ? theme.onPrimary : theme.text,
                                                 }}
                                             >
                                                 {formatPersianNumber(option)}
@@ -239,7 +240,6 @@ const styles = StyleSheet.create({
     overlay: {
         flex: 1,
         justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.4)',
     },
     modalContent: {
         borderTopLeftRadius: Radius.xl,
@@ -255,7 +255,6 @@ const styles = StyleSheet.create({
         width: 72,
         height: 5,
         borderRadius: 999,
-        backgroundColor: '#ccc',
         alignSelf: 'center',
         marginBottom: Spacing.three,
     },
@@ -271,7 +270,7 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     title: {
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
     },
     previewBox: {
         borderRadius: Radius.md,
@@ -282,10 +281,10 @@ const styles = StyleSheet.create({
         marginTop: Spacing.three,
     },
     previewLabel: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     previewValue: {
-        fontSize: 18,
+        fontSize: Typography.fontSize.subtitle,
         fontFamily: 'AppFont-Bold',
     },
     pickerRow: {
@@ -334,7 +333,7 @@ const styles = StyleSheet.create({
         borderRadius: Radius.md,
     },
     actionLabel: {
-        fontSize: 12,
-        lineHeight: 16,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.tight,
     },
 });

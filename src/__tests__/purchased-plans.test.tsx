@@ -7,6 +7,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useAuth } from '@/hooks/use-auth';
 import { useOnlineStatus } from '@/hooks/use-online-status';
+import { useTheme } from '@/hooks/use-theme';
 import {
     fetchCurrentPlan,
     fetchPlanCatalog,
@@ -44,30 +45,7 @@ jest.mock('@/hooks/use-app-feedback', () => ({ useAppFeedback: jest.fn() }));
 jest.mock('@/hooks/use-online-refetch', () => ({ useOnlineRefetch: jest.fn() }));
 jest.mock('@/hooks/use-online-status', () => ({ useOnlineStatus: jest.fn() }));
 jest.mock('@/hooks/use-plan-access', () => ({ usePlanAccess: () => ({ refresh: jest.fn() }) }));
-jest.mock('@/hooks/use-theme', () => ({
-    useTheme: () => ({
-        text: '#102A39',
-        textSecondary: '#4B6275',
-        textMuted: '#536B79',
-        background: '#EFF8FA',
-        surface: '#FFFFFF',
-        surfaceVariant: '#D9EFF2',
-        surfaceElevated: '#F5FBFC',
-        border: '#BBD9DE',
-        borderStrong: '#698D94',
-        primary: '#26C6DA',
-        primaryText: '#006B78',
-        onPrimary: '#00363F',
-        primaryContainer: '#D2F1F4',
-        secondary: '#2F6D8A',
-        onSecondary: '#FFFFFF',
-        success: '#18794E',
-        warning: '#8A5700',
-        error: '#B42318',
-        info: '#175CD3',
-        overlay: 'transparent',
-    }),
-}));
+jest.mock('@/hooks/use-theme', () => ({ useTheme: jest.fn() }));
 jest.mock('@/services/auth-api', () => ({
     AuthApiError: class AuthApiError extends Error {
         readonly code = null;
@@ -84,9 +62,9 @@ jest.mock('@/services/auth-api', () => ({
 }));
 jest.mock('@/services/account-offline-cache', () => ({
     ACCOUNT_OFFLINE_CACHE: {
-        currentPlan: { namespace: 'subscription-account-v1', key: 'current-plan', maxAgeMs: 86400000 },
+        currentPlan: { namespace: 'subscription-account-v1', key: 'current-plan', maxAgeMs: 2592000000 },
         planCatalog: { namespace: 'subscription-catalog-v1', key: 'catalog', maxAgeMs: 2592000000 },
-        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 86400000 },
+        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 2592000000 },
     },
     fetchWithOfflineFallback: jest.fn(async (_userId: number, _cache: unknown, fetcher: () => Promise<unknown>) => ({
         value: await fetcher(),
@@ -154,23 +132,53 @@ jest.mock('react-native-tab-view', () => {
                 jumpTo: (key: string) => void;
             }) => ReactNode;
         }) => {
-            const [index, setIndex] = React.useState(navigationState.index);
             const jumpTo = (key: string) => {
                 const nextIndex = navigationState.routes.findIndex((route) => route.key === key);
                 if (nextIndex < 0) return;
-                setIndex(nextIndex);
                 onIndexChange(nextIndex);
             };
-            const tabState = { ...navigationState, index };
             return React.createElement(
                 View,
                 null,
-                renderTabBar({ navigationState: tabState, jumpTo }),
-                renderScene({ route: navigationState.routes[index]! }),
+                renderTabBar({ navigationState, jumpTo }),
+                renderScene({ route: navigationState.routes[navigationState.index]! }),
             );
         },
     };
 });
+
+const lightThemeColors = {
+    text: '#102A39',
+    textSecondary: '#4B6275',
+    textMuted: '#536B79',
+    background: '#EFF8FA',
+    surface: '#FFFFFF',
+    surfaceVariant: '#D9EFF2',
+    surfaceElevated: '#F5FBFC',
+    border: '#BBD9DE',
+    borderStrong: '#698D94',
+    primary: '#26C6DA',
+    primaryText: '#006B78',
+    onPrimary: '#00363F',
+    primaryContainer: '#D2F1F4',
+    onPrimaryContainer: '#004F58',
+    secondary: '#2F6D8A',
+    onSecondary: '#FFFFFF',
+    success: '#18794E',
+    warning: '#8A5700',
+    warningFill: '#8A5700',
+    onWarning: '#FFFFFF',
+    error: '#B42318',
+    info: '#175CD3',
+    overlay: 'transparent',
+};
+const darkThemeColors = {
+    ...lightThemeColors,
+    primaryContainer: '#004F58',
+    onPrimaryContainer: '#D2F1F4',
+    success: '#4ADE80',
+    info: '#0096C7',
+};
 
 const user = {
     id: 7,
@@ -228,6 +236,7 @@ async function renderScreen() {
 beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(useAppContext).mockReturnValue({ theme: 'light' } as ReturnType<typeof useAppContext>);
+    jest.mocked(useTheme).mockReturnValue(lightThemeColors as ReturnType<typeof useTheme>);
     jest.mocked(useAuth).mockReturnValue({ user, isLoading: false } as ReturnType<typeof useAuth>);
     jest.mocked(useOnlineStatus).mockReturnValue(false);
     jest.mocked(useAppFeedback).mockReturnValue({
@@ -264,8 +273,28 @@ describe('PurchasedPlansScreen', () => {
     it('shows cached plans offline and disables subscription changes', async () => {
         const view = await renderScreen();
 
-        expect(await view.findByText(/اطلاعات اشتراک ذخیره‌شده/)).toBeTruthy();
-        expect(view.getByTestId('remaining-validity-progress').props.stroke).toBe('#31CB00');
+        expect(await view.findByText('اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود')).toBeTruthy();
+        expect(view.getByText(/وضعیت اشتراک · آخرین ذخیره‌سازی:/)).toBeTruthy();
+        expect(view.getByText(/نام و اطلاعات پلن‌ها · آخرین ذخیره‌سازی:/)).toBeTruthy();
+        expect(view.getByText(/نمایش پلن رزروشده به‌تنهایی مجوز استفاده از امکانات آن نیست/)).toBeTruthy();
+        expect(view.getByText('پایان دسترسی پلن فعلی')).toBeTruthy();
+        expect(view.getByText('روز مانده')).toBeTruthy();
+        expect(view.getByTestId('remaining-days-badge').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: lightThemeColors.primary })]),
+        );
+        expect(view.getByTestId('remaining-days-count').props.style).toEqual(
+            expect.objectContaining({ color: lightThemeColors.onPrimary }),
+        );
+        expect(view.getByText('روز مانده').props.style).toEqual(
+            expect.objectContaining({ color: lightThemeColors.onPrimary }),
+        );
+        expect(view.getByTestId('current-plan-icon').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: '#915B27' })]),
+        );
+        expect(view.getByTestId('remaining-validity-progress').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: lightThemeColors.primary })]),
+        );
+        expect(view.getByRole('progressbar', { name: /پایان دوره/ })).toBeTruthy();
         expect(view.queryByLabelText(/پیش‌نمایش رنگ/)).toBeNull();
         fireEvent.press(await view.findByRole('button', { name: /برنزی/ }));
 
@@ -277,14 +306,35 @@ describe('PurchasedPlansScreen', () => {
         expect(updateAutoRenew).not.toHaveBeenCalled();
     });
 
-    it('uses the selected light-color equivalents for the dark theme validity ring', async () => {
+    it('uses theme colors for validity progress and remaining days in the dark theme', async () => {
         jest.mocked(useAppContext).mockReturnValue({ theme: 'dark' } as ReturnType<typeof useAppContext>);
+        jest.mocked(useTheme).mockReturnValue(darkThemeColors as ReturnType<typeof useTheme>);
 
         const view = await renderScreen();
 
-        expect(await view.findByText(/اطلاعات اشتراک ذخیره‌شده/)).toBeTruthy();
-        expect(view.getByTestId('remaining-validity-progress').props.stroke).toBe('#4ADE80');
+        expect(await view.findByText('اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود')).toBeTruthy();
+        expect(view.getByTestId('remaining-validity-progress').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: darkThemeColors.primary })]),
+        );
+        expect(view.getByTestId('remaining-days-badge').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: darkThemeColors.primary })]),
+        );
+        expect(view.getByTestId('remaining-days-count').props.style).toEqual(
+            expect.objectContaining({ color: darkThemeColors.onPrimary }),
+        );
         expect(view.queryByLabelText(/پیش‌نمایش رنگ/)).toBeNull();
+    });
+
+    it('shows cached plan details when online fetches fall back to offline snapshots', async () => {
+        jest.mocked(useOnlineStatus).mockReturnValue(true);
+
+        const view = await renderScreen();
+
+        expect(await view.findByText('اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود')).toBeTruthy();
+        expect(view.getByText(/وضعیت اشتراک · آخرین ذخیره‌سازی:/)).toBeTruthy();
+        fireEvent.press(view.getByText('برنزی'));
+        const autoRenewSwitch = await view.findByLabelText('تمدید خودکار با کیف پول');
+        expect(autoRenewSwitch.props.disabled).toBe(true);
     });
 
     it('reports catalog errors without keeping the main screen loading', async () => {
@@ -296,7 +346,7 @@ describe('PurchasedPlansScreen', () => {
         expect(view.queryByText('در حال دریافت پلن‌ها…')).toBeNull();
     });
 
-    it('shows a plan-colored activation countdown with progress based on reservation time', async () => {
+    it('uses the theme primary color for the reserved activation countdown', async () => {
         const now = Date.now();
         const dayMs = 24 * 60 * 60 * 1000;
         const scheduledSubscription = {
@@ -320,15 +370,52 @@ describe('PurchasedPlansScreen', () => {
 
         expect(await view.findByText('زمان باقی‌مانده تا فعال‌سازی')).toBeTruthy();
         expect(view.getByTestId('scheduled-activation-progress').props.style).toEqual(
-            expect.arrayContaining([expect.objectContaining({ backgroundColor: '#00B4D8' })]),
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: lightThemeColors.primary })]),
+        );
+        expect(view.getByTestId('scheduled-plan-icon').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: '#6D6D6D' })]),
         );
         const progressBar = view.getByRole('progressbar', { name: /۲۰ روز/ });
         expect(progressBar.props.accessibilityValue.now).toBeGreaterThanOrEqual(66);
         expect(progressBar.props.accessibilityValue.now).toBeLessThanOrEqual(67);
     });
 
-    it('uses the selected blue for a scheduled plan in the dark theme', async () => {
+    it('shows the reserved plan as the next step from the current plan and opens its details', async () => {
+        const now = Date.now();
+        const scheduledSubscription = {
+            ...subscription,
+            id: 13,
+            plan_key: 'silver_month',
+            starts_at: new Date(now + 20 * 24 * 60 * 60 * 1000).toISOString(),
+            ends_at: new Date(now + 50 * 24 * 60 * 60 * 1000).toISOString(),
+            is_active: false,
+            reservation_created_at: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
+            refundable_amount: 120000,
+        };
+        jest.mocked(fetchCurrentPlan).mockResolvedValue({
+            ...currentPlan,
+            subscriptions: [subscription, scheduledSubscription],
+            scheduled_subscription: scheduledSubscription,
+        });
+
+        const view = await renderScreen();
+
+        const nextStep = await view.findByRole('button', { name: /جزئیات پلن رزروشدهٔ نقره‌ای/ });
+        expect(view.getByText('مرحلهٔ بعدی اشتراک')).toBeTruthy();
+        expect(view.getByTestId('scheduled-plan-preview-icon').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: '#6D6D6D' })]),
+        );
+        expect(view.getByText(/پس از پایان پلن فعلی · شروع/)).toBeTruthy();
+        expect(view.getByText(/این رزرو فقط برای مشاهده است و به‌تنهایی دسترسی یا مجوز آفلاین ایجاد نمی‌کند/)).toBeTruthy();
+
+        fireEvent.press(nextStep);
+
+        expect(await view.findByText('زمان باقی‌مانده تا فعال‌سازی')).toBeTruthy();
+    });
+
+    it('preserves the selected silver icon background in the dark theme', async () => {
         jest.mocked(useAppContext).mockReturnValue({ theme: 'dark' } as ReturnType<typeof useAppContext>);
+        jest.mocked(useTheme).mockReturnValue(darkThemeColors as ReturnType<typeof useTheme>);
         const now = Date.now();
         const scheduledSubscription = {
             ...subscription,
@@ -351,7 +438,10 @@ describe('PurchasedPlansScreen', () => {
 
         expect(await view.findByText('زمان باقی‌مانده تا فعال‌سازی')).toBeTruthy();
         expect(view.getByTestId('scheduled-activation-progress').props.style).toEqual(
-            expect.arrayContaining([expect.objectContaining({ backgroundColor: '#0096C7' })]),
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: darkThemeColors.primary })]),
+        );
+        expect(view.getByTestId('scheduled-plan-icon').props.style).toEqual(
+            expect.arrayContaining([expect.objectContaining({ backgroundColor: '#C4C4C4' })]),
         );
     });
 });

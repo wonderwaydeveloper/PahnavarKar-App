@@ -10,34 +10,34 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { getAppFontStyle } from '@/services/font-service';
 
 export function FontAwareButton(props: React.ComponentProps<typeof PaperButton>) {
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
 
     return (
         <PaperButton
             {...props}
-            labelStyle={getAppFontStyle(props.labelStyle, fontPreference)}
+            labelStyle={getAppFontStyle(props.labelStyle, fontPreference, undefined, fontSizePreference)}
         />
     );
 }
 
 export function FontAwareMenuItem(props: React.ComponentProps<typeof PaperMenu.Item>) {
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
 
     return (
         <PaperMenu.Item
             {...props}
-            titleStyle={getAppFontStyle(props.titleStyle, fontPreference)}
+            titleStyle={getAppFontStyle(props.titleStyle, fontPreference, undefined, fontSizePreference)}
         />
     );
 }
 
 export function FontAwarePaperTextInput(props: React.ComponentProps<typeof PaperTextInput>) {
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
 
     return (
         <PaperTextInput
             {...props}
-            contentStyle={getAppFontStyle(props.contentStyle, fontPreference)}
+            contentStyle={getAppFontStyle(props.contentStyle, fontPreference, undefined, fontSizePreference)}
         />
     );
 }
@@ -51,12 +51,12 @@ type FontAwareAppbarContentProps = Omit<
 };
 
 export function FontAwareAppbarContent(props: FontAwareAppbarContentProps) {
-    const { fontPreference } = useAppContext();
+    const { fontPreference, fontSizePreference } = useAppContext();
 
     return (
         <PaperAppbar.Content
             {...props}
-            titleStyle={getAppFontStyle(props.titleStyle, fontPreference)}
+            titleStyle={getAppFontStyle(props.titleStyle, fontPreference, undefined, fontSizePreference)}
         />
     );
 }

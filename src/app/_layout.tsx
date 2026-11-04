@@ -1,4 +1,6 @@
+import { Typography } from '@/constants/typography';
 import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router';
+import { Colors } from '@/constants/theme';
 import type { NotificationResponse } from 'expo-notifications';
 import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
@@ -124,7 +126,7 @@ function FontLoadedApp() {
 
   return (
     <>
-      <StatusBar barStyle={isLightTheme ? 'dark-content' : 'light-content'} />
+      <StatusBar barStyle="light-content" />
       <View
         pointerEvents="none"
         style={[styles.statusBarBackground, { height: insets.top, backgroundColor: headerBackgroundColor }]}
@@ -221,10 +223,7 @@ export default function RootLayout() {
 }
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
-  const isDark = useColorScheme() === 'dark';
-  const colors = isDark
-    ? { background: '#041E28', surface: '#082933', text: '#F4FAFF', secondary: '#B7D4E1', primary: '#4BD1E0', onPrimary: '#00363F', border: '#244A57' }
-    : { background: '#EFF8FA', surface: '#FFFFFF', text: '#102A39', secondary: '#4B6275', primary: '#26C6DA', onPrimary: '#00363F', border: '#BBD9DE' };
+  const colors = Colors[useColorScheme() === 'dark' ? 'dark' : 'light'];
 
   useEffect(() => {
     console.error('خطای پیش‌بینی‌نشده در مسیریابی برنامه رخ داد.', error);
@@ -234,7 +233,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     <View style={[errorStyles.container, { backgroundColor: colors.background }]}>
       <View style={[errorStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text accessibilityRole="header" style={[errorStyles.title, { color: colors.text }]}>صفحه بارگذاری نشد</Text>
-        <Text accessibilityRole="alert" style={[errorStyles.message, { color: colors.secondary }]}>
+        <Text accessibilityRole="alert" style={[errorStyles.message, { color: colors.textSecondary }]}>
           مشکلی پیش آمد. دوباره تلاش کنید؛ اگر مشکل ادامه داشت، برنامه را ببندید و دوباره باز کنید.
         </Text>
         <Pressable
@@ -252,10 +251,10 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 const errorStyles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24 },
   card: { alignItems: 'center', gap: 16, borderWidth: 1, borderRadius: 20, padding: 24 },
-  title: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
-  message: { fontSize: 15, lineHeight: 24, textAlign: 'center' },
+  title: { fontSize: Typography.fontSize.titleSmall, fontWeight: '700', textAlign: 'center' },
+  message: { fontSize: Typography.fontSize.body, lineHeight: Typography.lineHeight.comfortable, textAlign: 'center' },
   button: { minHeight: 48, minWidth: 170, alignItems: 'center', justifyContent: 'center', borderRadius: 12, paddingHorizontal: 20 },
-  buttonText: { fontSize: 15, fontWeight: '700' },
+  buttonText: { fontSize: Typography.fontSize.body, fontWeight: '700' },
 });
 
 const styles = StyleSheet.create({

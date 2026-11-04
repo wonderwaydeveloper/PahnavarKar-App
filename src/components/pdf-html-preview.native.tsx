@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { ActivityIndicator, Modal, Pressable, StatusBar, StyleSheet, View } from 'react-native';
 import { Appbar } from 'react-native-paper';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -5,7 +6,7 @@ import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { FontAwareAppbarContent } from '@/components/font-aware-paper';
-import { Spacing } from '@/constants/theme';
+import { PRODUCT_COLOR_TOKENS, Spacing } from '@/constants/theme';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ThemedText } from '@/components/themed-text';
 
@@ -118,7 +119,7 @@ function PdfHtmlPreviewContent({
         <>
             <StatusBar
                 hidden={false}
-                barStyle={isLightTheme ? 'dark-content' : 'light-content'}
+                barStyle="light-content"
             />
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={{ height: insets.top, backgroundColor: headerBackgroundColor }} />
@@ -171,7 +172,7 @@ function PdfHtmlPreviewContent({
                                 originWhitelist={['*']}
                                 source={{ html: previewHtml ?? '' }}
                                 style={styles.webView}
-                                backgroundColor="#FFFFFF"
+                                backgroundColor={PRODUCT_COLOR_TOKENS.pdfCanvas}
                                 javaScriptEnabled={false}
                                 domStorageEnabled={false}
                                 setSupportMultipleWindows={false}
@@ -220,10 +221,10 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 4 },
     },
     appBarAction: { width: 40, marginHorizontal: 0 },
-    appBarTitle: { fontFamily: 'AppFont-Bold', fontSize: 14, lineHeight: 22 },
+    appBarTitle: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall, lineHeight: Typography.lineHeight.label },
     content: { flex: 1, paddingHorizontal: Spacing.three, gap: Spacing.two },
     previewFrame: { flex: 1, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderRadius: 10 },
-    webView: { flex: 1, backgroundColor: '#FFFFFF' },
+    webView: { flex: 1, backgroundColor: PRODUCT_COLOR_TOKENS.pdfCanvas },
     actions: { flexDirection: 'row', gap: Spacing.two },
     actionItem: { flex: 1, minWidth: 0 },
     actionButton: { minHeight: 48, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', paddingHorizontal: Spacing.one },

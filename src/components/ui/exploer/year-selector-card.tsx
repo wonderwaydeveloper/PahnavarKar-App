@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Card } from 'react-native-paper';
@@ -76,7 +77,7 @@ export function YearSelectorCard({
             style={({ pressed }) => [
               styles.actionButton,
               {
-                backgroundColor: pressed ? theme.primaryContainer : theme.primary,
+                backgroundColor: pressed ? theme.primary : theme.primary,
               },
             ]}
           >
@@ -85,9 +86,9 @@ export function YearSelectorCard({
                 <MaterialCommunityIcons
                   name="calendar-month-outline"
                   size={18}
-                  color={pressed ? theme.primaryText : theme.onPrimary}
+                  color={theme.onPrimary}
                 />
-                <ThemedText style={[styles.buttonLabel, { color: pressed ? theme.primaryText : theme.onPrimary }]}>
+                <ThemedText style={[styles.buttonLabel, { color: theme.onPrimary }]}>
                   انتخاب سال
                 </ThemedText>
               </>
@@ -97,9 +98,9 @@ export function YearSelectorCard({
       </Card>
 
       <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-        <Pressable style={styles.yearPickerOverlay} onPress={onClose}>
+        <Pressable style={[styles.yearPickerOverlay, { backgroundColor: theme.overlay }]} onPress={onClose}>
           <Pressable style={[styles.yearPickerModal, { backgroundColor: theme.surfaceElevated, paddingBottom: Spacing.three + insets.bottom }]}>
-            <View style={styles.yearPickerHandle} />
+            <View style={[styles.yearPickerHandle, { backgroundColor: theme.borderStrong }]} />
             <View style={styles.yearPickerHeader}>
               <View style={styles.yearPickerHeaderTextBlock}>
                 <ThemedText type="smallBold" style={styles.yearPickerTitle}>انتخاب سال</ThemedText>
@@ -123,7 +124,7 @@ export function YearSelectorCard({
                     style={[
                       styles.yearPickerItem,
                       {
-                        backgroundColor: isSelected ? theme.primaryContainer : theme.surface,
+                        backgroundColor: isSelected ? theme.primary : theme.surface,
                         borderColor: isSelected ? theme.primary : theme.border,
                       },
                     ]}
@@ -131,12 +132,12 @@ export function YearSelectorCard({
                     <View style={styles.yearPickerItemContent}>
                       <ThemedText
                         type="labelBold"
-                        style={{ color: isSelected ? theme.primaryText : theme.text }}
+                        style={{ color: isSelected ? theme.onPrimary : theme.text }}
                       >
                         {formatYear(year.year)}
                       </ThemedText>
                       {isSelected ? (
-                        <MaterialCommunityIcons name="check-circle" size={18} color={theme.primaryText} />
+                        <MaterialCommunityIcons name="check-circle" size={18} color={theme.onPrimary} />
                       ) : (
                         <MaterialCommunityIcons name="circle-outline" size={18} color={theme.textSecondary} />
                       )}
@@ -175,13 +176,13 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: Typography.fontSize.bodyLarge,
+    lineHeight: Typography.lineHeight.label,
   },
   pageDescription: {
     fontFamily: 'AppFont-Regular',
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.fontSize.footnote,
+    lineHeight: Typography.lineHeight.caption,
   },
   metricsRow: {
     flexDirection: 'row',
@@ -195,8 +196,8 @@ const styles = StyleSheet.create({
     gap: Spacing.one,
   },
   sectionLabel: {
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: Typography.fontSize.footnote,
+    lineHeight: Typography.lineHeight.caption,
     fontFamily: 'AppFont-Medium',
   },
   metricContent: {
@@ -206,8 +207,8 @@ const styles = StyleSheet.create({
   },
   fieldValue: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.fontSize.compact,
+    lineHeight: Typography.lineHeight.bodyCompact,
   },
   actionButton: {
     flexDirection: 'row',
@@ -220,13 +221,12 @@ const styles = StyleSheet.create({
   },
   buttonLabel: {
     fontFamily: 'AppFont-Bold',
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: Typography.fontSize.compact,
+    lineHeight: Typography.lineHeight.bodyCompact,
   },
   yearPickerOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   yearPickerModal: {
     borderTopLeftRadius: Radius.xl,
@@ -239,7 +239,6 @@ const styles = StyleSheet.create({
     width: 72,
     height: 5,
     borderRadius: 999,
-    backgroundColor: '#ccc',
     alignSelf: 'center',
     marginBottom: Spacing.three,
   },
@@ -254,7 +253,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   yearPickerTitle: {
-    fontSize: 16,
+    fontSize: Typography.fontSize.bodyLarge,
     fontWeight: '600',
   },
   yearPickerList: {

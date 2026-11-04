@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { useState } from 'react';
 import { StyleSheet, View, type TextInputProps } from 'react-native';
 
@@ -82,7 +83,7 @@ const styles = StyleSheet.create({
         minWidth: 0,
         minHeight: 48,
         paddingVertical: 0,
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
         textAlign: 'center',
         writingDirection: 'ltr',
     },

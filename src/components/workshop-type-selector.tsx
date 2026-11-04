@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -75,8 +76,8 @@ const styles = StyleSheet.create({
         borderWidth: StyleSheet.hairlineWidth,
     },
     title: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
         fontFamily: 'AppFont-Medium',
     },
     optionsRow: {
@@ -99,8 +100,8 @@ const styles = StyleSheet.create({
     optionLabel: {
         flexShrink: 1,
         fontFamily: 'AppFont-Bold',
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
         textAlign: 'center',
     },
 });

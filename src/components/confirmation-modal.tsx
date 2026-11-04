@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Modal, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
@@ -43,7 +44,7 @@ export function ConfirmationModal({
             transparent
             visible={visible}
         >
-            <View style={styles.overlay}>
+            <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
                 <Pressable
                     accessibilityLabel="بستن پنجرهٔ تأیید"
                     accessibilityRole="button"
@@ -63,8 +64,8 @@ export function ConfirmationModal({
                     ]}
                 >
                     <View style={styles.header}>
-                        <View style={[styles.iconWrap, { backgroundColor: theme.primaryContainer }]}>
-                            <MaterialCommunityIcons name={icon} size={24} color={actionColor} />
+                        <View style={[styles.iconWrap, { backgroundColor: theme.primary }]}>
+                            <MaterialCommunityIcons name={icon} size={24} color={actionTextColor} />
                         </View>
                         <ThemedText type="largeTitle" style={styles.title}>{title}</ThemedText>
                     </View>
@@ -131,7 +132,6 @@ export function ConfirmationModal({
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.52)',
         alignItems: 'center',
         justifyContent: 'center',
         padding: Spacing.four,
@@ -170,11 +170,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     title: { textAlign: 'center' },
-    message: { textAlign: 'center', lineHeight: 24 },
+    message: { textAlign: 'center', lineHeight: Typography.lineHeight.comfortable },
     messageItems: { width: '100%', gap: Spacing.two },
     messageItem: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
     messageItemBullet: { width: 6, height: 6, borderRadius: 3, marginTop: 9 },
-    messageItemText: { flex: 1, lineHeight: 24, textAlign: 'auto' },
+    messageItemText: { flex: 1, lineHeight: Typography.lineHeight.comfortable, textAlign: 'auto' },
     actions: { width: '100%', flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.two },
     button: {
         flex: 1,

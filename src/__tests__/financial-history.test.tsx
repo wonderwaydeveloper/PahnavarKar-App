@@ -99,6 +99,8 @@ jest.mock('@/hooks/use-theme', () => ({
         primaryContainer: '#D2F1F4',
         success: '#18794E',
         warning: '#8A5700',
+        warningFill: '#8A5700',
+        onWarning: '#FFFFFF',
         error: '#B42318',
     }),
 }));
@@ -156,6 +158,32 @@ afterEach(() => {
 });
 
 describe('financial history tabs', () => {
+    it('shows the saved history notice with the latest cached page timestamp', async () => {
+        const savedAt = Date.now() - 60_000;
+        queryClient.setQueryData(
+            ['financial-history', user.id, 'transactions', null, null],
+            {
+                pages: [{
+                    data: [],
+                    meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 },
+                    offlineCacheSavedAt: savedAt,
+                }],
+                pageParams: [1],
+            },
+        );
+
+        const view = await render(
+            <QueryClientProvider client={queryClient}>
+                <FinancialHistoryScreen />
+            </QueryClientProvider>,
+        );
+
+        expect(await view.findByText('نسخهٔ ذخیره‌شدهٔ تاریخچه نمایش داده می‌شود')).toBeTruthy();
+        expect(view.getByText(new RegExp(
+            `این زبانه · آخرین ذخیره‌سازی: ${new Date(savedAt).toLocaleString('fa-IR')}`,
+        ))).toBeTruthy();
+    });
+
     it('renders the corresponding error card in each tab', async () => {
         const view = await render(
             <QueryClientProvider client={queryClient}>

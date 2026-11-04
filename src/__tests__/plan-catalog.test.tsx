@@ -50,12 +50,12 @@ jest.mock('expo-linking', () => ({
 
 jest.mock('@/services/account-offline-cache', () => ({
     ACCOUNT_OFFLINE_CACHE: {
-        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 86400000 },
+        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 2592000000 },
         planCatalog: { namespace: 'subscription-catalog-v1', key: 'catalog', maxAgeMs: 2592000000 },
         pendingSubscriptionOrder: {
             namespace: 'subscription-catalog-v1',
             key: 'pending-order',
-            maxAgeMs: 86400000,
+            maxAgeMs: 2592000000,
         },
     },
     fetchWithOfflineFallback: jest.fn(async (_userId: number, _cache: unknown, fetcher: () => Promise<unknown>) => ({
@@ -233,6 +233,7 @@ const appContext: AppContextType = {
     themePreference: 'light',
     colorPalette: 'default',
     fontPreference: 'system',
+    fontSizePreference: 'standard',
     fontError: null,
     currencyPreference: 'toman',
     currencyError: null,
@@ -245,6 +246,7 @@ const appContext: AppContextType = {
     setTheme: async () => {},
     setColorPalette: async () => {},
     setFontPreference: async () => {},
+    setFontSizePreference: async () => {},
     setCurrencyPreference: async () => {},
     setCalculationSound: async () => {},
     notifyCalculationCompleted: () => {},
@@ -324,13 +326,23 @@ function deferred<T>() {
     return { promise, resolve };
 }
 
-async function renderScreen() {
+async function renderScreen(offlineSavedAt: {
+    catalog?: number;
+    wallet?: number;
+    pendingOrder?: number;
+} = {}) {
     const queryClient = new QueryClient({
         defaultOptions: { queries: { retry: false, gcTime: 0 } },
     });
-    queryClient.setQueryData(['plan-catalog'], catalog);
-    queryClient.setQueryData(['wallet-overview', user.id], wallet);
-    queryClient.setQueryData(['pending-subscription-order', user.id], { order: null, payments: [] });
+    queryClient.setQueryData(['plan-catalog'], offlineSavedAt.catalog === undefined
+        ? catalog
+        : { ...catalog, offlineCacheSavedAt: offlineSavedAt.catalog });
+    queryClient.setQueryData(['wallet-overview', user.id], offlineSavedAt.wallet === undefined
+        ? wallet
+        : { ...wallet, offlineCacheSavedAt: offlineSavedAt.wallet });
+    queryClient.setQueryData(['pending-subscription-order', user.id], offlineSavedAt.pendingOrder === undefined
+        ? { order: null, payments: [] }
+        : { order: null, payments: [], offlineCacheSavedAt: offlineSavedAt.pendingOrder });
 
     return render(
         <QueryClientProvider client={queryClient}>
@@ -361,6 +373,26 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('PlanCatalogScreen', () => {
+    it('shows which cached purchase data is stale and prevents requesting a live quote', async () => {
+        const catalogSavedAt = Date.now() - 60_000;
+        const walletSavedAt = Date.now() - 120_000;
+        const view = await renderScreen({ catalog: catalogSavedAt, wallet: walletSavedAt });
+
+        expect(await view.findByText('اطلاعات خرید به‌صورت زنده تأیید نشده است')).toBeTruthy();
+        expect(view.getByText(new RegExp(
+            `کاتالوگ پلن‌ها · آخرین ذخیره‌سازی: ${new Date(catalogSavedAt).toLocaleString('fa-IR')}`,
+        ))).toBeTruthy();
+        expect(view.getByText(new RegExp(
+            `موجودی کیف پول · آخرین ذخیره‌سازی: ${new Date(walletSavedAt).toLocaleString('fa-IR')}`,
+        ))).toBeTruthy();
+        expect(view.getByText(/قیمت‌گیری نهایی، بررسی سفارش و خرید پس از اتصال/)).toBeTruthy();
+
+        const quoteButton = view.getByRole('button', { name: 'محاسبه مبلغ نهایی' });
+        expect(quoteButton.props.accessibilityState?.disabled).toBe(true);
+        await fireEvent.press(quoteButton);
+        expect(quoteSubscription).not.toHaveBeenCalled();
+    });
+
     it('shows plan features as a timeline with a title and description', async () => {
         const view = await renderScreen();
 

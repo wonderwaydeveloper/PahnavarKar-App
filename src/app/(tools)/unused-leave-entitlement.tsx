@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toGregorian, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -330,13 +331,15 @@ export default function UnusedLeaveEntitlementScreen() {
                                         disabled={Number(initialSavedLeaveDays.replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) <= 0}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                             Number(initialSavedLeaveDays.replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) <= 0 && styles.stepperButtonDisabled,
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش ذخیره مرخصی سال‌های قبل"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                     <NumericInputField
                                         mode="decimal"
@@ -352,12 +355,14 @@ export default function UnusedLeaveEntitlementScreen() {
                                         onPress={() => changeInitialSavedLeaveDays(1)}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش ذخیره مرخصی سال‌های قبل"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                 </View>
                             </View>
@@ -378,13 +383,15 @@ export default function UnusedLeaveEntitlementScreen() {
                                                         disabled={Number(String(usedLeaveDaysBySegment[index] ?? '0').replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) <= 0}
                                                         style={({ pressed }) => [
                                                             styles.stepperButton,
-                                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                             Number(String(usedLeaveDaysBySegment[index] ?? '0').replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) <= 0 && styles.stepperButtonDisabled,
                                                         ]}
                                                         accessibilityRole="button"
                                                         accessibilityLabel="کاهش مرخصی استفاده‌شده"
                                                     >
-                                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                        {({ pressed }) => (
+                                                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                        )}
                                                     </Pressable>
                                                     <NumericInputField
                                                         mode="decimal"
@@ -400,12 +407,14 @@ export default function UnusedLeaveEntitlementScreen() {
                                                         onPress={() => changeUsedLeaveDays(index, 1)}
                                                         style={({ pressed }) => [
                                                             styles.stepperButton,
-                                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                         ]}
                                                         accessibilityRole="button"
                                                         accessibilityLabel="افزایش مرخصی استفاده‌شده"
                                                     >
-                                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                        {({ pressed }) => (
+                                                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                        )}
                                                     </Pressable>
                                                 </View>
                                             </View>
@@ -474,13 +483,13 @@ export default function UnusedLeaveEntitlementScreen() {
                                         {showDetailedBreakdown && calculationDetails ? (
                                             <View style={styles.breakdownGrid}>
                                                 <View style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                                    <View style={styles.breakdownItemHeaderRow}>
+                                                    <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                         <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>خلاصه محاسبه</ThemedText>
                                                     </View>
                                                     <View style={styles.breakdownDetailGrid}>
                                                         <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>کل استحقاق</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(calculationDetails.totalEntitlementDays)} روز</ThemedText></View>
                                                         <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>کل مرخصی استفاده‌شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(calculationDetails.totalUsedLeaveDays)} روز</ThemedText></View>
-                                                        <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره نهایی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(calculationDetails.totalSavedLeaveDays)} روز</ThemedText></View>
+                                                        <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>ذخیره نهایی</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{formatNumber(calculationDetails.totalSavedLeaveDays)} روز</ThemedText></View>
                                                     </View>
                                                 </View>
                                                 {calculationDetails.breakdown.map((item) => (
@@ -491,7 +500,7 @@ export default function UnusedLeaveEntitlementScreen() {
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مرخصی استفاده‌شده</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatNumber(item.usedLeaveDays)} روز</ThemedText></View>
                                                             <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(item.savedLeaveDays)} روز</ThemedText></View>
                                                             {item.excessUsedDays > 0 ? <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مازاد کسرشده از ذخیره قبل</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.error }]}>{formatNumber(item.excessUsedDays)} روز</ThemedText></View> : null}
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ذخیره تجمعی پس از این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatNumber(item.carryAfter)} روز</ThemedText></View>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}><ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>ذخیره تجمعی پس از این بخش</ThemedText><ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{formatNumber(item.carryAfter)} روز</ThemedText></View>
                                                         </View>
                                                     </View>
                                                 ))}
@@ -567,8 +576,8 @@ const styles = StyleSheet.create({
         gap: Spacing.two,
     },
     usedLeaveLabel: {
-        fontSize: 12,
-        lineHeight: 19,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.bodyCompact,
     },
     stepper: {
         flexDirection: 'row',
@@ -592,7 +601,7 @@ const styles = StyleSheet.create({
         flex: 1,
         minHeight: 42,
         fontFamily: 'AppFont-Bold',
-        fontSize: 14,
+        fontSize: Typography.fontSize.bodySmall,
         paddingVertical: 0,
     },
     initialSavedStepper: { width: '100%' },
@@ -606,13 +615,13 @@ const styles = StyleSheet.create({
     },
     pageTitle: {
         display: 'none',
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     pageDescription: {
-        lineHeight: 20,
-        fontSize: 13,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.compact,
     },
     formulaBox: {
         borderRadius: Radius.md,
@@ -622,11 +631,11 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     formulaLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     formulaValue: {
-        lineHeight: 20,
-        fontSize: 12,
+        lineHeight: Typography.lineHeight.body,
+        fontSize: Typography.fontSize.footnote,
     },
     metricsRow: {
         flexDirection: 'row',
@@ -640,7 +649,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     sectionLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     dateInput: {
         flexDirection: 'row',
@@ -653,7 +662,7 @@ const styles = StyleSheet.create({
         borderWidth: StyleSheet.hairlineWidth,
     },
     fieldValue: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         flex: 1,
     },
     actionsGroup: {
@@ -666,7 +675,7 @@ const styles = StyleSheet.create({
     },
     actionLabel: {
         fontFamily: 'AppFont-Bold',
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     resultCard: {
         borderRadius: Radius.md,
@@ -692,11 +701,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     resultLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     amountValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
     breakdownCard: {
@@ -719,7 +728,7 @@ const styles = StyleSheet.create({
         gap: Spacing.one,
     },
     breakdownSectionTitle: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
         fontFamily: 'AppFont-Bold',
     },
     toggleButton: {
@@ -732,7 +741,7 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
     },
     toggleButtonLabel: {
-        fontSize: 11,
+        fontSize: Typography.fontSize.caption,
     },
     breakdownGrid: {
         gap: Spacing.two,
@@ -748,10 +757,9 @@ const styles = StyleSheet.create({
         paddingBottom: 2,
         marginBottom: 2,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0, 0, 0, 0.12)',
     },
     breakdownItemTitle: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     breakdownDetailGrid: {
         gap: Spacing.one,
@@ -764,11 +772,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     detailLabel: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     detailValue: {
-        fontSize: 16,
-        lineHeight: 22,
+        fontSize: Typography.fontSize.bodyLarge,
+        lineHeight: Typography.lineHeight.label,
         fontFamily: 'AppFont-Bold',
     },
 });

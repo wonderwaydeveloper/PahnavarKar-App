@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
     getPlanTierColor,
+    getPlanTierIcon,
     getPlanTierLogoBackground,
     getPlanTierLogoForeground,
 } from '@/utils/plan-tier-visual';
@@ -20,9 +21,23 @@ function contrastRatio(foreground: string, background: string): number {
 }
 
 describe('plan tier logo colors', () => {
+    it('uses a distinct icon shape for each paid plan tier', () => {
+        expect(getPlanTierIcon('bronze')).toBe('medal');
+        expect(getPlanTierIcon('silver')).toBe('shield-star');
+        expect(getPlanTierIcon('gold')).toBe('crown');
+        expect(new Set(['bronze', 'silver', 'gold'].map(getPlanTierIcon)).size).toBe(3);
+    });
+
     it('uses the yellow theme color for the gold plan background', () => {
-        expect(getPlanTierLogoBackground('gold', 'light')).toBe('#FFE76A');
-        expect(getPlanTierLogoBackground('gold', 'dark')).toBe('#665C00');
+        expect(getPlanTierLogoBackground('gold', 'light')).toBe('#FFEA00');
+        expect(getPlanTierLogoBackground('gold', 'dark')).toBe('#FFDD00');
+    });
+
+    it('uses the standard silver and bronze colors for each theme', () => {
+        expect(getPlanTierLogoBackground('silver', 'light')).toBe('#6D6D6D');
+        expect(getPlanTierLogoBackground('silver', 'dark')).toBe('#C4C4C4');
+        expect(getPlanTierLogoBackground('bronze', 'light')).toBe('#915B27');
+        expect(getPlanTierLogoBackground('bronze', 'dark')).toBe('#CE8946');
     });
 
     it('uses a distinct background for each plan in light and dark themes', () => {
@@ -67,7 +82,7 @@ describe('plan tier logo colors', () => {
 
     it('automatically uses dark icons on light backgrounds and light icons on dark backgrounds', () => {
         expect(getPlanTierLogoForeground('gold', 'light')).toBe('#102A39');
-        expect(getPlanTierLogoForeground('gold', 'dark')).toBe('#FFFFFF');
+        expect(getPlanTierLogoForeground('gold', 'dark')).toBe('#102A39');
     });
 
     it('falls back to the free plan background for unknown tiers', () => {

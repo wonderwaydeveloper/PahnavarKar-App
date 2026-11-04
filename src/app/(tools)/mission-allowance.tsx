@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -443,13 +444,15 @@ export default function MissionAllowanceScreen() {
                                                     disabled={normalizedValue <= 0}
                                                     style={({ pressed }) => [
                                                         styles.stepperButton,
-                                                        { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                        { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                         normalizedValue <= 0 && styles.stepperButtonDisabled,
                                                     ]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`کاهش روزهای مأموریت سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                                 <NumericInputField
                                                     value={displayedValue}
@@ -466,13 +469,15 @@ export default function MissionAllowanceScreen() {
                                                     disabled={normalizedValue >= availableDays}
                                                     style={({ pressed }) => [
                                                         styles.stepperButton,
-                                                        { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                        { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                         normalizedValue >= availableDays && styles.stepperButtonDisabled,
                                                     ]}
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`افزایش روزهای مأموریت سال ${period.year} دوره ${period.periodIndex}`}
                                                 >
-                                                    <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                    {({ pressed }) => (
+                                                        <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                    )}
                                                 </Pressable>
                                             </View>
                                         </View>
@@ -536,11 +541,11 @@ export default function MissionAllowanceScreen() {
                                             <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>تعداد روزهای مأموریت در بازهٔ انتخاب‌شده</ThemedText>
                                             <ThemedText type="bodyBold" style={[styles.totalMissionDaysValue, { color: theme.text }]}>{toPersianDigits(result.totalMissionDays)} روز</ThemedText>
                                         </View>
-                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                            <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                        <View style={[styles.summaryBoxContent, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                            <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.onPrimary }]}>
                                                 مبلغ فوق‌العادهٔ مأموریت پس از کسر مبلغ پرداخت‌شده به کارگر
                                             </ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.onPrimary }]}>
                                                 {remainingMissionAllowance === null
                                                     ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                     : formatCurrency(remainingMissionAllowance)}
@@ -565,9 +570,9 @@ export default function MissionAllowanceScreen() {
                                                             </ThemedText>
                                                         </View>
                                                         <View style={styles.breakdownDetailGrid}>
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>بازهٔ زمانی</ThemedText>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>
                                                                     {formatParsedDate(item.startDate)} تا {formatParsedDate(item.endDate)}
                                                                 </ThemedText>
                                                             </View>
@@ -597,9 +602,9 @@ export default function MissionAllowanceScreen() {
                                                                 <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{formulaSeniorityLabel} روزانه</ThemedText>
                                                                 <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{formatCurrency(item.dailySeniority)}</ThemedText>
                                                             </View>
-                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مبلغ این بخش</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>{formatCurrency(item.amount)}</ThemedText>
+                                                            <View style={[styles.breakdownDetailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>مبلغ این بخش</ThemedText>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{formatCurrency(item.amount)}</ThemedText>
                                                             </View>
                                                         </View>
                                                     </View>
@@ -648,46 +653,46 @@ const styles = StyleSheet.create({
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerRow: { alignItems: 'flex-start' },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    formulaLabel: { fontSize: 11, lineHeight: 16, fontFamily: 'AppFont-Medium' },
-    formulaText: { fontSize: 12, lineHeight: 21 },
+    formulaLabel: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.tight, fontFamily: 'AppFont-Medium' },
+    formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
     metricBox: { borderRadius: 12, padding: Spacing.two, gap: Spacing.one },
-    sectionLabel: { fontSize: 12, lineHeight: 18, fontFamily: 'AppFont-Medium' },
+    sectionLabel: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption, fontFamily: 'AppFont-Medium' },
     dateFieldsRow: { flexDirection: 'row', gap: Spacing.two },
-    daysValue: { minHeight: 40, textAlign: 'center', textAlignVertical: 'center', fontSize: 14, lineHeight: 20, fontFamily: 'AppFont-Bold' },
+    daysValue: { minHeight: 40, textAlign: 'center', textAlignVertical: 'center', fontSize: Typography.fontSize.bodySmall, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Bold' },
     yearFieldsGroup: { gap: Spacing.two },
     yearField: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
     yearFieldHeader: { gap: Spacing.half },
     stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: 14, paddingVertical: 0 },
-    fieldHint: { fontSize: 11, lineHeight: 20, fontFamily: 'AppFont-Regular' },
+    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall, paddingVertical: 0 },
+    fieldHint: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Regular' },
     groupSelector: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     breakdownCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     breakdownContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBoxContent: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
-    summaryLabel: { fontSize: 12, lineHeight: 18, fontFamily: 'AppFont-Medium' },
-    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    summaryLabel: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption, fontFamily: 'AppFont-Medium' },
+    amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     detailsGrid: { gap: Spacing.two },
     totalMissionDaysBox: { width: '100%', borderRadius: 12, borderWidth: 1, padding: Spacing.two, gap: Spacing.one, alignItems: 'center' },
-    totalMissionDaysValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    totalMissionDaysValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     breakdownSectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one },
-    breakdownSectionTitle: { fontSize: 13 },
+    breakdownSectionTitle: { fontSize: Typography.fontSize.compact },
     toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
-    toggleButtonLabel: { fontSize: 11 },
+    toggleButtonLabel: { fontSize: Typography.fontSize.caption },
     breakdownGrid: { gap: Spacing.two },
     breakdownItemCard: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.two, gap: Spacing.one },
     breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },
-    breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' },
+    breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' },
     breakdownDetailGrid: { gap: Spacing.one },
     breakdownDetailBox: { borderRadius: 8, borderWidth: 1, padding: Spacing.one, gap: Spacing.one, alignItems: 'center' },
-    detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    detailLabel: { fontSize: Typography.fontSize.footnote },
+    detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -117,13 +118,15 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         disabled={Number(normalizeDigits(insuranceMonths || '0')) <= 0}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                             Number(normalizeDigits(insuranceMonths || '0')) <= 0 && styles.stepperButtonDisabled,
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش سابقه بیمه"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                     <NumericInputField
                                         value={insuranceMonths}
@@ -138,12 +141,14 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         onPress={() => setInsuranceMonths((value) => changeMonths(value, 1))}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش سابقه بیمه"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                 </View>
                             </View>
@@ -158,13 +163,15 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         disabled={Number(normalizeDigits(usedMonths || '0')) <= 0}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                             Number(normalizeDigits(usedMonths || '0')) <= 0 && styles.stepperButtonDisabled,
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="کاهش مدت استفاده از مقرری"
                                     >
-                                        <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                     <NumericInputField
                                         value={usedMonths}
@@ -179,12 +186,14 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                         onPress={() => setUsedMonths((value) => changeMonths(value, 1))}
                                         style={({ pressed }) => [
                                             styles.stepperButton,
-                                            { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                            { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                         ]}
                                         accessibilityRole="button"
                                         accessibilityLabel="افزایش مدت استفاده از مقرری"
                                     >
-                                        <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                        {({ pressed }) => (
+                                            <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                        )}
                                     </Pressable>
                                 </View>
                             </View>
@@ -206,7 +215,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                                 style={[
                                                     styles.statusOption,
                                                     {
-                                                        backgroundColor: isSelected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: isSelected ? theme.primary : theme.surface,
                                                         borderColor: isSelected ? theme.primary : theme.border,
                                                     },
                                                 ]}
@@ -217,9 +226,9 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                                 <MaterialCommunityIcons
                                                     name={isSelected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={19}
-                                                    color={isSelected ? theme.primaryText : theme.textSecondary}
+                                                    color={isSelected ? theme.onPrimary : theme.textSecondary}
                                                 />
-                                                <ThemedText type="smallBold" style={{ color: isSelected ? theme.primaryText : theme.text }}>
+                                                <ThemedText type="smallBold" style={{ color: isSelected ? theme.onPrimary : theme.text }}>
                                                     {label}
                                                 </ThemedText>
                                             </Pressable>
@@ -255,11 +264,11 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                                                     {formatMonths(result.legalEntitlementMonths)}
                                                 </ThemedText>
                                             </View>
-                                            <View style={[styles.resultBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="small" style={[styles.resultLabel, { color: theme.textSecondary }]}>
+                                            <View style={[styles.resultBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="small" style={[styles.resultLabel, { color: theme.onPrimary }]}>
                                                     استحقاق نهایی
                                                 </ThemedText>
-                                                <ThemedText type="largeTitle" style={[styles.resultValue, { color: theme.primaryText }]}>
+                                                <ThemedText type="largeTitle" style={[styles.resultValue, { color: theme.onPrimary }]}>
                                                     {formatMonths(result.remainingEntitlementMonths)}
                                                 </ThemedText>
                                             </View>
@@ -297,26 +306,26 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     rulesBox: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    rulesText: { lineHeight: 23 },
+    rulesText: { lineHeight: Typography.lineHeight.relaxed },
     metricBox: { borderRadius: 14, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, gap: Spacing.one },
-    fieldLabel: { fontSize: 12 },
+    fieldLabel: { fontSize: Typography.fontSize.footnote },
     stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: 14, paddingVertical: 0 },
+    textInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall, paddingVertical: 0 },
     statusRow: { flexDirection: 'row', gap: Spacing.two },
     statusOption: { flex: 1, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: Spacing.one, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingHorizontal: Spacing.two },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 12 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     resultGrid: { flexDirection: 'row', gap: Spacing.two },
     resultBox: { flex: 1, alignItems: 'center', gap: Spacing.one, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: Spacing.two, paddingVertical: Spacing.two },
-    resultLabel: { fontSize: 10, lineHeight: 16, fontFamily: 'AppFont-Medium' },
-    resultValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    calculationText: { textAlign: 'center', lineHeight: 22 },
+    resultLabel: { fontSize: Typography.fontSize.tiny, lineHeight: Typography.lineHeight.tight, fontFamily: 'AppFont-Medium' },
+    resultValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    calculationText: { textAlign: 'center', lineHeight: Typography.lineHeight.label },
 });

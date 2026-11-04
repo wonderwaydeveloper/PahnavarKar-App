@@ -5,11 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, Animated as RNAnimated, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
 import { Snackbar } from 'react-native-paper';
 import { TabView } from 'react-native-tab-view';
-import Svg, { Circle } from 'react-native-svg';
 import Animated, {
     Easing,
     ReduceMotion,
-    useAnimatedProps,
     useAnimatedStyle,
     useSharedValue,
     withTiming,
@@ -17,6 +15,7 @@ import Animated, {
 
 import { ConfirmationModal } from '@/components/confirmation-modal';
 import { ErrorNoticeCard } from '@/components/error-notice-card';
+import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -59,20 +58,10 @@ const planCatalogQueryKey = CACHE_KEYS.planCatalog;
 const currentPlanQueryKey = CACHE_KEYS.currentPlan;
 const walletQueryKey = CACHE_KEYS.walletOverview;
 const PURCHASED_PLAN_TABS = [
-    { key: 'current' as const, title: 'پلن فعال' },
+    { key: 'current' as const, title: 'پلن فعلی' },
     { key: 'scheduled' as const, title: 'رزروشده' },
     { key: 'history' as const, title: 'سوابق' },
 ];
-const VALIDITY_COLORS = {
-    light: { green: '#31CB00', yellow: '#FFD60A', red: '#FF002B' },
-    dark: { green: '#4ADE80', yellow: '#FACC15', red: '#F87171' },
-} as const;
-const SCHEDULED_ACTIVATION_COLORS = {
-    light: '#00B4D8',
-    dark: '#0096C7',
-} as const;
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
 function PurchasedPlanTab({
     label,
     count,
@@ -122,13 +111,13 @@ function PurchasedPlanTab({
                 </ThemedText>
                 <View style={[
                     styles.tabCount,
-                    { backgroundColor: selected ? theme.primaryContainer : theme.surfaceVariant },
+                    { backgroundColor: selected ? theme.primary : theme.surfaceVariant },
                 ]}>
                     <ThemedText
                         type="smallBold"
                         style={[
                             styles.tabCountText,
-                            { color: selected ? theme.primaryText : theme.textSecondary },
+                            { color: selected ? theme.onPrimary : theme.textSecondary },
                         ]}
                     >
                         {new Intl.NumberFormat('fa-IR').format(count)}
@@ -263,6 +252,29 @@ export default function PurchasedPlansScreen() {
         || currentPlanQuery.isFetching
         || currentPlanQuery.isError
         || currentPlanQuery.data?.offlineCacheSavedAt !== undefined;
+    const offlinePlanSources = [
+        {
+            label: 'وضعیت اشتراک',
+            savedAt: currentPlanQuery.data?.offlineCacheSavedAt,
+            receivedAt: currentPlanQuery.data ? currentPlanQuery.dataUpdatedAt : undefined,
+        },
+        {
+            label: 'نام و اطلاعات پلن‌ها',
+            savedAt: catalogQuery.data?.offlineCacheSavedAt,
+            receivedAt: catalogQuery.data ? catalogQuery.dataUpdatedAt : undefined,
+        },
+        {
+            label: 'موجودی کیف پول',
+            savedAt: walletQuery.data?.offlineCacheSavedAt,
+            receivedAt: walletQuery.data ? walletQuery.dataUpdatedAt : undefined,
+        },
+    ].flatMap((source) => {
+        const timestamp = source.savedAt ?? source.receivedAt;
+        return timestamp === undefined || timestamp <= 0
+            ? []
+            : [{ label: source.label, timestamp, kind: source.savedAt !== undefined ? 'saved' as const : 'received' as const }];
+    });
+    const hasOfflinePlanData = offlinePlanSources.some((source) => source.kind === 'saved');
 
     useEffect(() => {
         focusedQueryState.current = {
@@ -474,285 +486,356 @@ export default function PurchasedPlansScreen() {
                                     />
                                 )}
                             >
-                    {!isOnline ? (
-                        <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
-                            <ThemedText type="smallBold" style={{ color: theme.warning }}>
-                                {currentPlanQuery.data
-                                    ? `اطلاعات اشتراک${currentPlanQuery.data.offlineCacheSavedAt !== undefined ? ' ذخیره‌شده' : ''}؛ آخرین دریافت ${new Date(currentPlanQuery.data.offlineCacheSavedAt ?? currentPlanQuery.dataUpdatedAt).toLocaleString('fa-IR')}.`
-                                    : 'اتصال اینترنت در دسترس نیست؛ اطلاعات ذخیره‌شدهٔ قابل‌نمایش موجود نیست.'}
-                            </ThemedText>
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                تغییر تمدید خودکار و لغو پلن رزروشده تا دریافت وضعیت زندهٔ سرور غیرفعال است.
-                            </ThemedText>
-                        </View>
-                    ) : null}
-                    {currentPlanQuery.data?.offlineCacheSavedAt !== undefined && isOnline ? (
-                        <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.warning }]}>
-                            <ThemedText type="small" style={{ color: theme.warning }}>
-                                اطلاعات اشتراک از حافظهٔ آفلاین نمایش داده می‌شود؛ آخرین ذخیره‌سازی {new Date(currentPlanQuery.data.offlineCacheSavedAt).toLocaleString('fa-IR')} بوده است.
-                            </ThemedText>
-                        </View>
-                    ) : null}
-                    {currentPlanQuery.error ? (
-                        <ErrorNoticeCard
-                            message={getUserFacingErrorMessage(currentPlanQuery.error, 'دریافت پلن‌های خریداری‌شده ناموفق بود.')}
-                            onRetry={() => void currentPlanQuery.refetch()}
-                            busy={currentPlanQuery.isRefetching}
-                            busyLabel="در حال دریافت اشتراک‌ها…"
-                        />
-                    ) : null}
-                    {catalogQuery.error ? (
-                        <ErrorNoticeCard
-                            message={getUserFacingErrorMessage(catalogQuery.error, 'دریافت نام پلن‌ها ناموفق بود.')}
-                            onRetry={() => void catalogQuery.refetch()}
-                            busy={catalogQuery.isRefetching}
-                            busyLabel="در حال دریافت نام پلن‌ها…"
-                        />
-                    ) : null}
-                    {walletQuery.error ? (
-                        <ErrorNoticeCard
-                            message={getUserFacingErrorMessage(walletQuery.error, 'دریافت موجودی کیف پول ناموفق بود.')}
-                            onRetry={() => void walletQuery.refetch()}
-                            busy={walletQuery.isRefetching}
-                            busyLabel="در حال دریافت موجودی…"
-                        />
-                    ) : null}
-                    {dataLoading ? (
-                        <View style={styles.centered}>
-                            <ActivityIndicator color={theme.primaryText} />
-                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                در حال دریافت پلن‌ها…
-                            </ThemedText>
-                        </View>
-                    ) : null}
-                    {!dataLoading && subscriptionsByTab[route.key].length === 0
-                        && !(currentPlanQuery.isError && !currentPlanQuery.data) ? (
-                        <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                            <MaterialCommunityIcons
-                                name={route.key === 'current'
-                                    ? 'crown-outline'
-                                    : route.key === 'scheduled' ? 'calendar-clock-outline' : 'history'}
-                                size={30}
-                                color={theme.textSecondary}
-                            />
-                            <ThemedText type="smallBold">
-                                {route.key === 'current'
-                                    ? subscriptions.length === 0
-                                        ? 'هنوز پلنی خریداری نکرده‌اید.'
-                                        : 'پلن فعالی ندارید.'
-                                    : route.key === 'scheduled'
-                                        ? 'پلن رزروشده‌ای ندارید.'
-                                        : 'سابقه‌ای برای نمایش وجود ندارد.'}
-                            </ThemedText>
-                            {route.key === 'current' && subscriptions.length === 0 ? (
-                                <Pressable
-                                    accessibilityRole="button"
-                                    onPress={() => router.push('/(tabs)/account/plan-catalog')}
-                                    style={[styles.retryButton, { backgroundColor: theme.primary }]}
-                                >
-                                    <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>مشاهدهٔ پلن‌ها</ThemedText>
-                                </Pressable>
-                            ) : null}
-                        </View>
-                    ) : subscriptionsByTab[route.key].map((subscription) => {
-                        const expanded = expandedId === subscription.id;
-                        const scheduled = scheduledSubscription?.id === subscription.id;
-                        const isCurrent = activeSubscription?.id === subscription.id;
-                        const tierKey = subscription.plan_key.split('_')[0];
-                        const tierName = catalog?.tiers.find((tier) => tier.key === tierKey)?.name ?? subscription.plan_key;
-                        const replacedByPlanKey = subscription.replaced_by?.plan_key;
-                        const replacedByTierKey = replacedByPlanKey?.split('_')[0];
-                        const replacedByTierName = replacedByPlanKey
-                            ? catalog?.tiers.find((tier) => tier.key === replacedByTierKey)?.name ?? replacedByPlanKey
-                            : null;
-                        const status = getStatusLabel(subscription, currentTime);
-                        return (
-                                <View key={subscription.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                {isCurrent && subscription.is_active ? (
-                                    <RemainingValidityIndicator
-                                        startsAt={subscription.starts_at}
-                                        endsAt={subscription.ends_at}
-                                        now={currentTime}
-                                        colorTheme={appTheme}
+                                {!isOnline || hasOfflinePlanData ? (
+                                    <OfflineDataNotice
                                         theme={theme}
+                                        title={offlinePlanSources.length > 0
+                                            ? 'اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود'
+                                            : 'اتصال زنده به سرور در دسترس نیست'}
+                                        description={offlinePlanSources.length > 0
+                                            ? 'این اطلاعات ممکن است آخرین وضعیت سرور نباشند:'
+                                            : undefined}
+                                        sources={offlinePlanSources}
+                                        emptyMessage="اطلاعات ذخیره‌شدهٔ قابل‌نمایشی برای این حساب در دسترس نیست."
+                                        actionMessage="تغییر تمدید خودکار و لغو پلن رزروشده به وضعیت زنده نیاز دارد. نمایش پلن رزروشده به‌تنهایی مجوز استفاده از امکانات آن نیست."
                                     />
                                 ) : null}
-                                {scheduled ? (
-                                    <ScheduledActivationIndicator
-                                        reservedAt={subscription.reservation_created_at}
-                                        startsAt={subscription.starts_at}
-                                        now={currentTime}
-                                        color={SCHEDULED_ACTIVATION_COLORS[appTheme]}
-                                        theme={theme}
+                                {currentPlanQuery.error ? (
+                                    <ErrorNoticeCard
+                                        message={getUserFacingErrorMessage(currentPlanQuery.error, 'دریافت پلن‌های خریداری‌شده ناموفق بود.')}
+                                        onRetry={() => void currentPlanQuery.refetch()}
+                                        busy={currentPlanQuery.isRefetching}
+                                        busyLabel="در حال دریافت اشتراک‌ها…"
                                     />
                                 ) : null}
-                                {((isCurrent && subscription.is_active) || scheduled) ? (
-                                    <View style={[styles.validitySeparator, { backgroundColor: theme.border }]} />
+                                {catalogQuery.error ? (
+                                    <ErrorNoticeCard
+                                        message={getUserFacingErrorMessage(catalogQuery.error, 'دریافت نام پلن‌ها ناموفق بود.')}
+                                        onRetry={() => void catalogQuery.refetch()}
+                                        busy={catalogQuery.isRefetching}
+                                        busyLabel="در حال دریافت نام پلن‌ها…"
+                                    />
                                 ) : null}
-                                <Pressable
-                                    accessibilityRole="button"
-                                    accessibilityState={{ expanded }}
-                                    onPress={() => setExpandedId((current) => current === subscription.id ? null : subscription.id)}
-                                    style={({ pressed }) => [
-                                        styles.cardHeader,
-                                        pressed && { backgroundColor: theme.surfaceVariant },
-                                    ]}
-                                >
-                                    <View style={[styles.planIcon, { backgroundColor: getPlanTierLogoBackground(tierKey, appTheme) }]}>
-                                        <MaterialCommunityIcons
-                                            name={getPlanTierIcon(tierKey)}
-                                            size={20}
-                                            color={getPlanTierLogoForeground(tierKey, appTheme)}
-                                        />
-                                    </View>
-                                    <View style={styles.flex}>
-                                        <ThemedText type="smallBold">{tierName}</ThemedText>
+                                {walletQuery.error ? (
+                                    <ErrorNoticeCard
+                                        message={getUserFacingErrorMessage(walletQuery.error, 'دریافت موجودی کیف پول ناموفق بود.')}
+                                        onRetry={() => void walletQuery.refetch()}
+                                        busy={walletQuery.isRefetching}
+                                        busyLabel="در حال دریافت موجودی…"
+                                    />
+                                ) : null}
+                                {dataLoading ? (
+                                    <View style={styles.centered}>
+                                        <ActivityIndicator color={theme.primaryText} />
                                         <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                            {scheduled
-                                                ? `رزروشده · فعال‌سازی ${formatDate(subscription.starts_at)}`
-                                                : `${status} · ${formatDate(subscription.starts_at)}`}
+                                            در حال دریافت پلن‌ها…
                                         </ThemedText>
                                     </View>
-                                    <MaterialCommunityIcons
-                                        name={expanded ? 'chevron-up' : 'chevron-down'}
-                                        size={22}
-                                        color={theme.textSecondary}
-                                    />
-                                </Pressable>
-                                {expanded ? (
-                                    <View style={[styles.details, { borderTopColor: theme.border }]}>
-                                        <DetailRow label="وضعیت" value={status} theme={theme} />
-                                        <DetailRow label="تاریخ فعال‌سازی" value={formatDate(subscription.starts_at, true)} theme={theme} />
-                                        <DetailRow label="تاریخ انقضا" value={formatDate(subscription.ends_at, true)} theme={theme} />
-                                        {scheduled ? (
-                                            <>
-                                                <DetailRow label="وضعیت خرید" value="خریداری و پرداخت‌شده" valueColor={theme.success} theme={theme} />
-                                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                    پس از پایان پلن فعلی، این پلن در زمان‌بندی اعلام‌شده فعال می‌شود.
-                                                </ThemedText>
-                                                {typeof subscription.refundable_amount === 'number' ? (
-                                                    <View style={[styles.refundNotice, { backgroundColor: theme.surfaceVariant }]}>
-                                                        <MaterialCommunityIcons name="wallet-plus-outline" size={18} color={theme.primaryText} />
-                                                        <ThemedText type="small" style={[styles.flex, { color: theme.textSecondary }]}>
-                                                            در صورت لغو، {new Intl.NumberFormat('fa-IR').format(subscription.refundable_amount)} تومان به کیف پول بازمی‌گردد.
-                                                        </ThemedText>
-                                                    </View>
-                                                ) : null}
-                                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                    استفادهٔ دوباره از کد تخفیف فقط در صورت معتبر بودن آن هنگام خرید بعدی امکان‌پذیر است.
-                                                </ThemedText>
-                                                {typeof subscription.refundable_amount === 'number' ? (
-                                                    <Pressable
-                                                        accessibilityRole="button"
-                                                        accessibilityState={{
-                                                            disabled: cancellingScheduled
-                                                                || updatingAutoRenew
-                                                                || subscriptionActionsUnavailable,
-                                                        }}
-                                                        disabled={cancellingScheduled || updatingAutoRenew || subscriptionActionsUnavailable}
-                                                        onPress={() => {
-                                                            if (!subscriptionActionsUnavailable) {
-                                                                setScheduledSubscriptionToCancel(subscription);
-                                                            }
-                                                        }}
-                                                        style={({ pressed }) => [
-                                                            styles.cancelScheduledButton,
-                                                            {
-                                                                borderColor: theme.error,
-                                                                opacity: pressed
-                                                                    || cancellingScheduled
-                                                                    || updatingAutoRenew
-                                                                    || subscriptionActionsUnavailable
-                                                                    ? 0.55
-                                                                    : 1,
-                                                            },
-                                                        ]}
-                                                    >
-                                                        <MaterialCommunityIcons name="calendar-remove-outline" size={18} color={theme.error} />
-                                                        <ThemedText type="smallBold" style={{ color: theme.error }}>
-                                                            لغو رزرو و بازگشت وجه
-                                                        </ThemedText>
-                                                    </Pressable>
-                                                ) : null}
-                                            </>
+                                ) : null}
+                                {!dataLoading && subscriptionsByTab[route.key].length === 0
+                                    && !(currentPlanQuery.isError && !currentPlanQuery.data) ? (
+                                    <View style={[styles.emptyCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                        <MaterialCommunityIcons
+                                            name={route.key === 'current'
+                                                ? 'crown-outline'
+                                                : route.key === 'scheduled' ? 'calendar-clock-outline' : 'history'}
+                                            size={30}
+                                            color={theme.textSecondary}
+                                        />
+                                        <ThemedText type="smallBold">
+                                            {route.key === 'current'
+                                                ? subscriptions.length === 0
+                                                    ? 'هنوز پلنی خریداری نکرده‌اید.'
+                                                    : 'پلن فعالی ندارید.'
+                                                : route.key === 'scheduled'
+                                                    ? 'پلن رزروشده‌ای ندارید.'
+                                                    : 'سابقه‌ای برای نمایش وجود ندارد.'}
+                                        </ThemedText>
+                                        {route.key === 'current' && subscriptions.length === 0 ? (
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                onPress={() => router.push('/(tabs)/account/plan-catalog')}
+                                                style={[styles.retryButton, { backgroundColor: theme.primary }]}
+                                            >
+                                                <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>مشاهدهٔ پلن‌ها</ThemedText>
+                                            </Pressable>
                                         ) : null}
-                                        {isCurrent ? (
-                                            <>
-                                                {scheduledSubscription ? (
-                                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                        پلن رزروشده پس از پایان این اشتراک فعال می‌شود؛ تمدید خودکار این پلن غیرفعال است.
-                                                    </ThemedText>
-                                                ) : null}
-                                                <View style={[styles.autoRenew, { borderTopColor: theme.border }]}>
-                                                    <View style={styles.flex}>
-                                                        <ThemedText type="smallBold">تمدید خودکار</ThemedText>
-                                                        <ThemedText
-                                                            type="small"
-                                                            style={{ color: subscription.auto_renew ? theme.success : theme.textSecondary }}
-                                                        >
-                                                            {subscription.auto_renew ? 'فعال' : 'غیرفعال'}
-                                                        </ThemedText>
-                                                    </View>
-                                                    <Switch
-                                                        accessibilityLabel="تمدید خودکار با کیف پول"
-                                                        disabled={updatingAutoRenew || cancellingScheduled || subscriptionActionsUnavailable}
-                                                        value={subscription.auto_renew}
-                                                        onValueChange={(enabled) => void changeAutoRenew(enabled)}
-                                                        trackColor={{ false: theme.borderStrong, true: theme.primary }}
-                                                        thumbColor={theme.surface}
+                                    </View>
+                                ) : subscriptionsByTab[route.key].map((subscription) => {
+                                    const expanded = expandedId === subscription.id;
+                                    const scheduled = scheduledSubscription?.id === subscription.id;
+                                    const isCurrent = activeSubscription?.id === subscription.id;
+                                    const tierKey = subscription.plan_key.split('_')[0];
+                                    const tierName = catalog?.tiers.find((tier) => tier.key === tierKey)?.name ?? subscription.plan_key;
+                                    const replacedByPlanKey = subscription.replaced_by?.plan_key;
+                                    const replacedByTierKey = replacedByPlanKey?.split('_')[0];
+                                    const replacedByTierName = replacedByPlanKey
+                                        ? catalog?.tiers.find((tier) => tier.key === replacedByTierKey)?.name ?? replacedByPlanKey
+                                        : null;
+                                    const status = getStatusLabel(subscription, currentTime);
+                                    return (
+                                        <View
+                                            key={subscription.id}
+                                            style={[
+                                                styles.card,
+                                                {
+                                                    backgroundColor: theme.surface,
+                                                    borderColor: isCurrent
+                                                        ? theme.primary
+                                                        : scheduled ? theme.primary : theme.border,
+                                                },
+                                            ]}
+                                        >
+                                            {isCurrent && subscription.is_active ? (
+                                                <RemainingValidityIndicator
+                                                    startsAt={subscription.starts_at}
+                                                    endsAt={subscription.ends_at}
+                                                    now={currentTime}
+                                                    theme={theme}
+                                                />
+                                            ) : null}
+                                            {scheduled ? (
+                                                <ScheduledActivationIndicator
+                                                    reservedAt={subscription.reservation_created_at}
+                                                    startsAt={subscription.starts_at}
+                                                    now={currentTime}
+                                                    color={theme.primary}
+                                                    theme={theme}
+                                                />
+                                            ) : null}
+                                            {((isCurrent && subscription.is_active) || scheduled) ? (
+                                                <View style={[styles.validitySeparator, { backgroundColor: theme.border }]} />
+                                            ) : null}
+                                            <Pressable
+                                                accessibilityRole="button"
+                                                accessibilityState={{ expanded }}
+                                                onPress={() => setExpandedId((current) => current === subscription.id ? null : subscription.id)}
+                                                style={({ pressed }) => [
+                                                    styles.cardHeader,
+                                                    pressed && { backgroundColor: theme.surfaceVariant },
+                                                ]}
+                                            >
+                                                <View
+                                                    testID={isCurrent ? 'current-plan-icon' : scheduled ? 'scheduled-plan-icon' : undefined}
+                                                    style={[
+                                                        styles.planIcon,
+                                                        {
+                                                            backgroundColor: getPlanTierLogoBackground(tierKey, appTheme),
+                                                        },
+                                                    ]}
+                                                >
+                                                    <MaterialCommunityIcons
+                                                        name={getPlanTierIcon(tierKey)}
+                                                        size={20}
+                                                        color={getPlanTierLogoForeground(tierKey, appTheme)}
                                                     />
                                                 </View>
-                                                {wallet ? (
-                                                    <DetailRow
-                                                        label={wallet.offlineCacheSavedAt !== undefined ? 'موجودی کیف پول · آفلاین' : 'موجودی کیف پول'}
-                                                        value={`${new Intl.NumberFormat('fa-IR').format(wallet.balance)} تومان`}
-                                                        theme={theme}
-                                                    />
-                                                ) : null}
-                                                {updatingAutoRenew ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
-                                            </>
-                                        ) : !scheduled ? (
-                                            <DetailRow
-                                                label="تمدید خودکار"
-                                                value={subscription.auto_renew && subscription.status === 'active' ? 'فعال' : 'غیرفعال'}
-                                                theme={theme}
-                                            />
-                                        ) : null}
-                                        {subscription.status === 'replaced' ? (
-                                            <>
-                                                {replacedByTierName ? (
-                                                    <>
-                                                    <DetailRow label="ارتقا به پلن" value={replacedByTierName} theme={theme} />
-                                                    {subscription.replaced_by?.replaced_at ? (
+                                                <View style={styles.flex}>
+                                                    <ThemedText type="smallBold">{tierName}</ThemedText>
+                                                    <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                        {scheduled
+                                                            ? `پلن رزروشده · شروع ${formatDate(subscription.starts_at)}`
+                                                            : isCurrent
+                                                                ? `اشتراک فعلی · شروع ${formatDate(subscription.starts_at)}`
+                                                                : `${status} · ${formatDate(subscription.starts_at)}`}
+                                                    </ThemedText>
+                                                </View>
+                                                <MaterialCommunityIcons
+                                                    name={expanded ? 'chevron-up' : 'chevron-down'}
+                                                    size={22}
+                                                    color={theme.textSecondary}
+                                                />
+                                            </Pressable>
+                                            {expanded ? (
+                                                <View style={[styles.details, { borderTopColor: theme.border }]}>
+                                                    <DetailRow label="وضعیت" value={status} theme={theme} />
+                                                    <DetailRow label="تاریخ فعال‌سازی" value={formatDate(subscription.starts_at, true)} theme={theme} />
+                                                    <DetailRow label="تاریخ انقضا" value={formatDate(subscription.ends_at, true)} theme={theme} />
+                                                    {scheduled ? (
+                                                        <>
+                                                            <DetailRow label="وضعیت خرید" value="خریداری و پرداخت‌شده" valueColor={theme.success} theme={theme} />
+                                                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                                پس از پایان پلن فعلی، این پلن در زمان‌بندی اعلام‌شده فعال می‌شود.
+                                                            </ThemedText>
+                                                            {typeof subscription.refundable_amount === 'number' ? (
+                                                                <View style={[styles.refundNotice, { backgroundColor: theme.surfaceVariant }]}>
+                                                                    <MaterialCommunityIcons name="wallet-plus-outline" size={18} color={theme.primaryText} />
+                                                                    <ThemedText type="small" style={[styles.flex, { color: theme.textSecondary }]}>
+                                                                        در صورت لغو، {new Intl.NumberFormat('fa-IR').format(subscription.refundable_amount)} تومان به کیف پول بازمی‌گردد.
+                                                                    </ThemedText>
+                                                                </View>
+                                                            ) : null}
+                                                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                                استفادهٔ دوباره از کد تخفیف فقط در صورت معتبر بودن آن هنگام خرید بعدی امکان‌پذیر است.
+                                                            </ThemedText>
+                                                            {typeof subscription.refundable_amount === 'number' ? (
+                                                                <Pressable
+                                                                    accessibilityRole="button"
+                                                                    accessibilityState={{
+                                                                        disabled: cancellingScheduled
+                                                                            || updatingAutoRenew
+                                                                            || subscriptionActionsUnavailable,
+                                                                    }}
+                                                                    disabled={cancellingScheduled || updatingAutoRenew || subscriptionActionsUnavailable}
+                                                                    onPress={() => {
+                                                                        if (!subscriptionActionsUnavailable) {
+                                                                            setScheduledSubscriptionToCancel(subscription);
+                                                                        }
+                                                                    }}
+                                                                    style={({ pressed }) => [
+                                                                        styles.cancelScheduledButton,
+                                                                        {
+                                                                            borderColor: theme.error,
+                                                                            opacity: pressed
+                                                                                || cancellingScheduled
+                                                                                || updatingAutoRenew
+                                                                                || subscriptionActionsUnavailable
+                                                                                ? 0.55
+                                                                                : 1,
+                                                                        },
+                                                                    ]}
+                                                                >
+                                                                    <MaterialCommunityIcons name="calendar-remove-outline" size={18} color={theme.error} />
+                                                                    <ThemedText type="smallBold" style={{ color: theme.error }}>
+                                                                        لغو رزرو و بازگشت وجه
+                                                                    </ThemedText>
+                                                                </Pressable>
+                                                            ) : null}
+                                                        </>
+                                                    ) : null}
+                                                    {isCurrent ? (
+                                                        <>
+                                                            {scheduledSubscription ? (
+                                                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                                    پلن رزروشده پس از پایان این اشتراک فعال می‌شود؛ تمدید خودکار این پلن غیرفعال است.
+                                                                </ThemedText>
+                                                            ) : null}
+                                                            <View style={[styles.autoRenew, { borderTopColor: theme.border }]}>
+                                                                <View style={styles.flex}>
+                                                                    <ThemedText type="smallBold">تمدید خودکار</ThemedText>
+                                                                    <ThemedText
+                                                                        type="small"
+                                                                        style={{ color: subscription.auto_renew ? theme.success : theme.textSecondary }}
+                                                                    >
+                                                                        {subscription.auto_renew ? 'فعال' : 'غیرفعال'}
+                                                                    </ThemedText>
+                                                                </View>
+                                                                <Switch
+                                                                    accessibilityLabel="تمدید خودکار با کیف پول"
+                                                                    disabled={updatingAutoRenew || cancellingScheduled || subscriptionActionsUnavailable}
+                                                                    value={subscription.auto_renew}
+                                                                    onValueChange={(enabled) => void changeAutoRenew(enabled)}
+                                                                    trackColor={{ false: theme.borderStrong, true: theme.primary }}
+                                                                    thumbColor={theme.surface}
+                                                                />
+                                                            </View>
+                                                            {wallet ? (
+                                                                <DetailRow
+                                                                    label={wallet.offlineCacheSavedAt !== undefined ? 'موجودی کیف پول · آفلاین' : 'موجودی کیف پول'}
+                                                                    value={`${new Intl.NumberFormat('fa-IR').format(wallet.balance)} تومان`}
+                                                                    theme={theme}
+                                                                />
+                                                            ) : null}
+                                                            {updatingAutoRenew ? <ActivityIndicator size="small" color={theme.primaryText} /> : null}
+                                                        </>
+                                                    ) : !scheduled ? (
                                                         <DetailRow
-                                                            label="تاریخ و ساعت ارتقا"
-                                                            value={formatDate(subscription.replaced_by.replaced_at, true)}
+                                                            label="تمدید خودکار"
+                                                            value={subscription.auto_renew && subscription.status === 'active' ? 'فعال' : 'غیرفعال'}
                                                             theme={theme}
                                                         />
                                                     ) : null}
-                                                    </>
-                                                ) : null}
-                                                <View style={[styles.upgradeNotice, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                                    {subscription.status === 'replaced' ? (
+                                                        <>
+                                                            {replacedByTierName ? (
+                                                                <>
+                                                                    <DetailRow label="ارتقا به پلن" value={replacedByTierName} theme={theme} />
+                                                                    {subscription.replaced_by?.replaced_at ? (
+                                                                        <DetailRow
+                                                                            label="تاریخ و ساعت ارتقا"
+                                                                            value={formatDate(subscription.replaced_by.replaced_at, true)}
+                                                                            theme={theme}
+                                                                        />
+                                                                    ) : null}
+                                                                </>
+                                                            ) : null}
+                                                            <View style={[styles.upgradeNotice, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                                    این اشتراک با ارتقا به پلن جدید پایان یافته است.
+                                                                </ThemedText>
+                                                            </View>
+                                                        </>
+                                                    ) : subscription.status === 'cancelled' && typeof subscription.refund_amount === 'number' ? (
+                                                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                            پلن رزروشده لغو شد و {new Intl.NumberFormat('fa-IR').format(subscription.refund_amount)} تومان به کیف پول بازگشت.
+                                                        </ThemedText>
+                                                    ) : subscription.cancellation_scheduled && subscription.is_active ? (
+                                                        <ThemedText type="small" style={{ color: theme.warning }}>
+                                                            تمدید این اشتراک لغو شده و تا تاریخ انقضا فعال می‌ماند.
+                                                        </ThemedText>
+                                                    ) : null}
+                                                </View>
+                                            ) : null}
+                                        </View>
+                                    );
+                                })}
+                                {route.key === 'current' && scheduledSubscription ? (() => {
+                                    const nextTierKey = scheduledSubscription.plan_key.split('_')[0];
+                                    const nextTierName = catalog?.tiers.find((tier) => tier.key === nextTierKey)?.name
+                                        ?? scheduledSubscription.plan_key;
+                                    return (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel={`جزئیات پلن رزروشدهٔ ${nextTierName}، شروع ${formatDate(scheduledSubscription.starts_at)}`}
+                                            onPress={() => {
+                                                setExpandedId(scheduledSubscription.id);
+                                                setActiveTab('scheduled');
+                                            }}
+                                            style={({ pressed }) => [
+                                                styles.nextPlanPreview,
+                                                {
+                                                    backgroundColor: theme.surface,
+                                                    borderColor: theme.primary,
+                                                    opacity: pressed ? 0.8 : 1,
+                                                },
+                                            ]}
+                                        >
+                                            <View style={styles.nextPlanHeading}>
+                                                <MaterialCommunityIcons
+                                                    name="timeline-clock-outline"
+                                                    size={20}
+                                                    color={theme.primary}
+                                                />
+                                                <ThemedText type="smallBold" style={{ color: theme.primary }}>
+                                                    مرحلهٔ بعدی اشتراک
+                                                </ThemedText>
+                                            </View>
+                                            <View style={styles.nextPlanSummary}>
+                                                <View style={[
+                                                    styles.planIcon,
+                                                    { backgroundColor: getPlanTierLogoBackground(nextTierKey, appTheme) },
+                                                ]} testID="scheduled-plan-preview-icon">
+                                                    <MaterialCommunityIcons
+                                                        name={getPlanTierIcon(nextTierKey)}
+                                                        size={20}
+                                                        color={getPlanTierLogoForeground(nextTierKey, appTheme)}
+                                                    />
+                                                </View>
+                                                <View style={styles.flex}>
+                                                    <ThemedText type="smallBold">{nextTierName}</ThemedText>
                                                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                    این اشتراک با ارتقا به پلن جدید پایان یافته است.
+                                                        پس از پایان پلن فعلی · شروع {formatDate(scheduledSubscription.starts_at)}
                                                     </ThemedText>
                                                 </View>
-                                            </>
-                                        ) : subscription.status === 'cancelled' && typeof subscription.refund_amount === 'number' ? (
+                                                <MaterialCommunityIcons name="chevron-left" size={22} color={theme.textSecondary} />
+                                            </View>
                                             <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                                پلن رزروشده لغو شد و {new Intl.NumberFormat('fa-IR').format(subscription.refund_amount)} تومان به کیف پول بازگشت.
+                                                این رزرو فقط برای مشاهده است و به‌تنهایی دسترسی یا مجوز آفلاین ایجاد نمی‌کند.
                                             </ThemedText>
-                                        ) : subscription.cancellation_scheduled && subscription.is_active ? (
-                                            <ThemedText type="small" style={{ color: theme.warning }}>
-                                                تمدید این اشتراک لغو شده و تا تاریخ انقضا فعال می‌ماند.
-                                            </ThemedText>
-                                        ) : null}
-                                    </View>
-                                ) : null}
-                                </View>
-                        );
-                    })}
-                    </ScrollView>
+                                        </Pressable>
+                                    );
+                                })() : null}
+                            </ScrollView>
                         )}
                         renderTabBar={({ navigationState, jumpTo }) => (
                             <View
@@ -802,7 +885,7 @@ export default function PurchasedPlansScreen() {
                     type="small"
                     style={{
                         color: messageKind === 'error'
-                            ? theme.onError
+                            ? theme.onErrorFill
                             : messageKind === 'info' ? theme.onInfo : theme.onSuccess,
                     }}
                 >
@@ -831,13 +914,11 @@ function RemainingValidityIndicator({
     startsAt,
     endsAt,
     now,
-    colorTheme,
     theme,
 }: {
     startsAt: string;
     endsAt: string;
     now: number;
-    colorTheme: 'light' | 'dark';
     theme: ReturnType<typeof useTheme>;
 }) {
     const startTime = new Date(startsAt).getTime();
@@ -846,12 +927,6 @@ function RemainingValidityIndicator({
     const isValidDuration = Number.isFinite(startTime) && Number.isFinite(endTime) && duration > 0;
     const remaining = isValidDuration ? Math.max(0, Math.min(1, (endTime - now) / duration)) : 0;
     const remainingDays = Math.max(0, Math.ceil((endTime - now) / (24 * 60 * 60 * 1000)));
-    const colorSet = VALIDITY_COLORS[colorTheme];
-    const remainingColor = remaining > 0.5
-        ? colorSet.green
-        : remaining > 0.2 ? colorSet.yellow : colorSet.red;
-    const radius = 34;
-    const circumference = 2 * Math.PI * radius;
     const formattedDays = new Intl.NumberFormat('fa-IR').format(remainingDays);
     const progress = useSharedValue(0);
 
@@ -863,46 +938,49 @@ function RemainingValidityIndicator({
         });
     }, [progress, remaining]);
 
-    const animatedCircleProps = useAnimatedProps(() => ({
-        strokeDashoffset: circumference * (1 - progress.value),
+    const animatedProgressStyle = useAnimatedStyle(() => ({
+        width: `${progress.value * 100}%`,
     }));
     if (!isValidDuration) return null;
 
     return (
         <View
             accessible
-            accessibilityRole="image"
-            accessibilityLabel={`اعتبار باقی‌مانده: ${formattedDays} روز`}
+            accessibilityRole="progressbar"
+            accessibilityLabel={`اعتبار باقی‌مانده ${formattedDays} روز؛ پایان دوره ${formatDate(endsAt)}`}
+            accessibilityValue={{ min: 0, max: 100, now: Math.round(remaining * 100) }}
             style={[styles.validitySummary, { backgroundColor: theme.surface }]}
         >
-            <View style={styles.validityCircle}>
-                <Svg width={80} height={80} viewBox="0 0 80 80">
-                    <Circle cx={40} cy={40} r={radius} fill="none" stroke={theme.border} strokeWidth={6} />
-                    <AnimatedCircle
-                        testID="remaining-validity-progress"
-                        cx={40}
-                        cy={40}
-                        r={radius}
-                        fill="none"
-                        stroke={remainingColor}
-                        strokeWidth={6}
-                        strokeDasharray={`${circumference} ${circumference}`}
-                        strokeLinecap="round"
-                        rotation={-90}
-                        origin="40, 40"
-                        animatedProps={animatedCircleProps}
-                    />
-                </Svg>
-                <View pointerEvents="none" style={styles.validityLabel}>
-                    <ThemedText type="bodyBold" style={{ color: theme.text }}>{formattedDays}</ThemedText>
-                    <View style={[styles.validityLabelDivider, { backgroundColor: theme.borderStrong }]} />
-                    <ThemedText type="small" style={{ color: theme.text }}>روز</ThemedText>
+            <View style={styles.validityTopRow}>
+                <View style={styles.validityEndDate}>
+                    <ThemedText type="small" style={{ color: theme.textSecondary }}>پایان دسترسی پلن فعلی</ThemedText>
+                    <ThemedText type="bodyBold">{formatDate(endsAt)}</ThemedText>
+                </View>
+                <View
+                    testID="remaining-days-badge"
+                    style={[styles.remainingDays, { backgroundColor: theme.primary }]}
+                >
+                    <ThemedText
+                        testID="remaining-days-count"
+                        type="bodyBold"
+                        style={{ color: theme.onPrimary }}
+                    >
+                        {formattedDays}
+                    </ThemedText>
+                    <ThemedText type="small" style={{ color: theme.onPrimary }}>روز مانده</ThemedText>
                 </View>
             </View>
-            <View style={styles.validityCopy}>
-                <ThemedText type="small" style={{ color: theme.textSecondary }}>پایان دورهٔ فعلی</ThemedText>
-                <ThemedText type="small">:</ThemedText>
-                <ThemedText type="smallBold">{formatDate(endsAt)}</ThemedText>
+            <View
+                style={[styles.validityTrack, { backgroundColor: theme.surfaceVariant }]}
+            >
+                <Animated.View
+                    testID="remaining-validity-progress"
+                    style={[
+                        styles.validityFill,
+                        { backgroundColor: theme.primary },
+                        animatedProgressStyle,
+                    ]}
+                />
             </View>
         </View>
     );
@@ -1021,20 +1099,24 @@ const styles = StyleSheet.create({
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.two, padding: Spacing.four },
     emptyCard: { alignItems: 'center', gap: Spacing.two, borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.four },
     retryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, paddingHorizontal: Spacing.three },
-    card: { borderWidth: 1, borderRadius: Radius.md, overflow: 'hidden' },
-    cardHeader: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.two },
+    card: { borderWidth: 1.5, borderRadius: Radius.lg, overflow: 'hidden' },
+    cardHeader: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three },
     validitySeparator: { height: StyleSheet.hairlineWidth },
     planIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md },
     flex: { flex: 1 },
-    validitySummary: { minHeight: 104, flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
+    validitySummary: { gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+    validityTopRow: { flexDirection: 'row', direction: 'rtl', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
+    validityEndDate: { flex: 1, gap: Spacing.half },
+    remainingDays: { minWidth: 76, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one },
+    validityTrack: { height: 6, borderRadius: 999, overflow: 'hidden' },
+    validityFill: { height: '100%', borderRadius: 999 },
     activationSummary: { minHeight: 72, justifyContent: 'center', gap: Spacing.two, paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
     activationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: Spacing.two },
     activationTrack: { height: 6, borderRadius: 999, overflow: 'hidden' },
     activationFill: { height: '100%', borderRadius: 999 },
-    validityCircle: { width: 80, height: 80, alignItems: 'center', justifyContent: 'center' },
-    validityLabel: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center', gap: 2 },
-    validityLabelDivider: { width: 30, height: 1.5, borderRadius: 1 },
-    validityCopy: { flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: Spacing.one, rowGap: 2 },
+    nextPlanPreview: { gap: Spacing.two, borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three },
+    nextPlanHeading: { flexDirection: 'row', direction: 'rtl', alignItems: 'center', gap: Spacing.one },
+    nextPlanSummary: { flexDirection: 'row', direction: 'rtl', alignItems: 'center', gap: Spacing.two },
     details: { borderTopWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.two },
     detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
     upgradeNotice: { borderWidth: StyleSheet.hairlineWidth, borderRadius: Radius.sm, padding: Spacing.two },

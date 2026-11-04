@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -23,7 +24,7 @@ export function ErrorState({
     return (
         <ThemedView style={styles.container} accessibilityRole="alert">
             <View style={[styles.icon, { backgroundColor: theme.errorFill }]}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={30} color={theme.onError} />
+                <MaterialCommunityIcons name="alert-circle-outline" size={30} color={theme.onErrorFill} />
             </View>
             <ThemedText type="bodyBold" style={styles.title}>{title}</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.message}>{message}</ThemedText>
@@ -64,7 +65,7 @@ const styles = StyleSheet.create({
     message: {
         maxWidth: 420,
         textAlign: 'center',
-        lineHeight: 24,
+        lineHeight: Typography.lineHeight.comfortable,
     },
     retryButton: {
         minHeight: 44,

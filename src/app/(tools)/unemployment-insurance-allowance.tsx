@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -84,9 +85,9 @@ function ResultDetail({ label, value, emphasized = false }: { label: string; val
     const theme = useTheme();
 
     return (
-        <View style={[styles.detailBox, { backgroundColor: emphasized ? theme.primaryContainer : theme.surface, borderColor: emphasized ? theme.primary : theme.border }]}>
-            <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>{label}</ThemedText>
-            <ThemedText type="smallBold" style={[styles.detailValue, { color: emphasized ? theme.primaryText : theme.text }]}>{value}</ThemedText>
+        <View style={[styles.detailBox, { backgroundColor: emphasized ? theme.primary : theme.surface, borderColor: emphasized ? theme.primary : theme.border }]}>
+            <ThemedText type="small" style={[styles.detailLabel, { color: emphasized ? theme.onPrimary : theme.textSecondary }]}>{label}</ThemedText>
+            <ThemedText type="smallBold" style={[styles.detailValue, { color: emphasized ? theme.onPrimary : theme.text }]}>{value}</ThemedText>
         </View>
     );
 }
@@ -274,9 +275,9 @@ export default function UnemploymentInsuranceAllowanceScreen() {
                                     <ThemedText type="small" style={[styles.dependentsLimit, { color: theme.textMuted }]}>۰ تا ۴ نفر</ThemedText>
                                 </View>
                                 <View style={[styles.stepper, styles.dependentsStepper, { backgroundColor: theme.surface, borderColor: theme.border, direction: 'ltr' }]}>
-                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, -1))} disabled={Number(normalizeDigits(dependents || '0')) <= 0} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) <= 0 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="کاهش افراد تحت تکفل"><MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} /></Pressable>
+                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, -1))} disabled={Number(normalizeDigits(dependents || '0')) <= 0} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) <= 0 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="کاهش افراد تحت تکفل">{({ pressed }) => (<MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />)}</Pressable>
                                     <NumericInputField value={dependents} onChangeText={setDependents} style={[styles.stepperInput, { color: theme.text, direction: 'ltr' }]} textAlign="center" accessibilityLabel="تعداد افراد تحت تکفل" />
-                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, 1, 4))} disabled={Number(normalizeDigits(dependents || '0')) >= 4} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) >= 4 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="افزایش افراد تحت تکفل"><MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} /></Pressable>
+                                    <Pressable onPress={() => setDependents((value) => changeNumber(value, 1, 4))} disabled={Number(normalizeDigits(dependents || '0')) >= 4} style={({ pressed }) => [styles.stepperButton, { backgroundColor: pressed ? theme.primary : theme.surfaceVariant }, Number(normalizeDigits(dependents || '0')) >= 4 && styles.stepperButtonDisabled]} accessibilityRole="button" accessibilityLabel="افزایش افراد تحت تکفل">{({ pressed }) => (<MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />)}</Pressable>
                                 </View>
                             </View>
 
@@ -288,9 +289,9 @@ export default function UnemploymentInsuranceAllowanceScreen() {
                                 <Card style={[styles.resultCard, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                     <Card.Content style={styles.resultContent}>
                                         <CalculationResultHeading />
-                                        <View style={[styles.summaryBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                            <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>مقرری ماهیانه بیمه بیکاری</ThemedText>
-                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.primaryText }]}>{formatCurrency(result.monthlyAmount)}</ThemedText>
+                                        <View style={[styles.summaryBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                            <ThemedText type="small" style={[styles.summaryLabel, { color: theme.onPrimary }]}>مقرری ماهیانه بیمه بیکاری</ThemedText>
+                                            <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.onPrimary }]}>{formatCurrency(result.monthlyAmount)}</ThemedText>
                                         </View>
                                         <View style={styles.breakdownGrid}>
                                             <ResultDetail label="متوسط مزد روزانه" value={formatCurrency(result.averageDailyWage)} />
@@ -322,32 +323,32 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    formulaText: { fontSize: 12, lineHeight: 21 },
+    formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
     metricBox: { borderRadius: 12, padding: Spacing.two, gap: Spacing.one },
-    sectionLabel: { fontSize: 11 },
-    fieldHint: { fontSize: 10, lineHeight: 16 },
+    sectionLabel: { fontSize: Typography.fontSize.caption },
+    fieldHint: { fontSize: Typography.fontSize.tiny, lineHeight: Typography.lineHeight.tight },
     dependentsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    dependentsLimit: { fontSize: 10 },
+    dependentsLimit: { fontSize: Typography.fontSize.tiny },
     dateInput: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, paddingVertical: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
-    textInput: { minHeight: 42, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingHorizontal: Spacing.two, fontFamily: 'AppFont-Bold', fontSize: 14 },
+    textInput: { minHeight: 42, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8, paddingHorizontal: Spacing.two, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodySmall },
     stepper: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.one, gap: Spacing.one },
     dependentsStepper: { width: '100%' },
     stepperButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
     stepperButtonDisabled: { opacity: 0.4 },
-    stepperInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: 16, paddingVertical: 0 },
+    stepperInput: { flex: 1, minHeight: 42, fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.bodyLarge, paddingVertical: 0 },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     summaryBox: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth },
-    summaryLabel: { fontSize: 10, lineHeight: 16, fontFamily: 'AppFont-Medium' },
-    amountValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    summaryLabel: { fontSize: Typography.fontSize.tiny, lineHeight: Typography.lineHeight.tight, fontFamily: 'AppFont-Medium' },
+    amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     breakdownGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
-    detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    detailLabel: { fontSize: Typography.fontSize.footnote },
+    detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

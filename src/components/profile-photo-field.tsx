@@ -24,7 +24,7 @@ export function ProfilePhotoField({
     const theme = useTheme();
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.primaryContainer }]}>
+        <View style={[styles.container, { backgroundColor: theme.primary }]}>
             {uri ? (
                 <Pressable
                     accessibilityRole="button"
@@ -42,7 +42,7 @@ export function ProfilePhotoField({
                     onPress={onSelect}
                     style={styles.placeholder}
                 >
-                    <MaterialCommunityIcons name="account-outline" size={36} color={theme.primaryText} />
+                    <MaterialCommunityIcons name="account-outline" size={36} color={theme.onPrimary} />
                 </Pressable>
             )}
             <Pressable

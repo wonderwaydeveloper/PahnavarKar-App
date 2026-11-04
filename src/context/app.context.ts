@@ -1,5 +1,8 @@
 import { Colors, type AppColorPalette, type ThemePalette } from '@/constants/theme';
+import type { FontSizePreference } from '@/constants/font-scale';
 import { createContext } from 'react';
+
+export type { FontSizePreference } from '@/constants/font-scale';
 
 export type ThemeType = keyof typeof Colors;
 export type ThemePreference = ThemeType | 'system';
@@ -12,6 +15,7 @@ export interface AppContextType {
     themePreference: ThemePreference;
     colorPalette: ThemePalette;
     fontPreference: FontPreference;
+    fontSizePreference: FontSizePreference;
     fontError: string | null;
     currencyPreference: CurrencyPreference;
     currencyError: string | null;
@@ -24,6 +28,7 @@ export interface AppContextType {
     setTheme: (theme: ThemePreference) => Promise<void>;
     setColorPalette: (palette: ThemePalette) => Promise<void>;
     setFontPreference: (font: FontPreference) => Promise<void>;
+    setFontSizePreference: (size: FontSizePreference) => Promise<void>;
     setCurrencyPreference: (currency: CurrencyPreference) => Promise<void>;
     setCalculationSound: (sound: CalculationSound) => Promise<void>;
     notifyCalculationCompleted: () => void;

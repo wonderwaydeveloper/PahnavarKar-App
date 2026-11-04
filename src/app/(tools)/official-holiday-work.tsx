@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
@@ -497,7 +498,7 @@ export default function OfficialHolidayWorkScreen() {
                                                 style={[
                                                     styles.workHoursMethodOption,
                                                     {
-                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        backgroundColor: selected ? theme.primary : theme.surface,
                                                         borderColor: selected ? theme.primary : theme.border,
                                                         borderWidth: selected ? 1.5 : StyleSheet.hairlineWidth,
                                                     },
@@ -506,13 +507,13 @@ export default function OfficialHolidayWorkScreen() {
                                                 <MaterialCommunityIcons
                                                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                                                     size={20}
-                                                    color={selected ? theme.primaryText : theme.textSecondary}
+                                                    color={selected ? theme.onPrimary : theme.textSecondary}
                                                 />
                                                 <ThemedText
                                                     type="smallBold"
                                                     style={[
                                                         styles.workHoursMethodLabel,
-                                                        { color: selected ? theme.primaryText : theme.text },
+                                                        { color: selected ? theme.onPrimary : theme.text },
                                                     ]}
                                                 >
                                                     {option.label}
@@ -551,13 +552,15 @@ export default function OfficialHolidayWorkScreen() {
                                                 disabled={normalizedActualWorkedHours <= 0}
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     normalizedActualWorkedHours <= 0 && styles.workHoursStepperButtonDisabled,
                                                 ]}
                                                 accessibilityRole="button"
                                                 accessibilityLabel="کاهش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="minus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="minus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                             <NumericInputField
                                                 mode="decimal"
@@ -578,7 +581,7 @@ export default function OfficialHolidayWorkScreen() {
                                                 }
                                                 style={({ pressed }) => [
                                                     styles.workHoursStepperButton,
-                                                    { backgroundColor: pressed ? theme.primaryContainer : theme.surfaceVariant },
+                                                    { backgroundColor: pressed ? theme.primary : theme.surfaceVariant },
                                                     maximumAllowedWorkHours !== null
                                                     && normalizedActualWorkedHours >= maximumAllowedWorkHours
                                                     && styles.workHoursStepperButtonDisabled,
@@ -586,7 +589,9 @@ export default function OfficialHolidayWorkScreen() {
                                                 accessibilityRole="button"
                                                 accessibilityLabel="افزایش ساعات کارکرد کارگر"
                                             >
-                                                <MaterialCommunityIcons name="plus" size={20} color={theme.primaryText} />
+                                                {({ pressed }) => (
+                                                    <MaterialCommunityIcons name="plus" size={20} color={pressed ? theme.onPrimary : theme.primaryText} />
+                                                )}
                                             </Pressable>
                                         </View>
                                         {workedHoursError ? (
@@ -651,7 +656,7 @@ export default function OfficialHolidayWorkScreen() {
                                     color={isWorkerInsuranceExempt ? theme.primaryText : theme.textSecondary}
                                 />
                                 <View style={styles.insuranceExemptionText}>
-                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>
+                                    <ThemedText type="smallBold" style={{ color: theme.text, fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact }}>
                                         مشمول معافیت از پرداخت سهم بیمه ی کارگر هستم
                                     </ThemedText>
                                     <ThemedText type="small" style={[styles.insuranceExemptionDescription, { color: theme.textSecondary }]}>
@@ -731,29 +736,29 @@ export default function OfficialHolidayWorkScreen() {
                                                     {toPersianDigits(formatCurrency(employerInsuranceAmount))}
                                                 </ThemedText>
                                             </View>
-                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                     مبلغ تعطیل‌کاری پس از کسر سهم بیمهٔ کارگر
                                                 </ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                     {toPersianDigits(formatCurrency(finalClaimAmount))}
                                                 </ThemedText>
                                             </View>
-                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                     مبلغ تعطیل‌کاری رسمی پس از کسر مبلغ پرداخت‌شده به کارگر
                                                 </ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                     {remainingHolidayWorkAmount === null
                                                         ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                         : formatCurrency(remainingHolidayWorkAmount)}
                                                 </ThemedText>
                                             </View>
-                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.textSecondary }]}>
+                                            <View style={[styles.insuranceSummaryRow, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryLabel, styles.insuranceSummaryEmphasisLabel, { color: theme.onPrimary }]}>
                                                     مبلغ تعطیل‌کاری رسمی پس از کسر سهم بیمهٔ کارگر و مبلغ پرداخت‌شده
                                                 </ThemedText>
-                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.primaryText }]}>
+                                                <ThemedText type="smallBold" style={[styles.insuranceSummaryValue, styles.insuranceSummaryEmphasisValue, { color: theme.onPrimary }]}>
                                                     {finalRemainingHolidayWorkAmount === null
                                                         ? 'مبلغ پرداخت‌شده نامعتبر است'
                                                         : formatCurrency(finalRemainingHolidayWorkAmount)}
@@ -790,9 +795,9 @@ export default function OfficialHolidayWorkScreen() {
                                                         </View>
 
                                                         <View style={styles.detailGrid}>
-                                                            <View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>بازهٔ زمانی دوره</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
+                                                            <View style={[styles.detailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>بازهٔ زمانی دوره</ThemedText>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>
                                                                     {`${formatBreakdownDate(item.startDate)} تا ${formatBreakdownDate(item.endDate)}`}
                                                                 </ThemedText>
                                                             </View>
@@ -824,9 +829,9 @@ export default function OfficialHolidayWorkScreen() {
                                                                     {toPersianDigits(formatCurrency(item.holidayWorkRate))}
                                                                 </ThemedText>
                                                             </View>
-                                                            <View style={[styles.detailBox, { backgroundColor: theme.primaryContainer, borderColor: theme.primary }]}>
-                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>مبلغ نهایی</ThemedText>
-                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.primaryText }]}>
+                                                            <View style={[styles.detailBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                                <ThemedText type="small" style={[styles.detailLabel, { color: theme.onPrimary }]}>مبلغ نهایی</ThemedText>
+                                                                <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>
                                                                     {toPersianDigits(formatCurrency(item.amount))}
                                                                 </ThemedText>
                                                             </View>
@@ -886,14 +891,14 @@ const styles = StyleSheet.create({
     card: { borderRadius: Radius.md, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     cardContent: { gap: Spacing.three, paddingVertical: Spacing.four, paddingHorizontal: Spacing.three },
     headerText: { alignSelf: 'stretch', gap: Spacing.one },
-    pageTitle: { display: 'none', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    pageDescription: { fontSize: 13, lineHeight: 20 },
+    pageTitle: { display: 'none', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    pageDescription: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.body },
     formulaBox: { borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, padding: Spacing.two, gap: Spacing.one },
-    formulaLabel: { fontSize: 11 },
-    formulaText: { fontSize: 12, lineHeight: 21 },
+    formulaLabel: { fontSize: Typography.fontSize.caption },
+    formulaText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.bodyLarge },
     metricsRow: { flexDirection: 'row', gap: Spacing.two },
     metricBox: { flex: 1, borderRadius: 14, padding: Spacing.two, gap: Spacing.one },
-    sectionLabel: { fontSize: 11 },
+    sectionLabel: { fontSize: Typography.fontSize.caption },
     workHoursSection: {
         gap: Spacing.two,
         padding: Spacing.two,
@@ -914,7 +919,7 @@ const styles = StyleSheet.create({
     },
     workHoursMethodLabel: {
         flexShrink: 1,
-        lineHeight: 20,
+        lineHeight: Typography.lineHeight.body,
     },
     workHoursDivider: {
         height: StyleSheet.hairlineWidth,
@@ -928,12 +933,12 @@ const styles = StyleSheet.create({
         minHeight: 48,
         paddingVertical: 0,
         fontFamily: 'AppFont-Bold',
-        fontSize: 16,
+        fontSize: Typography.fontSize.bodyLarge,
         writingDirection: 'ltr',
     },
     workHoursHint: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     workHoursStepper: {
         minHeight: 54,
@@ -971,7 +976,7 @@ const styles = StyleSheet.create({
     },
     actionsGroup: { flexDirection: 'row', gap: Spacing.two },
     actionButton: { flex: 1, borderRadius: 10 },
-    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: 12 },
+    actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' },
     resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two },
     insuranceSummary: {
@@ -988,10 +993,10 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
     },
-    insuranceSummaryLabel: { textAlign: 'center', fontSize: 12 },
-    insuranceSummaryValue: { textAlign: 'center', fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
-    insuranceSummaryEmphasisLabel: { fontSize: 13 },
-    insuranceSummaryEmphasisValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    insuranceSummaryLabel: { textAlign: 'center', fontSize: Typography.fontSize.footnote },
+    insuranceSummaryValue: { textAlign: 'center', fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    insuranceSummaryEmphasisLabel: { fontSize: Typography.fontSize.compact },
+    insuranceSummaryEmphasisValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
     insuranceExemptionOption: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1011,7 +1016,7 @@ const styles = StyleSheet.create({
         gap: Spacing.half,
     },
     insuranceExemptionDescription: {
-        fontSize: 12,
+        fontSize: Typography.fontSize.footnote,
     },
     insuranceLegalBasis: {
         gap: Spacing.one,
@@ -1020,8 +1025,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
     },
     insuranceLegalSummary: {
-        fontSize: 12,
-        lineHeight: 18,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.caption,
     },
     insuranceLegalToggle: {
         flexDirection: 'row',
@@ -1031,11 +1036,11 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.half,
     },
     insuranceLegalToggleLabel: {
-        fontSize: 13,
+        fontSize: Typography.fontSize.compact,
     },
     insuranceLegalText: {
-        fontSize: 12,
-        lineHeight: 20,
+        fontSize: Typography.fontSize.footnote,
+        lineHeight: Typography.lineHeight.body,
     },
     breakdownHeader: {
         flexDirection: 'row',
@@ -1045,8 +1050,8 @@ const styles = StyleSheet.create({
         paddingVertical: Spacing.one,
         gap: Spacing.one,
     },
-    breakdownSectionTitle: { fontSize: 13, fontFamily: 'AppFont-Bold' },
-    toggleButtonLabel: { fontSize: 11 },
+    breakdownSectionTitle: { fontSize: Typography.fontSize.compact, fontFamily: 'AppFont-Bold' },
+    toggleButtonLabel: { fontSize: Typography.fontSize.caption },
     toggleButton: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1059,9 +1064,9 @@ const styles = StyleSheet.create({
     breakdownGrid: { gap: Spacing.two },
     breakdownItemCard: { borderRadius: Radius.md, borderWidth: 1, padding: Spacing.two, gap: Spacing.one },
     breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth },
-    breakdownItemTitle: { fontSize: 12, fontFamily: 'AppFont-Bold' },
+    breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' },
     detailGrid: { gap: Spacing.one },
     detailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 },
-    detailLabel: { fontSize: 12 },
-    detailValue: { fontSize: 16, lineHeight: 22, fontFamily: 'AppFont-Bold' },
+    detailLabel: { fontSize: Typography.fontSize.footnote },
+    detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });

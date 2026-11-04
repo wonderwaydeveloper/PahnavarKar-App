@@ -49,7 +49,7 @@ export function AppFeedbackProvider({ children }: PropsWithChildren) {
             ? theme.successFill
             : feedback?.variant === 'warning' ? theme.warningFill : theme.infoFill;
     const textColor = feedback?.variant === 'error'
-        ? theme.onError
+        ? theme.onErrorFill
         : feedback?.variant === 'success'
             ? theme.onSuccess
             : feedback?.variant === 'warning' ? theme.onWarning : theme.onInfo;

@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -182,7 +183,7 @@ const styles = StyleSheet.create({
         padding: Spacing.five,
     },
     title: { textAlign: 'center' },
-    description: { lineHeight: 24, textAlign: 'center' },
+    description: { lineHeight: Typography.lineHeight.comfortable, textAlign: 'center' },
     button: {
         minHeight: 48,
         alignSelf: 'stretch',

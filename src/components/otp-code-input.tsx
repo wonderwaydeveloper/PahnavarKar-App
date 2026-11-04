@@ -1,3 +1,4 @@
+import { Typography } from '@/constants/typography';
 import { useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderRadius: Radius.md,
         paddingHorizontal: Spacing.three,
-        fontSize: 24,
+        fontSize: Typography.fontSize.titleLarge,
         letterSpacing: 8,
         direction: 'ltr',
         writingDirection: 'ltr',
