@@ -60,6 +60,19 @@ export const GROUP_CALCULATION_KEYS = [
 export type GroupCalculationKey = (typeof GROUP_CALCULATION_KEYS)[number];
 export type GroupCalculationMaritalStatus = 'single' | 'married';
 
+export const INSURANCE_CALCULATION_KEYS: readonly GroupCalculationKey[] = [
+    'base-salary',
+    'entitled-seniority',
+    'housing-allowance',
+    'monthly-allowance',
+    'spousal-allowance',
+    'overtime-entitlement',
+    'night-shift-entitlement',
+    'monthly-shift-work',
+    'official-holiday-work',
+    'friday-work',
+];
+
 const WORK_TIME_SCALED_KEYS = new Set<GroupCalculationKey>([
     'family-allowance',
     'housing-allowance',
@@ -112,6 +125,43 @@ export interface GroupCalculationResult {
     unit: 'ریال' | 'روز' | 'ساعت' | 'ماه';
     breakdown: unknown[];
     error?: string;
+}
+
+export interface WorkerClaimsAfterPaymentsResult {
+    remainingClaim: number;
+    workerInsuranceAmount: number;
+    finalClaim: number;
+    error?: string;
+}
+
+export function calculateWorkerClaimsAfterPayments(
+    wageTotalAmount: number,
+    insuranceBaseAmount: number,
+    amountPaid: number,
+    workerInsuranceExempt: boolean,
+    wageTotalError?: string,
+): WorkerClaimsAfterPaymentsResult {
+    const error = wageTotalError
+        ?? (!Number.isSafeInteger(amountPaid) || amountPaid < 0
+            ? 'مبلغ پرداخت‌شده باید عدد صحیح و نامنفی باشد.'
+            : !Number.isFinite(wageTotalAmount)
+                ? 'جمع حقوق و مزایا قابل محاسبه نیست.'
+                : undefined);
+
+    if (error) {
+        return { error, remainingClaim: 0, workerInsuranceAmount: 0, finalClaim: 0 };
+    }
+
+    const remainingClaim = Math.max(0, Math.round(wageTotalAmount - amountPaid));
+    const workerInsuranceAmount = workerInsuranceExempt
+        ? 0
+        : Math.round(Math.max(0, insuranceBaseAmount) * 0.07);
+
+    return {
+        remainingClaim,
+        workerInsuranceAmount,
+        finalClaim: Math.max(0, remainingClaim - workerInsuranceAmount),
+    };
 }
 
 const GROUP_RESULT_UNITS: Partial<Record<GroupCalculationKey, GroupCalculationResult['unit']>> = {
@@ -309,6 +359,8 @@ function calculateOne(key: GroupCalculationKey, input: GroupCalculationInput): P
                 input.workshopType,
                 input.jobGroupNumber,
                 input.settledThrough1391,
+                'persian-year-end',
+                'last-covered-day-of-year',
             );
             return { value: result.totalEntitlementAmount, unit: 'ریال', breakdown: result.breakdown };
         }

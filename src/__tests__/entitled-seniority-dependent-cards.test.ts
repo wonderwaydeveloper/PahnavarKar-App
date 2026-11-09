@@ -15,6 +15,7 @@ import {
     calculateSuspensionWageFromPeriodData,
     calculateUnusedLeaveWageFromPeriodData,
     parseDateInput,
+    type ParsedDateInput,
     type SalaryPeriodBucket,
 } from '@/utils/salary-calculation';
 
@@ -65,6 +66,41 @@ function getSettlementExamplePeriodBuckets(): SalaryPeriodBucket[] {
             marital_allowance: 0,
         })),
     }));
+}
+
+function calculateGroupBonus(
+    startDate: ParsedDateInput,
+    endDate: ParsedDateInput,
+    employmentStartDate: ParsedDateInput,
+    periodBuckets: SalaryPeriodBucket[],
+) {
+    const result = calculateGroupItems(['bonus-entitlement'], {
+        startDate,
+        endDate,
+        missionStartDate: startDate,
+        missionEndDate: endDate,
+        periodBuckets,
+        officialHolidayDates: [],
+        maritalStatus: 'single',
+        childrenCount: 0,
+        dailyWorkMinutes: 440,
+        dailyWorkHours: 440 / 60,
+        employmentStartDate,
+        workshopType: 'unclassified',
+        settledThrough1391: false,
+        dailyOvertimeHours: 0,
+        shiftType: 'morning-evening',
+        fridayWorkDaysByPeriod: {},
+        missionDaysByPeriod: {},
+        usedLeaveDaysBySegment: [],
+        initialSavedLeaveDays: 0,
+    }).find((item) => item.key === 'bonus-entitlement');
+
+    if (!result) {
+        throw new Error('Group bonus calculation must return a result.');
+    }
+
+    return result;
 }
 
 function expectSeniorityInBreakdown(
@@ -143,6 +179,21 @@ describe('cards that use entitled seniority', () => {
         expect(yearEndBasedBonus.totalEntitlementAmount).toBe(78_000);
         expect(anniversaryBasedBonus.totalEntitlementAmount).toBe(72_000);
 
+        const standaloneBonus = calculateBonusEntitlementFromPeriodData(
+            startDate,
+            endDate,
+            employmentStartDate,
+            periodBuckets,
+            'unclassified',
+            undefined,
+            false,
+            'persian-year-end',
+            'last-covered-day-of-year',
+        );
+        const groupBonus = calculateGroupBonus(startDate, endDate, employmentStartDate, periodBuckets);
+        expect(groupBonus.value).toBe(standaloneBonus.totalEntitlementAmount);
+        expect(groupBonus.breakdown).toEqual(standaloneBonus.breakdown);
+
         const midyearEndDate = parseDateInput('1400/06/31');
         if (!midyearEndDate) {
             throw new Error('Bonus partial-year end date must be a valid Jalali date.');
@@ -159,6 +210,14 @@ describe('cards that use entitled seniority', () => {
         );
         expect(partialYearBonus.breakdown.map((item) => item.dailySeniority)).toEqual([0]);
         expect(partialYearBonus.totalEntitlementAmount).toBe(30_000);
+        const partialGroupBonus = calculateGroupBonus(
+            startDate,
+            midyearEndDate,
+            employmentStartDate,
+            periodBuckets,
+        );
+        expect(partialGroupBonus.value).toBe(partialYearBonus.totalEntitlementAmount);
+        expect(partialGroupBonus.breakdown).toEqual(partialYearBonus.breakdown);
     });
 
     it('does not apply 1405 seniority before the selected end date reaches the employment anniversary', () => {
@@ -264,6 +323,9 @@ describe('cards that use entitled seniority', () => {
             636_809,
         ]);
         expect(lastCoveredDayBonus.totalEntitlementAmount).toBe(34_815_649);
+        const groupBonus = calculateGroupBonus(startDate, yearEndDate, employmentStartDate, periodBuckets);
+        expect(groupBonus.value).toBe(lastCoveredDayBonus.totalEntitlementAmount);
+        expect(groupBonus.breakdown).toEqual(lastCoveredDayBonus.breakdown);
 
         const midPeriodEndBonus = calculateBonusEntitlementFromPeriodData(
             startDate,
@@ -278,6 +340,14 @@ describe('cards that use entitled seniority', () => {
         );
         expect(midPeriodEndBonus.breakdown.map((item) => item.dailyMinimumWage)).toEqual([611_809]);
         expect(midPeriodEndBonus.totalEntitlementAmount).toBe(3_157_724);
+        const partialGroupBonus = calculateGroupBonus(
+            startDate,
+            partialYearEndDate,
+            employmentStartDate,
+            periodBuckets,
+        );
+        expect(partialGroupBonus.value).toBe(midPeriodEndBonus.totalEntitlementAmount);
+        expect(partialGroupBonus.breakdown).toEqual(midPeriodEndBonus.breakdown);
     });
 
     it('applies the settled 1 Farvardin anniversary to every dependent standalone card', () => {

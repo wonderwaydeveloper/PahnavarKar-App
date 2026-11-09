@@ -47,8 +47,10 @@ import {
 import { displayCurrencyToRial, formatCurrencyAmount, getCurrencyLabel } from '@/utils/currency';
 import { normalizeWorkHoursInput } from '@/utils/work-hours-input';
 import {
+    calculateWorkerClaimsAfterPayments,
     calculateGroupItems,
     GROUP_CALCULATION_KEYS,
+    INSURANCE_CALCULATION_KEYS,
     type GroupCalculationKey,
     type GroupCalculationResult,
 } from '@/utils/group-calculation';
@@ -85,18 +87,6 @@ const GROUP_TOOLS = GROUP_TOOL_CATEGORIES.flatMap((category) =>
     ),
 );
 const WAGE_TOTAL_EXCLUDED_KEYS: GroupCalculationKey[] = ['minimum-bonus', 'maximum-bonus'];
-const INSURANCE_CALCULATION_KEYS: GroupCalculationKey[] = [
-    'base-salary',
-    'housing-allowance',
-    'monthly-allowance',
-    'spousal-allowance',
-    'entitled-seniority',
-    'overtime-entitlement',
-    'night-shift-entitlement',
-    'monthly-shift-work',
-    'official-holiday-work',
-    'friday-work',
-];
 
 function isWageCalculationKey(key: GroupCalculationKey) {
     return GROUP_TOOLS.some((tool) => (
@@ -134,6 +124,13 @@ function getEmployerInsuranceTotal(results: readonly GroupCalculationResult[]) {
     return results.reduce((total, result) => {
         if (result.error || !isInsuranceCalculationKey(result.key)) return total;
         return total + Math.round(Math.round(getInsuranceBaseAmount(result)) * 0.23);
+    }, 0);
+}
+
+function getWorkerInsuranceBaseAmount(results: readonly GroupCalculationResult[]) {
+    return results.reduce((total, result) => {
+        if (result.error || !isInsuranceCalculationKey(result.key)) return total;
+        return total + getInsuranceBaseAmount(result);
     }, 0);
 }
 
@@ -214,31 +211,6 @@ function calculateContractorMonthlyTotals(
         contractorTotal: contractorTotal31.amount,
         employerInsurance31: contractorTotal31.employerInsuranceAmount,
         contractorTotalError: contractorTotal31.error,
-    };
-}
-
-function calculateWorkerClaimsAfterPayments(
-    wageTotalAmount: number,
-    amountPaid: number,
-    wageTotalError?: string,
-) {
-    const error = wageTotalError
-        ?? (!Number.isSafeInteger(amountPaid) || amountPaid < 0
-            ? 'مبلغ پرداخت‌شده باید عدد صحیح و نامنفی باشد.'
-            : !Number.isFinite(wageTotalAmount)
-                ? 'جمع حقوق و مزایا قابل محاسبه نیست.'
-                : undefined);
-
-    if (error) {
-        return { error, remainingClaim: 0, finalClaim: 0 };
-    }
-
-    const remainingClaim = Math.max(0, Math.round(wageTotalAmount - amountPaid));
-    const workerInsurance = Math.round(remainingClaim * 0.07);
-
-    return {
-        remainingClaim,
-        finalClaim: remainingClaim - workerInsurance,
     };
 }
 
@@ -669,6 +641,7 @@ function formatBreakdownDetail(
         const phaseMap: Record<string, string> = {
             'before-anniversary': 'پیش از سالگرد استخدام',
             'after-anniversary': afterAnniversary,
+            'calendar-year-end': 'پایهٔ سنوات در پایان کارکرد این سال',
             'settled-through-1391': 'تصفیه‌شده تا پایان ۱۳۹۱',
             'before-anniversary-settled-through-1391': 'پیش از سالگرد و تسویه تا پایان ۱۳۹۱',
             'after-anniversary-settled-through-1391': key === 'mission-allowance'
@@ -874,13 +847,20 @@ async function getPdfAssetDataUri(moduleId: number, mimeType: string, label: str
         const base64 = await new File(localUri).base64();
         return `data:${mimeType};base64,${base64}`;
     } catch (error) {
-        throw new Error(getUserFacingErrorMessage(error, 'خواندن فایل برای فیش PDF ناموفق بود.'));
+        throw new Error(getUserFacingErrorMessage(error, 'خواندن فایل گزارش PDF ناموفق بود.'));
     }
 }
 
-async function getGroupCalculationPdfAssets(fontPreference: FontPreference): Promise<GroupCalculationPdfAssets> {
+async function getGroupCalculationPdfAssets(
+    fontPreference: FontPreference,
+    colorMode: 'monochrome' | 'color',
+): Promise<GroupCalculationPdfAssets> {
+    const logoAsset = colorMode === 'color'
+        ? require('../../../assets/images/logo-white.png')
+        : require('../../../assets/images/logo-teal.png');
+
     if (fontPreference === 'system') {
-        const logo = await getPdfAssetDataUri(require('../../../assets/images/logo-white.png'), 'image/png', 'app logo');
+        const logo = await getPdfAssetDataUri(logoAsset, 'image/png', 'app logo');
         return { logo };
     }
 
@@ -905,7 +885,7 @@ async function getGroupCalculationPdfAssets(fontPreference: FontPreference): Pro
                 bold: require('../../../assets/fonts/shabnam/Shabnam-Bold-FD.ttf'),
             };
     const [logo, regularFont, mediumFont, semiBoldFont, boldFont] = await Promise.all([
-        getPdfAssetDataUri(require('../../../assets/images/logo-white.png'), 'image/png', 'app logo'),
+        getPdfAssetDataUri(logoAsset, 'image/png', 'app logo'),
         getPdfAssetDataUri(fontFiles.regular, 'font/ttf', 'regular font'),
         getPdfAssetDataUri(fontFiles.medium, 'font/ttf', 'medium font'),
         getPdfAssetDataUri(fontFiles.semiBold, 'font/ttf', 'semibold font'),
@@ -918,7 +898,13 @@ async function getGroupCalculationPdfAssets(fontPreference: FontPreference): Pro
 export default function GroupCalculationScreen() {
     const theme = useTheme();
     const { showError } = useAppFeedback();
-    const { fontPreference, currencyPreference, colorPalette, colorPaletteTone, notifyCalculationCompleted } = useAppContext();
+    const {
+        colorPalette,
+        colorPaletteTone,
+        fontPreference,
+        currencyPreference,
+        notifyCalculationCompleted,
+    } = useAppContext();
     const { formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -958,6 +944,8 @@ export default function GroupCalculationScreen() {
     const [actualWorkedHours, setActualWorkedHours] = useState<string | null>(null);
     const [workedHoursError, setWorkedHoursError] = useState('');
     const [isWorkerInsuranceExempt, setIsWorkerInsuranceExempt] = useState(false);
+    const [isWorkerInsuranceItemsExpanded, setIsWorkerInsuranceItemsExpanded] = useState(false);
+    const [isEmployerInsuranceItemsExpanded, setIsEmployerInsuranceItemsExpanded] = useState(false);
     const [isInsuranceLegalBasisVisible, setIsInsuranceLegalBasisVisible] = useState(false);
     const [periodBuckets, setPeriodBuckets] = useState<SalaryPeriodBucket[]>([]);
     const [holidayDates, setHolidayDates] = useState<string[]>([]);
@@ -975,6 +963,7 @@ export default function GroupCalculationScreen() {
     const [pdfSnackbarVisible, setPdfSnackbarVisible] = useState(false);
     const [pdfSnackbarIsError, setPdfSnackbarIsError] = useState(true);
     const [includePdfDetails, setIncludePdfDetails] = useState(false);
+    const [pdfColorMode, setPdfColorMode] = useState<'monochrome' | 'color'>('color');
     const [employerName, setEmployerName] = useState('');
     const [employerIdentifier, setEmployerIdentifier] = useState('');
     const [employeeName, setEmployeeName] = useState('');
@@ -1053,7 +1042,7 @@ export default function GroupCalculationScreen() {
     const contractorWorkerCountValue = Number(normalizeDigits(contractorWorkerCount)) || 0;
     const contractorWorkerCountIsSafe = Number.isSafeInteger(contractorWorkerCountValue);
     const hasInsuranceDays = selectedKeys.includes('insurance-days-entitlement');
-    const hasInsuranceCalculation = selectedKeys.some(isInsuranceCalculationKey);
+    const hasWorkerInsuranceCalculation = selectedKeys.some(isInsuranceCalculationKey);
     const hasPayrollDailyWorkTime = selectedKeys.some((key) => PAYROLL_DAILY_WORK_KEYS.includes(key));
     const hasDailyWorkTime = hasPayrollDailyWorkTime || hasInsuranceDays;
     const hasEmploymentBasedCalculation = selectedKeys.some((key) => [
@@ -1536,7 +1525,11 @@ export default function GroupCalculationScreen() {
         const contractorWorkerCountValue = Number(normalizeDigits(contractorWorkerCount));
         const wageTotalHasErrors = wageTotalResults.some((result) => result.error);
         const wageTotalAmount = wageTotalResults.reduce((total, result) => total + getResultAmount(result), 0);
+        const workerInsuranceBaseAmount = getWorkerInsuranceBaseAmount(wageTotalResults);
         const employerInsuranceTotal = getEmployerInsuranceTotal(wageTotalResults);
+        const insuranceItems = wageTotalResults
+            .filter((result) => !result.error && isInsuranceCalculationKey(result.key))
+            .map((result) => getResultTitle(result, workshopType));
         const contractorTotals = calculateContractorMonthlyTotals(
             wageTotalAmount,
             employerInsuranceTotal,
@@ -1550,7 +1543,9 @@ export default function GroupCalculationScreen() {
         );
         const workerClaims = calculateWorkerClaimsAfterPayments(
             wageTotalAmount,
+            workerInsuranceBaseAmount,
             amountPaidValue,
+            isWorkerInsuranceExempt,
             contractorTotals.wageTotalError,
         );
         const contractorWorkerCountLabel = contractorWorkerCount.trim().length > 0
@@ -1565,11 +1560,15 @@ export default function GroupCalculationScreen() {
                     contractorTotalError: contractorTotals.contractorTotalError,
                     contractorWorkerCount: contractorWorkerCountLabel,
                     excludedBonusItems,
+                    insuranceItems,
+                    employerInsuranceAmount: undefined,
                     amountPaid: Number.isSafeInteger(amountPaidValue) && amountPaidValue >= 0
                         ? formatCurrency(amountPaidValue)
                         : 'مبلغ نامعتبر',
                     remainingClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.remainingClaim),
+                    workerInsuranceAmount: workerClaims.error ? undefined : formatCurrency(workerClaims.workerInsuranceAmount),
                     finalClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.finalClaim),
+                    workerInsuranceExempt: isWorkerInsuranceExempt,
                     claimError: workerClaims.error,
                 }
                 : {
@@ -1586,11 +1585,15 @@ export default function GroupCalculationScreen() {
                     employerInsurance31: formatCurrency(contractorTotals.employerInsurance31),
                     contractorTotalError: contractorTotals.contractorTotalError,
                     excludedBonusItems,
+                    insuranceItems,
+                    employerInsuranceAmount: formatCurrency(employerInsuranceTotal),
                     amountPaid: Number.isSafeInteger(amountPaidValue) && amountPaidValue >= 0
                         ? formatCurrency(amountPaidValue)
                         : 'مبلغ نامعتبر',
                     remainingClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.remainingClaim),
+                    workerInsuranceAmount: workerClaims.error ? undefined : formatCurrency(workerClaims.workerInsuranceAmount),
                     finalClaim: workerClaims.error ? undefined : formatCurrency(workerClaims.finalClaim),
+                    workerInsuranceExempt: isWorkerInsuranceExempt,
                     claimError: workerClaims.error,
                 }
             : undefined;
@@ -1738,7 +1741,7 @@ export default function GroupCalculationScreen() {
                 value: contractorWorkerCountLabel,
             },
         ];
-        if (results.some((result) => !result.error && isInsuranceCalculationKey(result.key))) {
+        if (wageTotalResults.some((result) => !result.error)) {
             metadata.push({
                 section: 'محاسبات بیمه',
                 label: 'معافیت از سهم بیمهٔ کارگر',
@@ -1927,14 +1930,15 @@ export default function GroupCalculationScreen() {
         setPdfAction(action);
         setPdfSnackbarVisible(false);
         try {
-            const pdfAssets = await getGroupCalculationPdfAssets(fontPreference);
+            const pdfAssets = await getGroupCalculationPdfAssets(fontPreference, pdfColorMode);
             const html = buildGroupCalculationPdfHtml(
                 pdfSections,
                 metadata,
                 includePdfDetails,
                 pdfAssets,
-                colorPalette,
                 wageTotal,
+                pdfColorMode,
+                colorPalette,
                 colorPaletteTone,
             );
             if (action === 'preview') {
@@ -1962,9 +1966,9 @@ export default function GroupCalculationScreen() {
                     mimeType: 'application/pdf',
                 });
                 if (savedFile.location === 'downloads') {
-                    setPdfSnackbarMessage('فیش PDF در پوشهٔ Downloads/PahnavarKar ذخیره شد.');
+                    setPdfSnackbarMessage('گزارش PDF در پوشهٔ Downloads/PahnavarKar ذخیره شد.');
                 } else {
-                    setPdfSnackbarMessage('فیش PDF در پوشهٔ پهناورکار در برنامهٔ Files ذخیره شد.');
+                    setPdfSnackbarMessage('گزارش PDF در پوشهٔ پهناورکار در برنامهٔ Files ذخیره شد.');
                 }
                 setPdfSnackbarIsError(false);
                 setPdfSnackbarVisible(true);
@@ -1984,7 +1988,7 @@ export default function GroupCalculationScreen() {
                 await Sharing.shareAsync(shareUri, {
                     mimeType: 'application/pdf',
                     UTI: '.pdf',
-                    dialogTitle: 'اشتراک فیش محاسبات',
+                    dialogTitle: 'اشتراک گزارش محاسبات',
                 });
             } else {
                 await Print.printAsync({ html });
@@ -2003,7 +2007,7 @@ export default function GroupCalculationScreen() {
             );
             showError(
                 error,
-                action === 'save' ? 'ذخیرهٔ فیش PDF انجام نشد.' : 'ساخت یا اشتراک PDF انجام نشد.',
+                action === 'save' ? 'ذخیرهٔ گزارش PDF انجام نشد.' : 'ساخت یا اشتراک گزارش PDF انجام نشد.',
             );
         } finally {
             setPdfAction(null);
@@ -2109,7 +2113,7 @@ export default function GroupCalculationScreen() {
                             <View style={[styles.employeeInfoHint, { backgroundColor: theme.surface }]}>
                                 <MaterialCommunityIcons name="information-outline" size={16} color={theme.textSecondary} />
                                 <ThemedText type="small" style={[styles.fieldHint, styles.employeeInfoHintText, { color: theme.textSecondary }]}>
-                                    این اطلاعات اختیاری است و در صورت تکمیل، در فیش PDF درج می‌شود.
+                                    این اطلاعات اختیاری است و در صورت تکمیل، در گزارش PDF درج می‌شود.
                                 </ThemedText>
                             </View>
                             <TextInput
@@ -2155,7 +2159,7 @@ export default function GroupCalculationScreen() {
                             <View style={[styles.employeeInfoHint, { backgroundColor: theme.surface }]}>
                                 <MaterialCommunityIcons name="information-outline" size={16} color={theme.textSecondary} />
                                 <ThemedText type="small" style={[styles.fieldHint, styles.employeeInfoHintText, { color: theme.textSecondary }]}>
-                                    این اطلاعات اختیاری است و در صورت تکمیل، در فیش PDF درج می‌شود.
+                                    این اطلاعات اختیاری است و در صورت تکمیل، در گزارش PDF درج می‌شود.
                                 </ThemedText>
                             </View>
                             <TextInput
@@ -2918,7 +2922,7 @@ export default function GroupCalculationScreen() {
                             </View>
                         </View>
 
-                        {hasInsuranceCalculation ? (
+                        {hasWorkerInsuranceCalculation ? (
                             <View style={styles.insuranceOptions}>
                                 <Pressable
                                     accessibilityRole="checkbox"
@@ -2994,7 +2998,7 @@ export default function GroupCalculationScreen() {
 
                 {results ? (
                     <View style={styles.results}>
-                        <ThemedText type="smallBold" style={styles.resultsTitle}>نتایج</ThemedText>
+                        <ThemedText type="smallBold" style={styles.resultsTitle}>نتایج محاسبات</ThemedText>
                         <View style={[styles.pdfExportSection, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
                             {(() => {
                                 const wageTotalResults = getWageTotalResults(results);
@@ -3002,6 +3006,10 @@ export default function GroupCalculationScreen() {
 
                                 const wageTotalHasErrors = wageTotalResults.some((result) => result.error);
                                 const wageTotalAmount = wageTotalResults.reduce((total, result) => total + getResultAmount(result), 0);
+                                const workerInsuranceBaseAmount = getWorkerInsuranceBaseAmount(wageTotalResults);
+                                const workerInsuranceResults = wageTotalResults.filter((result) => (
+                                    !result.error && isInsuranceCalculationKey(result.key)
+                                ));
                                 const employerInsuranceTotal = getEmployerInsuranceTotal(wageTotalResults);
                                 const workerCount = Number(normalizeDigits(contractorWorkerCount));
                                 const contractorTotals = calculateContractorMonthlyTotals(
@@ -3013,10 +3021,12 @@ export default function GroupCalculationScreen() {
                                 );
                                 const workerClaims = calculateWorkerClaimsAfterPayments(
                                     wageTotalAmount,
+                                    workerInsuranceBaseAmount,
                                     displayCurrencyToRial(
                                         Number(normalizeDigits(amountPaidToWorker)),
                                         currencyPreference,
                                     ),
+                                    isWorkerInsuranceExempt,
                                     contractorTotals.wageTotalError,
                                 );
                                 const excludedBonusItems = getExcludedBonusItemTitles(results);
@@ -3043,7 +3053,107 @@ export default function GroupCalculationScreen() {
                                             </View>
                                             <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                 <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
-                                                    ماندهٔ حقوق و مزایا پس از کسر ۷٪ سهم بیمهٔ کارگر
+                                                    {`۷٪ بیمه سهم کارگر از اقلام مشمول${isWorkerInsuranceExempt ? ' (معاف)' : ''}`}
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: theme.primaryText }]}>
+                                                    {workerClaims.error ?? formatCurrency(workerClaims.workerInsuranceAmount)}
+                                                </ThemedText>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    accessibilityState={{ expanded: isWorkerInsuranceItemsExpanded }}
+                                                    accessibilityLabel={`${isWorkerInsuranceItemsExpanded ? 'بستن' : 'نمایش'} فهرست ${toPersianDigits(workerInsuranceResults.length)} قلم مشمول سهم بیمهٔ کارگر`}
+                                                    onPress={() => setIsWorkerInsuranceItemsExpanded((expanded) => !expanded)}
+                                                    style={[styles.insuranceItemsDropdown, { borderColor: theme.border, backgroundColor: theme.surfaceVariant }]}
+                                                >
+                                                    <ThemedText type="small" style={[styles.insuranceItemsDropdownLabel, { color: theme.primaryText }]}>
+                                                        {`فهرست اقلام مشمول (${toPersianDigits(workerInsuranceResults.length)})`}
+                                                    </ThemedText>
+                                                    <MaterialCommunityIcons
+                                                        name={isWorkerInsuranceItemsExpanded ? 'chevron-up' : 'chevron-down'}
+                                                        size={20}
+                                                        color={theme.primaryText}
+                                                    />
+                                                </Pressable>
+                                                {isWorkerInsuranceItemsExpanded ? (
+                                                    <View style={[styles.insuranceItemsDropdownContent, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                                                        {workerInsuranceResults.length > 0
+                                                            ? workerInsuranceResults.map((result) => (
+                                                                <View key={result.key} style={styles.insuranceItemsDropdownRow}>
+                                                                    <MaterialCommunityIcons
+                                                                        name="circle-small"
+                                                                        size={20}
+                                                                        color={theme.primaryText}
+                                                                    />
+                                                                    <ThemedText
+                                                                        type="small"
+                                                                        style={[styles.insuranceItemsDropdownItem, { color: theme.text }]}
+                                                                    >
+                                                                        {getResultTitle(result, workshopType)}
+                                                                    </ThemedText>
+                                                                </View>
+                                                            ))
+                                                            : (
+                                                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                                    قلم مشمولی در محاسبات انتخاب‌شده وجود ندارد.
+                                                                </ThemedText>
+                                                            )}
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                            <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    ۲۳٪ بیمه سهم کارفرما از اقلام مشمول
+                                                </ThemedText>
+                                                <ThemedText type="smallBold" style={[styles.amountValue, { color: contractorTotals.wageTotalError ? theme.error : theme.primaryText }]}>
+                                                    {contractorTotals.wageTotalError ?? formatCurrency(employerInsuranceTotal)}
+                                                </ThemedText>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    accessibilityState={{ expanded: isEmployerInsuranceItemsExpanded }}
+                                                    accessibilityLabel={`${isEmployerInsuranceItemsExpanded ? 'بستن' : 'نمایش'} فهرست ${toPersianDigits(workerInsuranceResults.length)} قلم مشمول سهم بیمهٔ کارفرما`}
+                                                    onPress={() => setIsEmployerInsuranceItemsExpanded((expanded) => !expanded)}
+                                                    style={[styles.insuranceItemsDropdown, { borderColor: theme.border, backgroundColor: theme.surfaceVariant }]}
+                                                >
+                                                    <ThemedText type="small" style={[styles.insuranceItemsDropdownLabel, { color: theme.primaryText }]}>
+                                                        {`فهرست اقلام مشمول (${toPersianDigits(workerInsuranceResults.length)})`}
+                                                    </ThemedText>
+                                                    <MaterialCommunityIcons
+                                                        name={isEmployerInsuranceItemsExpanded ? 'chevron-up' : 'chevron-down'}
+                                                        size={20}
+                                                        color={theme.primaryText}
+                                                    />
+                                                </Pressable>
+                                                {isEmployerInsuranceItemsExpanded ? (
+                                                    <View style={[styles.insuranceItemsDropdownContent, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                                                        {workerInsuranceResults.length > 0
+                                                            ? workerInsuranceResults.map((result) => (
+                                                                <View key={result.key} style={styles.insuranceItemsDropdownRow}>
+                                                                    <MaterialCommunityIcons
+                                                                        name="circle-small"
+                                                                        size={20}
+                                                                        color={theme.primaryText}
+                                                                    />
+                                                                    <ThemedText
+                                                                        type="small"
+                                                                        style={[styles.insuranceItemsDropdownItem, { color: theme.text }]}
+                                                                    >
+                                                                        {getResultTitle(result, workshopType)}
+                                                                    </ThemedText>
+                                                                </View>
+                                                            ))
+                                                            : (
+                                                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                                                    قلم مشمولی در محاسبات انتخاب‌شده وجود ندارد.
+                                                                </ThemedText>
+                                                            )}
+                                                    </View>
+                                                ) : null}
+                                            </View>
+                                            <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                                <ThemedText type="small" style={[styles.summaryLabel, { color: theme.textSecondary }]}>
+                                                    {isWorkerInsuranceExempt
+                                                        ? 'ماندهٔ حقوق و مزایا با اعمال معافیت از سهم بیمهٔ کارگر'
+                                                        : 'ماندهٔ حقوق و مزایا پس از کسر ۷٪ سهم بیمهٔ کارگر'}
                                                 </ThemedText>
                                                 <ThemedText type="smallBold" style={[styles.amountValue, { color: workerClaims.error ? theme.error : theme.primaryText }]}>
                                                     {workerClaims.error ?? formatCurrency(workerClaims.finalClaim)}
@@ -3064,7 +3174,7 @@ export default function GroupCalculationScreen() {
                                                         ?? formatCurrency(contractorTotals.contractorTotal30)}
                                                 </ThemedText>
                                                 <ThemedText type="small" style={[styles.contractorInsuranceNote, { color: theme.textSecondary }]}>
-                                                    شامل سهم ۲۳٪ بیمهٔ کارفرما: {formatCurrency(contractorTotals.employerInsurance30)}
+                                                    شامل ۲۳٪ بیمه سهم کارفرما: {formatCurrency(contractorTotals.employerInsurance30)}
                                                 </ThemedText>
                                             </View>
                                             <View style={[styles.contractorTotalBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -3082,7 +3192,7 @@ export default function GroupCalculationScreen() {
                                                         ?? formatCurrency(contractorTotals.contractorTotal)}
                                                 </ThemedText>
                                                 <ThemedText type="small" style={[styles.contractorInsuranceNote, { color: theme.textSecondary }]}>
-                                                    شامل سهم ۲۳٪ بیمهٔ کارفرما: {formatCurrency(contractorTotals.employerInsurance31)}
+                                                    شامل ۲۳٪ بیمه سهم کارفرما: {formatCurrency(contractorTotals.employerInsurance31)}
                                                 </ThemedText>
                                             </View>
                                             {excludedBonusItems.length > 0 ? (
@@ -3094,11 +3204,80 @@ export default function GroupCalculationScreen() {
                                     </View>
                                 );
                             })()}
+                        </View>
+                        <View style={[styles.pdfExportSection, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
                             <View style={styles.pdfExportHeader}>
-                                <ThemedText type="smallBold">خروجی فیش PDF</ThemedText>
-                                <ThemedText type="small" style={[styles.fieldHint, { color: theme.textSecondary }]}>
-                                    روش دریافت فایل را انتخاب کنید.
-                                </ThemedText>
+                                <View style={[styles.pdfExportIcon, { backgroundColor: theme.primaryContainer }]}>
+                                    <MaterialCommunityIcons name="file-pdf-box" size={24} color={theme.primary} />
+                                </View>
+                                <View style={styles.pdfExportHeadingText}>
+                                    <ThemedText type="smallBold">گزارش PDF</ThemedText>
+                                    <ThemedText type="small" style={[styles.fieldHint, { color: theme.textSecondary }]}>
+                                        قالب گزارش را انتخاب کنید و سپس پیش‌نمایش، ذخیره یا اشتراک‌گذاری را انجام دهید.
+                                    </ThemedText>
+                                </View>
+                            </View>
+                            <View style={styles.pdfColorModeGroup}>
+                                <View style={styles.pdfColorModeOptions}>
+                                    {([
+                                        {
+                                            value: 'color',
+                                            label: 'رنگی',
+                                            description: 'هماهنگ با تم برنامه',
+                                            icon: 'palette-outline' as const,
+                                        },
+                                        {
+                                            value: 'monochrome',
+                                            label: 'سیاه‌وسفید',
+                                            description: 'مناسب چاپ و کم‌مصرف',
+                                            icon: 'contrast-box' as const,
+                                        },
+                                    ] as const).map((option) => {
+                                        const selected = pdfColorMode === option.value;
+                                        return (
+                                            <Pressable
+                                                key={option.value}
+                                                style={[
+                                                    styles.pdfColorModeOption,
+                                                    {
+                                                        backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                        borderColor: selected ? theme.primary : theme.borderStrong,
+                                                    },
+                                                ]}
+                                                onPress={() => setPdfColorMode(option.value)}
+                                                disabled={pdfAction !== null}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ checked: selected, disabled: pdfAction !== null }}
+                                                accessibilityLabel={`${option.label}، ${option.description}`}
+                                            >
+                                                <View style={styles.pdfColorModeOptionContent}>
+                                                    <MaterialCommunityIcons
+                                                        name={option.icon}
+                                                        size={20}
+                                                        color={selected ? theme.primary : theme.textSecondary}
+                                                    />
+                                                    <View style={styles.pdfColorModeOptionText}>
+                                                        <ThemedText
+                                                            type="smallBold"
+                                                            style={{ color: selected ? theme.onPrimaryContainer : theme.text }}
+                                                        >
+                                                            {option.label}
+                                                        </ThemedText>
+                                                        <ThemedText
+                                                            type="small"
+                                                            style={[styles.fieldHint, { color: selected ? theme.onPrimaryContainer : theme.textSecondary }]}
+                                                        >
+                                                            {option.description}
+                                                        </ThemedText>
+                                                    </View>
+                                                    {selected ? (
+                                                        <MaterialCommunityIcons name="check-circle" size={18} color={theme.primary} />
+                                                    ) : null}
+                                                </View>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </View>
                             </View>
                             <View style={[styles.pdfDetailsOption, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                 <Checkbox
@@ -3118,30 +3297,17 @@ export default function GroupCalculationScreen() {
                                         درج جزئیات محاسبه
                                     </ThemedText>
                                     <ThemedText type="small" style={[styles.fieldHint, { color: theme.textSecondary }]}>
-                                        اطلاعات تفصیلی محاسبات نیز به PDF اضافه شود.
+                                        ریز محاسبات نیز در گزارش درج شود.
                                     </ThemedText>
                                 </Pressable>
                             </View>
                             <View style={styles.pdfActions}>
                                 <View style={styles.pdfActionItem}>
                                     <PdfActionButton
-                                        label="پیش‌نمایش"
+                                        label="پیش‌نمایش گزارش PDF"
                                         icon="eye-outline"
                                         onPress={() => void handleExportPdf('preview')}
                                         loading={pdfAction === 'preview'}
-                                        disabled={pdfAction !== null}
-                                        variant="outlined"
-                                        primaryColor={theme.primary}
-                                        surfaceColor={theme.surface}
-                                        borderColor={theme.borderStrong}
-                                    />
-                                </View>
-                                <View style={styles.pdfActionItem}>
-                                    <PdfActionButton
-                                        label="اشتراک‌گذاری"
-                                        icon="share-variant"
-                                        onPress={() => void handleExportPdf('share')}
-                                        loading={pdfAction === 'share'}
                                         disabled={pdfAction !== null}
                                         variant="contained"
                                         primaryColor={theme.primary}
@@ -3149,18 +3315,33 @@ export default function GroupCalculationScreen() {
                                         borderColor={theme.borderStrong}
                                     />
                                 </View>
-                                <View style={styles.pdfActionItem}>
-                                    <PdfActionButton
-                                        label="ذخیره"
-                                        icon="download"
-                                        onPress={() => void handleExportPdf('save')}
-                                        loading={pdfAction === 'save'}
-                                        disabled={pdfAction !== null}
-                                        variant="outlined"
-                                        primaryColor={theme.primary}
-                                        surfaceColor={theme.surface}
-                                        borderColor={theme.borderStrong}
-                                    />
+                                <View style={styles.pdfSecondaryActions}>
+                                    <View style={styles.pdfActionItem}>
+                                        <PdfActionButton
+                                            label="اشتراک‌گذاری"
+                                            icon="share-variant"
+                                            onPress={() => void handleExportPdf('share')}
+                                            loading={pdfAction === 'share'}
+                                            disabled={pdfAction !== null}
+                                            variant="outlined"
+                                            primaryColor={theme.primary}
+                                            surfaceColor={theme.surface}
+                                            borderColor={theme.borderStrong}
+                                        />
+                                    </View>
+                                    <View style={styles.pdfActionItem}>
+                                        <PdfActionButton
+                                            label="ذخیرهٔ فایل"
+                                            icon="download"
+                                            onPress={() => void handleExportPdf('save')}
+                                            loading={pdfAction === 'save'}
+                                            disabled={pdfAction !== null}
+                                            variant="outlined"
+                                            primaryColor={theme.primary}
+                                            surfaceColor={theme.surface}
+                                            borderColor={theme.borderStrong}
+                                        />
+                                    </View>
                                 </View>
                             </View>
                         </View>
@@ -3187,6 +3368,34 @@ export default function GroupCalculationScreen() {
                                     }];
                                 })()
                                 : result.breakdown;
+                            const bonusAnnualSummary = result.key === 'bonus-entitlement'
+                                ? (() => {
+                                    const totals = new Map<number, number>();
+                                    const lastIndexes = new Map<number, number>();
+                                    const coveredPeriods = new Map<number, Set<number>>();
+
+                                    result.breakdown.forEach((entry, index) => {
+                                        if (!isRecord(entry)
+                                            || typeof entry.year !== 'number'
+                                            || typeof entry.periodIndex !== 'number'
+                                            || typeof entry.entitlementAmount !== 'number'
+                                            || !Number.isFinite(entry.entitlementAmount)) {
+                                            return;
+                                        }
+
+                                        totals.set(
+                                            entry.year,
+                                            (totals.get(entry.year) ?? 0) + entry.entitlementAmount,
+                                        );
+                                        lastIndexes.set(entry.year, index);
+                                        const periods = coveredPeriods.get(entry.year) ?? new Set<number>();
+                                        periods.add(entry.periodIndex);
+                                        coveredPeriods.set(entry.year, periods);
+                                    });
+
+                                    return { totals, lastIndexes, coveredPeriods };
+                                })()
+                                : null;
                             const formattedValue = result.unit === 'ریال'
                                 ? formatCurrency(result.value)
                                 : toPersianDigits(Number.isInteger(result.value) ? String(result.value) : result.value.toFixed(2));
@@ -3413,6 +3622,22 @@ export default function GroupCalculationScreen() {
                                                                             );
                                                                         })}
                                                                     </View>
+                                                                    {result.key === 'bonus-entitlement'
+                                                                        && bonusAnnualSummary
+                                                                        && detailRecord
+                                                                        && typeof detailRecord.year === 'number'
+                                                                        && (bonusAnnualSummary.coveredPeriods.get(detailRecord.year)?.size ?? 0) > 1
+                                                                        && bonusAnnualSummary.lastIndexes.get(detailRecord.year) === index
+                                                                        ? (
+                                                                            <View style={[styles.summaryBoxContent, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                                                <ThemedText type="smallBold" style={[styles.summaryLabel, { color: theme.onPrimary }]}>
+                                                                                    {`مجموع دو دوره سال ${toPersianDigits(detailRecord.year)}`}
+                                                                                </ThemedText>
+                                                                                <ThemedText type="largeTitle" style={[styles.amountValue, { color: theme.onPrimary }]}>
+                                                                                    {formatCurrency(bonusAnnualSummary.totals.get(detailRecord.year) ?? 0)}
+                                                                                </ThemedText>
+                                                                            </View>
+                                                                        ) : null}
                                                                 </View>
                                                             );
                                                         })}
@@ -3570,20 +3795,33 @@ const styles = StyleSheet.create({
     periodInputRow: { gap: Spacing.one },
     groupPicker: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.two, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
     results: { gap: Spacing.two },
-    pdfExportSection: { gap: Spacing.three, padding: Spacing.three, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
+    pdfExportSection: { gap: Spacing.three, padding: Spacing.three, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth },
     insuranceOptions: { gap: Spacing.one },
     insuranceExemptionOption: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     insuranceExemptionText: { flex: 1, gap: Spacing.half },
     insuranceExemptionDescription: { fontSize: Typography.fontSize.footnote },
     insuranceLegalBasis: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
+    insuranceItemsDropdown: { width: '100%', minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one, paddingHorizontal: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
+    insuranceItemsDropdownLabel: { flex: 1, fontSize: Typography.fontSize.footnote },
+    insuranceItemsDropdownContent: { width: '100%', gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 8 },
+    insuranceItemsDropdownRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.half },
+    insuranceItemsDropdownItem: { flex: 1, fontSize: Typography.fontSize.footnote },
     insuranceLegalSummary: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.caption },
     insuranceLegalToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.one, paddingVertical: Spacing.half },
     insuranceLegalToggleLabel: { fontSize: Typography.fontSize.compact },
     insuranceLegalText: { fontSize: Typography.fontSize.footnote, lineHeight: Typography.lineHeight.body },
-    pdfExportHeader: { gap: Spacing.half },
-    pdfDetailsOption: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, paddingEnd: Spacing.two },
+    pdfExportHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+    pdfExportIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
+    pdfExportHeadingText: { flex: 1, gap: Spacing.half },
+    pdfColorModeGroup: { gap: Spacing.one },
+    pdfColorModeOptions: { flexDirection: 'row', gap: Spacing.one },
+    pdfColorModeOption: { flex: 1, minWidth: 0, minHeight: 68, justifyContent: 'center', paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth },
+    pdfColorModeOptionContent: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+    pdfColorModeOptionText: { flex: 1, minWidth: 0, gap: Spacing.half },
+    pdfDetailsOption: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, paddingEnd: Spacing.two },
     pdfDetailsLabel: { flex: 1, gap: Spacing.half, paddingVertical: Spacing.two },
-    pdfActions: { flexDirection: 'row', gap: Spacing.one },
+    pdfActions: { gap: Spacing.one },
+    pdfSecondaryActions: { flexDirection: 'row', gap: Spacing.one },
     pdfActionItem: { flex: 1, minWidth: 0 },
     pdfActionButton: { minHeight: 46, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', paddingHorizontal: Spacing.half },
     pdfActionButtonContent: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.half },

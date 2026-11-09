@@ -233,6 +233,21 @@ export default function BonusEntitlementScreen() {
     const remainingBonusAmount = result && isPaidAmountValid
         ? Math.max(0, Math.round(result.totalEntitlementAmount) - amountPaidInRial)
         : null;
+    const annualBreakdownSummary = useMemo(() => {
+        const totals = new Map<number, number>();
+        const lastIndexes = new Map<number, number>();
+        const coveredPeriods = new Map<number, Set<number>>();
+
+        result?.breakdown.forEach((item, index) => {
+            totals.set(item.year, (totals.get(item.year) ?? 0) + item.entitlementAmount);
+            lastIndexes.set(item.year, index);
+            const periods = coveredPeriods.get(item.year) ?? new Set<number>();
+            periods.add(item.periodIndex);
+            coveredPeriods.set(item.year, periods);
+        });
+
+        return { totals, lastIndexes, coveredPeriods };
+    }, [result]);
 
     const handleDateSelect = (value: string) => {
         if (pickerTarget === 'employment') {
@@ -337,22 +352,6 @@ export default function BonusEntitlementScreen() {
                                 <CalculationDescriptionBox>
                                     <ThemedText type="small" style={[styles.pageDescription, { color: theme.textSecondary }]}>محاسبه عیدی پاداش ماهیانه بر اساس ماده واحده قانون تعیین عیدی پاداش، مصوب مجلس در سال ۱۳۷۰</ThemedText>
                                 </CalculationDescriptionBox>
-                            </View>
-                            <View style={[styles.formulaBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
-                                <ThemedText type="smallBold" style={[styles.formulaLabel, { color: theme.textSecondary }]}>
-                                    فرمول محاسبه
-                                </ThemedText>
-                                <ThemedText type="small" style={[styles.formulaText, { color: theme.text }]}>
-                                    مبلغ محاسبه‌شدهٔ هر بازه = ماه‌های پوشش‌یافته × ۵ × (حداقل مزد روزانه + پایه سنوات استحقاقی روزانه)
-                                    {'\n'}
-                                    حداقل عیدی = ماه‌های پوشش‌یافته × ۵ × حداقل مزد روزانه؛ حداکثر عیدی = ماه‌های پوشش‌یافته × ۷٫۵ × حداقل مزد روزانه.
-                                    {'\n'}
-                                    مبلغ نهایی هر بازه از حداکثر قانونی بیشتر نمی‌شود و متناسب با نسبت ساعات کارکرد اعمال می‌شود.
-                                    {'\n'}
-                                    پایهٔ سنواتِ آخرین روزِ کارکرد در هر سال شمسی، برای تمام کارکرد همان سال در نظر گرفته می‌شود؛ در سال پایانی، این روز از تاریخ پایان بازه جلوتر نمی‌رود.
-                                    {'\n'}
-                                    در سال‌های چنددوره‌ای، حداقل مزدِ دورهٔ شامل آخرین روزِ انتخاب‌شده در آن سال، مبنای کل کارکرد همان سال است.
-                                </ThemedText>
                             </View>
                             <View style={styles.metricsRow}>
                                 <DateInputField label="از تاریخ" value={startDate} onPress={() => setPickerTarget('start')} formatValue={formatDate} />
@@ -568,7 +567,10 @@ export default function BonusEntitlementScreen() {
                                                 <MaterialCommunityIcons name={showDetails ? 'chevron-up' : 'chevron-down'} size={18} color={theme.primaryText} />
                                             </Pressable>
                                         </View>
-                                        {showDetails ? <View style={styles.breakdownGrid}>{result.breakdown.map((item, index) => (
+                                        {showDetails ? <View style={styles.breakdownGrid}>{result.breakdown.map((item, index) => {
+                                            const yearPeriods = periodBuckets.find((bucket) => bucket.year === item.year)?.periods ?? [];
+
+                                            return (
                                             <View key={`${item.year}-${item.periodIndex}-${index}`} style={[styles.breakdownItemCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                                 <View style={[styles.breakdownItemHeaderRow, { borderBottomColor: theme.border }]}>
                                                     <ThemedText type="smallBold" style={[styles.breakdownItemTitle, { color: theme.text }]}>{`سال ${toPersianDigits(item.year)}${(periodBuckets.find((bucket) => bucket.year === item.year)?.periods.length ?? 0) > 1 ? ` · دوره ${toPersianDigits(item.periodIndex)}` : ''}`}</ThemedText>
@@ -611,8 +613,22 @@ export default function BonusEntitlementScreen() {
                                                         <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.onPrimary }]}>{toPersianDigits(formatCurrency(item.entitlementAmount))}</ThemedText>
                                                     </View>
                                                 </View>
+                                                {yearPeriods.length > 1
+                                                    && (annualBreakdownSummary.coveredPeriods.get(item.year)?.size ?? 0) > 1
+                                                    && annualBreakdownSummary.lastIndexes.get(item.year) === index
+                                                    ? (
+                                                        <View style={[styles.annualTotalBox, { backgroundColor: theme.primary, borderColor: theme.primary }]}>
+                                                            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
+                                                                {`مجموع دو دوره سال ${toPersianDigits(item.year)}`}
+                                                            </ThemedText>
+                                                            <ThemedText type="bodyBold" style={[styles.annualTotalValue, { color: theme.onPrimary }]}>
+                                                                {toPersianDigits(formatCurrency(annualBreakdownSummary.totals.get(item.year) ?? 0))}
+                                                            </ThemedText>
+                                                        </View>
+                                                    ) : null}
                                             </View>
-                                        ))}</View> : null}
+                                            );
+                                        })}</View> : null}
                                     </Card.Content>
                                 </Card>
                             ) : null}
@@ -648,5 +664,5 @@ const styles = StyleSheet.create({
     paidAmountSection: { gap: Spacing.one, padding: Spacing.two, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12 },
     checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.two, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, checkText: { flex: 1, gap: Spacing.one }, optionTitle: { fontSize: Typography.fontSize.compact, lineHeight: Typography.lineHeight.bodyCompact, fontFamily: 'AppFont-Bold' }, optionDescription: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.body, fontFamily: 'AppFont-Regular' }, actionsGroup: { flexDirection: 'row', gap: Spacing.two }, actionButton: { flex: 1, borderRadius: 12 }, actionLabel: { fontFamily: 'AppFont-Bold', fontSize: Typography.fontSize.footnote },
     resultCard: { borderRadius: Radius.md, borderWidth: 1, marginTop: Spacing.two, overflow: 'hidden' }, resultContent: { gap: Spacing.two, paddingVertical: Spacing.three, paddingHorizontal: Spacing.two }, summaryBoxContent: { width: '100%', alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryDetailsGrid: { gap: Spacing.one }, summaryDetailBox: { width: '100%', alignItems: 'center', gap: Spacing.half, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, summaryLabel: { fontSize: Typography.fontSize.caption }, amountValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
-    breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one }, breakdownSectionTitle: { fontSize: Typography.fontSize.compact }, toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, toggleButtonLabel: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.inputCompact, fontFamily: 'AppFont-Bold' }, breakdownGrid: { gap: Spacing.two }, breakdownItemCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1 }, breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth }, breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' }, breakdownDetailGrid: { gap: Spacing.one }, breakdownDetailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 }, detailLabel: { fontSize: Typography.fontSize.footnote }, detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
+    breakdownHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.one, paddingVertical: Spacing.one, gap: Spacing.one }, breakdownSectionTitle: { fontSize: Typography.fontSize.compact }, toggleButton: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one, paddingHorizontal: Spacing.two, paddingVertical: Spacing.one, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth }, toggleButtonLabel: { fontSize: Typography.fontSize.caption, lineHeight: Typography.lineHeight.inputCompact, fontFamily: 'AppFont-Bold' }, breakdownGrid: { gap: Spacing.two }, breakdownItemCard: { gap: Spacing.one, padding: Spacing.two, borderRadius: Radius.md, borderWidth: 1 }, breakdownItemHeaderRow: { paddingTop: 2, paddingBottom: 2, marginBottom: 2, borderBottomWidth: StyleSheet.hairlineWidth }, breakdownItemTitle: { fontSize: Typography.fontSize.footnote, fontFamily: 'AppFont-Bold' }, annualTotalBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.two, borderRadius: 12, borderWidth: 1 }, annualTotalValue: { fontSize: Typography.fontSize.bodyLarge }, breakdownDetailGrid: { gap: Spacing.one }, breakdownDetailBox: { alignItems: 'center', gap: Spacing.one, padding: Spacing.one, borderRadius: 8, borderWidth: 1 }, detailLabel: { fontSize: Typography.fontSize.footnote }, detailValue: { fontSize: Typography.fontSize.bodyLarge, lineHeight: Typography.lineHeight.label, fontFamily: 'AppFont-Bold' },
 });
