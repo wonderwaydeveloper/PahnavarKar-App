@@ -1,9 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, Animated as RNAnimated, Pressable, RefreshControl, ScrollView, StyleSheet, Switch, useWindowDimensions, View } from 'react-native';
-import { Snackbar } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { TabView } from 'react-native-tab-view';
 import Animated, {
     Easing,
@@ -15,7 +15,6 @@ import Animated, {
 
 import { ConfirmationModal } from '@/components/confirmation-modal';
 import { ErrorNoticeCard } from '@/components/error-notice-card';
-import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -24,6 +23,7 @@ import { useAppContext } from '@/hooks/use-app-context';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useOnlineRefetch } from '@/hooks/use-online-refetch';
 import { useOnlineStatus } from '@/hooks/use-online-status';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { usePlanAccess } from '@/hooks/use-plan-access';
 import { CACHE_KEYS, CACHE_POLICY } from '@/services/cache-policy';
 import { useTheme } from '@/hooks/use-theme';
@@ -182,7 +182,7 @@ export default function PurchasedPlansScreen() {
                     return fetchCurrentPlan(token);
                 },
                 isCurrentPlanCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
@@ -202,7 +202,7 @@ export default function PurchasedPlansScreen() {
                 ACCOUNT_OFFLINE_CACHE.planCatalog,
                 fetchPlanCatalog,
                 isPlanCatalogCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
@@ -226,7 +226,7 @@ export default function PurchasedPlansScreen() {
                     return fetchWalletOverview(token);
                 },
                 isWalletOverviewCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
@@ -241,6 +241,9 @@ export default function PurchasedPlansScreen() {
     const [cancellingScheduled, setCancellingScheduled] = useState(false);
     const [message, setMessage] = useState('');
     const [messageKind, setMessageKind] = useState<'info' | 'success' | 'error'>('success');
+    const [offlineRefreshPending, setOfflineRefreshPending] = useState(
+        () => userId !== null && !onlineManager.isOnline(),
+    );
     const previousUserId = useRef(userId);
     const hasFocusedScreen = useRef(false);
     const focusedQueryState = useRef({ hasSubscriptions: false, walletExpanded: false });
@@ -248,33 +251,53 @@ export default function PurchasedPlansScreen() {
 
     const dataLoading = currentPlanQuery.isPending;
     const subscriptionMutationInFlight = useRef(false);
+    const showWalletData = activeSubscription !== null && expandedId === activeSubscription.id;
+    const catalogIsRelevant = subscriptions.length > 0;
     const subscriptionActionsUnavailable = !isOnline
+        || offlineRefreshPending
         || currentPlanQuery.isFetching
         || currentPlanQuery.isError
-        || currentPlanQuery.data?.offlineCacheSavedAt !== undefined;
-    const offlinePlanSources = [
-        {
-            label: 'وضعیت اشتراک',
-            savedAt: currentPlanQuery.data?.offlineCacheSavedAt,
-            receivedAt: currentPlanQuery.data ? currentPlanQuery.dataUpdatedAt : undefined,
-        },
-        {
-            label: 'نام و اطلاعات پلن‌ها',
-            savedAt: catalogQuery.data?.offlineCacheSavedAt,
-            receivedAt: catalogQuery.data ? catalogQuery.dataUpdatedAt : undefined,
-        },
-        {
-            label: 'موجودی کیف پول',
-            savedAt: walletQuery.data?.offlineCacheSavedAt,
-            receivedAt: walletQuery.data ? walletQuery.dataUpdatedAt : undefined,
-        },
-    ].flatMap((source) => {
-        const timestamp = source.savedAt ?? source.receivedAt;
-        return timestamp === undefined || timestamp <= 0
-            ? []
-            : [{ label: source.label, timestamp, kind: source.savedAt !== undefined ? 'saved' as const : 'received' as const }];
-    });
-    const hasOfflinePlanData = offlinePlanSources.some((source) => source.kind === 'saved');
+        || currentPlanQuery.data === undefined
+        || currentPlanQuery.data.offlineCacheSavedAt !== undefined
+        || (catalogIsRelevant && (
+            catalogQuery.isFetching
+            || catalogQuery.isError
+            || catalogQuery.data === undefined
+            || catalogQuery.data.offlineCacheSavedAt !== undefined
+        ))
+        || (showWalletData && (
+            walletQuery.isFetching
+            || walletQuery.isError
+            || walletQuery.data === undefined
+            || walletQuery.data.offlineCacheSavedAt !== undefined
+        ));
+    const hasOfflinePlanData = currentPlanQuery.data?.offlineCacheSavedAt !== undefined
+        || (catalogIsRelevant && catalogQuery.data?.offlineCacheSavedAt !== undefined)
+        || (showWalletData && walletQuery.data?.offlineCacheSavedAt !== undefined);
+    const showOfflinePlanNotice = !isOnline || offlineRefreshPending || hasOfflinePlanData;
+    useOfflinePageNotice(showOfflinePlanNotice ? {
+        hasSavedData: hasOfflinePlanData,
+        message: hasOfflinePlanData
+            ? 'اطلاعات ذخیره‌شدهٔ اشتراک ممکن است به‌روز نباشد.'
+            : isOnline
+                ? 'اطلاعات اشتراک هنوز از سرور تأیید نشده است.'
+                : 'سرور در دسترس نیست؛ اطلاعات اشتراک به‌روز نمی‌شود.',
+        details: [
+            isOnline
+                ? 'تا دریافت پاسخ تازه، تغییرات اشتراک در دسترس نیست.'
+                : 'تمدید خودکار و مدیریت پلن رزروشده تا اتصال دوباره در دسترس نیست.',
+            'نمایش پلن رزروشده به‌تنهایی به معنی فعال‌بودن دسترسی آن نیست.',
+        ],
+    } : null);
+
+    useEffect(() => {
+        const markOfflineRefreshPending = (online: boolean) => {
+            if (!online && userId !== null) {
+                setOfflineRefreshPending(true);
+            }
+        };
+        return onlineManager.subscribe(markOfflineRefreshPending);
+    }, [userId]);
 
     useEffect(() => {
         focusedQueryState.current = {
@@ -426,17 +449,40 @@ export default function PurchasedPlansScreen() {
         }
     };
 
-    const refreshData = () => {
+    const refetchCurrentPlan = currentPlanQuery.refetch;
+    const refetchCatalog = catalogQuery.refetch;
+    const refetchWallet = walletQuery.refetch;
+    const refreshData = useCallback(async () => {
         if (userId === null) return;
-        const requests: Promise<unknown>[] = [currentPlanQuery.refetch()];
-        if (subscriptions.length > 0) requests.push(catalogQuery.refetch());
-        if (activeSubscription !== null && expandedId === activeSubscription.id) {
-            requests.push(walletQuery.refetch());
+        const requests: Promise<boolean>[] = [
+            refetchCurrentPlan().then((result) => (
+                result.isSuccess && result.data?.offlineCacheSavedAt === undefined
+            )),
+        ];
+        if (subscriptions.length > 0) {
+            requests.push(refetchCatalog().then((result) => (
+                result.isSuccess && result.data?.offlineCacheSavedAt === undefined
+            )));
         }
-        void Promise.all(requests);
-    };
+        if (showWalletData) {
+            requests.push(refetchWallet().then((result) => (
+                result.isSuccess && result.data?.offlineCacheSavedAt === undefined
+            )));
+        }
+        const results = await Promise.all(requests);
+        if (results.every(Boolean)) {
+            setOfflineRefreshPending(false);
+        }
+    }, [
+        refetchCatalog,
+        refetchCurrentPlan,
+        refetchWallet,
+        subscriptions.length,
+        userId,
+        showWalletData,
+    ]);
     useOnlineRefetch(() => {
-        refreshData();
+        void refreshData();
         void refreshPlanAccess().catch((error: unknown) => {
             showError(error, 'به‌روزرسانی دسترسی پلن ناموفق بود.');
         });
@@ -486,20 +532,6 @@ export default function PurchasedPlansScreen() {
                                     />
                                 )}
                             >
-                                {!isOnline || hasOfflinePlanData ? (
-                                    <OfflineDataNotice
-                                        theme={theme}
-                                        title={offlinePlanSources.length > 0
-                                            ? 'اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود'
-                                            : 'اتصال زنده به سرور در دسترس نیست'}
-                                        description={offlinePlanSources.length > 0
-                                            ? 'این اطلاعات ممکن است آخرین وضعیت سرور نباشند:'
-                                            : undefined}
-                                        sources={offlinePlanSources}
-                                        emptyMessage="اطلاعات ذخیره‌شدهٔ قابل‌نمایشی برای این حساب در دسترس نیست."
-                                        actionMessage="تغییر تمدید خودکار و لغو پلن رزروشده به وضعیت زنده نیاز دارد. نمایش پلن رزروشده به‌تنهایی مجوز استفاده از امکانات آن نیست."
-                                    />
-                                ) : null}
                                 {currentPlanQuery.error ? (
                                     <ErrorNoticeCard
                                         message={getUserFacingErrorMessage(currentPlanQuery.error, 'دریافت پلن‌های خریداری‌شده ناموفق بود.')}
@@ -871,7 +903,7 @@ export default function PurchasedPlansScreen() {
                     />
                 </>
             )}
-            <Snackbar
+            <Snackbar variant="error"
                 visible={message.length > 0}
                 onDismiss={() => setMessage('')}
                 duration={4500}

@@ -1,110 +1,96 @@
-import { onlineManager } from '@tanstack/react-query';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import {
+    getServerConnectivityStatus,
+    subscribeToServerConnectivity,
+    type ServerConnectivityStatus,
+} from '@/services/server-connectivity';
 
-const RECONNECTED_MESSAGE_DURATION_MS = 3000;
-const NOTICE_FADE_DURATION_MS = 220;
-
-type NetworkNotice = 'online' | 'offline' | 'reconnected';
+const NOTICE_FADE_IN_DURATION_MS = 180;
+const NOTICE_FADE_OUT_DURATION_MS = 120;
 
 export function NetworkStatusBanner() {
     const theme = useTheme();
     const [opacity] = useState(() => new Animated.Value(0));
-    const [notice, setNotice] = useState<NetworkNotice>(() => (
-        onlineManager.isOnline() ? 'online' : 'offline'
-    ));
-    const wasOnline = useRef(onlineManager.isOnline());
-    const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const status = useSyncExternalStore(
+        subscribeToServerConnectivity,
+        getServerConnectivityStatus,
+        getServerConnectivityStatus,
+    );
+    const [displayedStatus, setDisplayedStatus] = useState<Exclude<ServerConnectivityStatus, 'connected'> | null>(
+        () => status === 'connected' ? null : status,
+    );
 
     useEffect(() => {
-        const unsubscribe = onlineManager.subscribe((isOnline) => {
-            if (isOnline === wasOnline.current) {
-                return;
-            }
-
-            wasOnline.current = isOnline;
-            if (reconnectTimer.current) {
-                clearTimeout(reconnectTimer.current);
-                reconnectTimer.current = null;
-            }
-
-            if (!isOnline) {
-                setNotice('offline');
-                return;
-            }
-
-            setNotice('reconnected');
-            reconnectTimer.current = setTimeout(() => {
-                Animated.timing(opacity, {
-                    toValue: 0,
-                    duration: NOTICE_FADE_DURATION_MS,
-                    useNativeDriver: true,
-                }).start(({ finished }) => {
-                    if (finished && wasOnline.current) {
-                        setNotice('online');
-                    }
-                });
-                reconnectTimer.current = null;
-            }, RECONNECTED_MESSAGE_DURATION_MS);
-        });
-
-        return () => {
-            unsubscribe();
-            if (reconnectTimer.current) {
-                clearTimeout(reconnectTimer.current);
-            }
-        };
-    }, [opacity]);
-
-    useEffect(() => {
-        if (notice === 'online') {
-            opacity.setValue(0);
-            return;
+        if (status === 'connected') {
+            const animation = Animated.timing(opacity, {
+                toValue: 0,
+                duration: NOTICE_FADE_OUT_DURATION_MS,
+                useNativeDriver: true,
+            });
+            animation.start(({ finished }) => {
+                if (finished) setDisplayedStatus(null);
+            });
+            return () => animation.stop();
         }
 
-        Animated.timing(opacity, {
+        const animation = Animated.timing(opacity, {
             toValue: 1,
-            duration: NOTICE_FADE_DURATION_MS,
+            duration: NOTICE_FADE_IN_DURATION_MS,
             useNativeDriver: true,
-        }).start();
-    }, [notice, opacity]);
+        });
+        animation.start(({ finished }) => {
+            if (finished) setDisplayedStatus(status);
+        });
+        return () => animation.stop();
+    }, [status, opacity]);
 
-    if (notice === 'online') {
+    const visibleStatus = status === 'connected' ? displayedStatus : status;
+    if (visibleStatus === null) {
         return null;
     }
 
-    const isOffline = notice === 'offline';
-    const message = isOffline ? 'اتصال اینترنتی ندارید' : 'دوباره متصل شدید';
+    const noticeConfig: Record<Exclude<ServerConnectivityStatus, 'connected'>, { message: string; icon: ComponentProps<typeof MaterialCommunityIcons>['name']; backgroundColor: string; textColor: string }> = {
+        connecting: {
+            message: 'در حال اتصال به سرور…',
+            icon: 'cloud-sync-outline',
+            backgroundColor: theme.infoFill,
+            textColor: theme.onInfo,
+        },
+        'server-unavailable': {
+            message: 'ارتباط با سرور برقرار نیست',
+            icon: 'cloud-alert',
+            backgroundColor: theme.errorFill,
+            textColor: theme.onErrorFill,
+        },
+    };
+    const config = noticeConfig[visibleStatus];
 
     return (
         <Animated.View
             accessibilityRole="alert"
             accessibilityLiveRegion="polite"
-            accessibilityLabel={message}
+            accessibilityLabel={config.message}
             style={[
                 styles.banner,
                 {
-                    backgroundColor: isOffline ? theme.warningFill : theme.successFill,
+                    backgroundColor: config.backgroundColor,
                     opacity,
                 },
             ]}
         >
-            <MaterialCommunityIcons
-                name={isOffline ? 'wifi-off' : 'wifi'}
-                size={14}
-                color={isOffline ? theme.onWarning : theme.onSuccess}
-            />
+            <MaterialCommunityIcons name={config.icon} size={14} color={config.textColor} />
             <ThemedText
                 type="smallBold"
                 numberOfLines={1}
-                style={{ color: isOffline ? theme.onWarning : theme.onSuccess }}
+                style={{ color: config.textColor }}
             >
-                {message}
+                {config.message}
             </ThemedText>
         </Animated.View>
     );

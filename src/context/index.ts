@@ -15,7 +15,7 @@ export {
     type AppFeedbackOptions,
     type AppFeedbackVariant,
 } from './app-feedback.context';
-export type { ThemePalette } from '@/constants/theme';
+export type { ThemePalette, ThemePaletteTone } from '@/constants/theme';
 export { AppProvider } from './app.provider';
 export { AppFeedbackProvider } from '@/components/app-feedback-provider';
 export { AuthProvider } from './auth.provider';

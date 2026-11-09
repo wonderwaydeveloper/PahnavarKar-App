@@ -1,6 +1,7 @@
-import type { ToolDefinition } from '@/constants/tool-definitions';
+import type { ToolCategory, ToolDefinition } from '@/constants/tool-definitions';
 
 export type HomeTab = 'all' | 'wageContinuous' | 'wageNonContinuous' | 'nonWage' | 'yearlyInfo' | 'rules';
+export type HomeActionGroups<T extends ToolDefinition> = Record<ToolCategory, T[]>;
 
 export type HomeRoute = {
     key: HomeTab;
@@ -20,4 +21,23 @@ export function filterHomeActions<T extends ToolDefinition>(actions: readonly T[
     if (tab === 'all') return [...actions];
     if (tab === 'rules') return [];
     return actions.filter((action) => action.category === tab);
+}
+
+export function groupHomeActions<T extends ToolDefinition>(
+    actions: readonly T[],
+    tab: HomeTab,
+): HomeActionGroups<T> {
+    const groups: HomeActionGroups<T> = {
+        wageContinuous: [],
+        wageNonContinuous: [],
+        nonWage: [],
+        yearlyInfo: [],
+    };
+
+    for (const action of actions) {
+        if (tab !== 'all' && action.category !== tab) continue;
+        groups[action.category].push(action);
+    }
+
+    return groups;
 }

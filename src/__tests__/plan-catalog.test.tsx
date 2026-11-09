@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps, ReactNode } from 'react';
 
 import type { AppContextType } from '@/context/app.context';
@@ -22,11 +22,22 @@ import {
     type SubscriptionQuote,
     type WalletOverview,
 } from '@/services/auth-api';
+import { ACCOUNT_OFFLINE_CACHE, saveOfflineCacheValue } from '@/services/account-offline-cache';
 import PlanCatalogScreen from '@/app/(tabs)/account/plan-catalog';
+import { getOfflinePageNotices } from '@/services/offline-page-status';
+
+let mockIsOnline = true;
+let mockServerStatus: 'connecting' | 'connected' | 'server-unavailable' = 'connected';
 
 jest.mock('expo-router', () => ({
+    usePathname: () => '/account/plan-catalog',
     useFocusEffect: jest.fn(),
     useRouter: () => ({ push: jest.fn() }),
+}));
+
+jest.mock('@/hooks/use-online-status', () => ({
+    useOnlineStatus: () => mockIsOnline,
+    useServerConnectivityStatus: () => mockServerStatus,
 }));
 
 jest.mock('expo-crypto', () => ({
@@ -224,6 +235,7 @@ const authContext: AuthContextType = {
     deleteAccount: async () => {},
     signOut: async () => {},
     signOutAll: async () => {},
+    signOutOtherDevices: async () => {},
     getDevices: async () => [],
     revokeUserDevice: async () => {},
 };
@@ -232,6 +244,7 @@ const appContext: AppContextType = {
     theme: 'light',
     themePreference: 'light',
     colorPalette: 'default',
+    colorPaletteTone: null,
     fontPreference: 'system',
     fontSizePreference: 'standard',
     fontError: null,
@@ -257,9 +270,10 @@ const appContext: AppContextType = {
 
 const planAccessContext: PlanAccessContextType = {
     planAccess: null,
+    isUsingOfflineData: false,
     isLoading: false,
     error: null,
-    refresh: async () => {},
+    refresh: async () => true,
 };
 
 const catalog: PlanCatalog = {
@@ -354,6 +368,9 @@ async function renderScreen(offlineSavedAt: {
 beforeEach(() => {
     jest.clearAllMocks();
     mockSecureStore.clear();
+    mockIsOnline = true;
+    mockServerStatus = 'connected';
+    onlineManager.setOnline(true);
     jest.mocked(useAppContext).mockReturnValue(appContext);
     jest.mocked(useAppFeedback).mockReturnValue({
         showFeedback,
@@ -378,14 +395,10 @@ describe('PlanCatalogScreen', () => {
         const walletSavedAt = Date.now() - 120_000;
         const view = await renderScreen({ catalog: catalogSavedAt, wallet: walletSavedAt });
 
-        expect(await view.findByText('اطلاعات خرید به‌صورت زنده تأیید نشده است')).toBeTruthy();
-        expect(view.getByText(new RegExp(
-            `کاتالوگ پلن‌ها · آخرین ذخیره‌سازی: ${new Date(catalogSavedAt).toLocaleString('fa-IR')}`,
-        ))).toBeTruthy();
-        expect(view.getByText(new RegExp(
-            `موجودی کیف پول · آخرین ذخیره‌سازی: ${new Date(walletSavedAt).toLocaleString('fa-IR')}`,
-        ))).toBeTruthy();
-        expect(view.getByText(/قیمت‌گیری نهایی، بررسی سفارش و خرید پس از اتصال/)).toBeTruthy();
+        expect(getOfflinePageNotices().some((notice) => (
+            notice.pathname === '/account/plan-catalog'
+            && notice.message === 'اطلاعات ذخیره‌شدهٔ پلن ممکن است به‌روز نباشد.'
+        ))).toBe(true);
 
         const quoteButton = view.getByRole('button', { name: 'محاسبه مبلغ نهایی' });
         expect(quoteButton.props.accessibilityState?.disabled).toBe(true);
@@ -416,7 +429,7 @@ describe('PlanCatalogScreen', () => {
             </QueryClientProvider>,
         );
 
-        expect(await view.findByText('ارتباط برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.')).toBeTruthy();
+        expect(await view.findByText('ارتباط با سرور برقرار نشد. دوباره تلاش کنید.')).toBeTruthy();
         expect(fetchPlanCatalog).toHaveBeenCalledTimes(1);
         const silverTab = view.getByRole('tab', { name: 'نقره‌ای' });
         expect(silverTab.props.accessibilityState).toEqual({ selected: false, disabled: false });
@@ -429,7 +442,111 @@ describe('PlanCatalogScreen', () => {
                 disabled: false,
             });
         });
-        expect(view.getByText('ارتباط برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.')).toBeTruthy();
+        expect(view.getByText('ارتباط با سرور برقرار نشد. دوباره تلاش کنید.')).toBeTruthy();
+    });
+
+    it('uses the offline notice instead of repeating a network error card when the server is unavailable', async () => {
+        mockIsOnline = false;
+        mockServerStatus = 'server-unavailable';
+        onlineManager.setOnline(false);
+        jest.mocked(fetchPlanCatalog).mockRejectedValue(new TypeError('Catalog network unavailable'));
+        const queryClient = new QueryClient({
+            defaultOptions: { queries: { retry: false, gcTime: 0 } },
+        });
+        queryClient.setQueryData(['wallet-overview', user.id], wallet);
+        queryClient.setQueryData(['pending-subscription-order', user.id], { order: null, payments: [] });
+
+        const view = await render(
+            <QueryClientProvider client={queryClient}>
+                <PlanCatalogScreen />
+            </QueryClientProvider>,
+        );
+
+        expect(getOfflinePageNotices().some((notice) => (
+            notice.pathname === '/account/plan-catalog'
+            && notice.message === 'سرور در دسترس نیست؛ قیمت و خرید تأیید نمی‌شود.'
+        ))).toBe(true);
+        expect(view.queryByText('ارتباط با سرور برقرار نشد. دوباره تلاش کنید.')).toBeNull();
+    });
+
+    it('keeps purchase actions unavailable after reconnect until every purchase query returns live data', async () => {
+        const view = await renderScreen();
+        await waitFor(() => {
+            expect(view.getByRole('button', { name: 'محاسبه مبلغ نهایی' })).toBeTruthy();
+        });
+        jest.mocked(quoteSubscription).mockResolvedValue(makeQuote());
+        await fireEvent.press(view.getByRole('button', { name: 'محاسبه مبلغ نهایی' }));
+        await waitFor(() => {
+            expect(view.getByRole('button', { name: 'تأیید و خرید' })).toBeTruthy();
+        });
+        const catalogResponse = deferred<PlanCatalog>();
+        const walletResponse = deferred<WalletOverview>();
+        const pendingOrderResponse = deferred<{ order: null; payments: [] }>();
+
+        await act(async () => {
+            mockIsOnline = false;
+            mockServerStatus = 'server-unavailable';
+            onlineManager.setOnline(false);
+        });
+        expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/plan-catalog')).toBe(true);
+        const purchaseButton = view.getByRole('button', { name: 'در حال بررسی سفارش قبلی…' });
+        expect(purchaseButton.props.accessibilityState?.disabled).toBe(true);
+        await fireEvent.press(purchaseButton);
+        expect(purchaseSubscription).not.toHaveBeenCalled();
+
+        await act(async () => {
+            jest.mocked(fetchPlanCatalog).mockReturnValueOnce(catalogResponse.promise);
+            jest.mocked(fetchWalletOverview).mockReturnValueOnce(walletResponse.promise);
+            jest.mocked(fetchPendingSubscriptionOrder).mockReturnValueOnce(pendingOrderResponse.promise);
+            mockIsOnline = true;
+            mockServerStatus = 'connected';
+            onlineManager.setOnline(true);
+        });
+        await waitFor(() => {
+            expect(fetchPlanCatalog).toHaveBeenCalled();
+            expect(fetchWalletOverview).toHaveBeenCalled();
+            expect(fetchPendingSubscriptionOrder).toHaveBeenCalled();
+        });
+        expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/plan-catalog')).toBe(true);
+
+        await act(async () => {
+            catalogResponse.resolve(catalog);
+            walletResponse.resolve(wallet);
+            pendingOrderResponse.resolve({ order: null, payments: [] });
+            await Promise.all([
+                catalogResponse.promise,
+                walletResponse.promise,
+                pendingOrderResponse.promise,
+            ]);
+        });
+
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/plan-catalog')).toBe(false);
+        });
+        expect(view.getByRole('button', { name: 'تأیید و خرید' }).props.accessibilityState?.disabled).toBe(false);
+    });
+
+    it('keeps purchase actions unavailable when a reconnect refresh fails', async () => {
+        const view = await renderScreen();
+
+        await act(async () => {
+            mockIsOnline = false;
+            mockServerStatus = 'server-unavailable';
+            onlineManager.setOnline(false);
+        });
+        jest.mocked(fetchPlanCatalog).mockRejectedValueOnce(new TypeError('Catalog network unavailable'));
+
+        await act(async () => {
+            mockIsOnline = true;
+            mockServerStatus = 'connected';
+            onlineManager.setOnline(true);
+        });
+
+        await waitFor(() => {
+            expect(fetchPlanCatalog).toHaveBeenCalled();
+            expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/plan-catalog')).toBe(true);
+        });
+        expect(view.getByRole('button', { name: 'محاسبه مبلغ نهایی' }).props.accessibilityState?.disabled).toBe(true);
     });
 
     it('retries an uncertain purchase with the same idempotency key and exact request', async () => {
@@ -475,6 +592,49 @@ describe('PlanCatalogScreen', () => {
         expect(purchaseMock.mock.calls[0]?.[2]).toBe('11111111-1111-4111-8111-111111111111');
         expect(mockSecureStore.size).toBe(0);
     });
+
+    it.each(['succeeded', 'failed'] as const)(
+        'persists a cleared pending-order snapshot when purchase returns %s immediately',
+        async (status) => {
+            jest.mocked(quoteSubscription).mockResolvedValue(makeQuote());
+            jest.mocked(purchaseSubscription).mockResolvedValue({
+                order: {
+                    id: 23,
+                    reference: 'terminal-purchase',
+                    kind: 'subscription',
+                    subscription_change_type: 'purchase',
+                    plan_key: 'bronze_1_month',
+                    plan_name: null,
+                    status,
+                    failure_code: status === 'failed' ? 'payment_failed' : null,
+                    gross_amount: 120000,
+                    discount_amount: 20000,
+                    plan_credit_amount: 0,
+                    wallet_amount: 0,
+                    gateway_amount: 100000,
+                    refunded_amount: 0,
+                    currency: 'IRR',
+                    expires_at: '2030-01-31T00:00:00.000Z',
+                    completed_at: null,
+                },
+                payment: null,
+            });
+            const view = await renderScreen();
+
+            await fireEvent.press(view.getByRole('button', { name: 'محاسبه مبلغ نهایی' }));
+            await waitFor(() => expect(view.getByRole('button', { name: 'تأیید و خرید' })).toBeTruthy());
+            await fireEvent.press(view.getByRole('button', { name: 'تأیید و خرید' }));
+
+            await waitFor(() => {
+                expect(saveOfflineCacheValue).toHaveBeenCalledWith(
+                    user.id,
+                    ACCOUNT_OFFLINE_CACHE.pendingSubscriptionOrder,
+                    { order: null, payments: [] },
+                );
+            });
+            view.unmount();
+        },
+    );
 
     it('deduplicates manual status checks while the automatic initial check is in flight', async () => {
         const order: Awaited<ReturnType<typeof fetchPendingSubscriptionOrder>>['order'] = {
@@ -527,6 +687,73 @@ describe('PlanCatalogScreen', () => {
             await orderRequest.promise;
         });
     });
+
+    it.each(['succeeded', 'failed'] as const)(
+        'persists a cleared pending-order snapshot after a %s terminal outcome',
+        async (status) => {
+            const order: Awaited<ReturnType<typeof fetchPendingSubscriptionOrder>>['order'] = {
+                id: 22,
+                reference: 'terminal-order',
+                kind: 'subscription',
+                subscription_change_type: 'purchase',
+                plan_key: 'bronze_1_month',
+                plan_name: null,
+                status,
+                failure_code: status === 'failed' ? 'payment_failed' : null,
+                gross_amount: 120000,
+                discount_amount: 20000,
+                plan_credit_amount: 0,
+                wallet_amount: 0,
+                gateway_amount: 100000,
+                refunded_amount: 0,
+                currency: 'IRR',
+                expires_at: '2030-01-31T00:00:00.000Z',
+                completed_at: null,
+            };
+            const queryClient = new QueryClient({
+                defaultOptions: { queries: { retry: false, gcTime: 10000 } },
+            });
+            const invalidateQueries = jest.spyOn(queryClient, 'invalidateQueries');
+            queryClient.setQueryData(['plan-catalog'], catalog);
+            queryClient.setQueryData(['wallet-overview', user.id], wallet);
+            queryClient.setQueryData(['current-plan', user.id], { plan: { key: 'free' } });
+            queryClient.setQueryData(['pending-subscription-order', user.id], { order, payments: [] });
+            jest.mocked(fetchPaymentOrder).mockResolvedValue({
+                order,
+                payments: [],
+                refund_transactions: [],
+                subscription: null,
+            });
+
+            const view = await render(
+                <QueryClientProvider client={queryClient}>
+                    <PlanCatalogScreen />
+                </QueryClientProvider>,
+            );
+
+            await waitFor(() => {
+                expect(saveOfflineCacheValue).toHaveBeenCalledWith(
+                    user.id,
+                    ACCOUNT_OFFLINE_CACHE.pendingSubscriptionOrder,
+                    { order: null, payments: [] },
+                );
+                expect(queryClient.getQueryData(['pending-subscription-order', user.id])).toMatchObject({
+                    order: null,
+                    payments: [],
+                });
+            });
+            if (status === 'succeeded') {
+                await waitFor(() => {
+                    expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['current-plan', user.id] });
+                });
+            }
+            await waitFor(() => {
+                expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ['wallet-overview', user.id] });
+            });
+            view.unmount();
+            queryClient.clear();
+        },
+    );
 
     it('enables wallet payment only when covered and combined payment for any positive balance', async () => {
         jest.mocked(fetchWalletOverview).mockResolvedValue({ ...wallet, balance: 30000 });

@@ -21,6 +21,8 @@ module.exports = ({ config }) => ({
                 backgroundColor: colorTokens.native.splashBackground.light,
                 dark: {
                     ...plugin[1].dark,
+                    image: './assets/images/logo-white.png',
+                    imageWidth: 200,
                     backgroundColor: colorTokens.native.splashBackground.dark,
                 },
             },

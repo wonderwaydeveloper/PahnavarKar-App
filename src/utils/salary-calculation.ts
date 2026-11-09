@@ -228,6 +228,8 @@ export function calculateEntitledSeniorityFromPeriodData(
     const breakdown: EntitledSeniorityCalculationBreakdownItem[] = [];
     let previousEntitlement = 0;
     const firstEntitlementYear = appliesSettlementPath ? 1392 : employmentStartDate.year + 1;
+    const resetAnniversaryToStartOfYear = appliesSettlementPath
+        && compareParsedDates(employmentStartDate, { year: 1391, month: 1, day: 1 }) <= 0;
 
     for (const bucket of sortedBuckets) {
         if (bucket.year < firstCalculationYear || bucket.year > endDate.year) {
@@ -239,11 +241,10 @@ export function calculateEntitledSeniorityFromPeriodData(
         const previousEntitlementAtYearStart = previousEntitlement;
         let entitlementAtYearEnd = previousEntitlement;
         const anniversaryYear = bucket.year;
-        const settledEmploymentAfterStartOf1391 = compareParsedDates(employmentStartDate, { year: 1391, month: 1, day: 1 }) > 0;
         const anniversaryDate = {
             year: anniversaryYear,
-            month: appliesSettlementPath && bucket.year === 1392 && !settledEmploymentAfterStartOf1391 ? 1 : employmentStartDate.month,
-            day: appliesSettlementPath && bucket.year === 1392 && !settledEmploymentAfterStartOf1391
+            month: resetAnniversaryToStartOfYear ? 1 : employmentStartDate.month,
+            day: resetAnniversaryToStartOfYear
                 ? 1
                 : Math.min(employmentStartDate.day, jalaaliMonthLength(anniversaryYear, employmentStartDate.month)),
         };
@@ -688,7 +689,7 @@ export interface BonusEntitlementBreakdownItem {
     periodIndex: number;
     startDate: ParsedDateInput;
     endDate: ParsedDateInput;
-    phase: 'before-anniversary' | 'after-anniversary';
+    phase: 'before-anniversary' | 'after-anniversary' | 'calendar-year-end';
     monthsCovered: number;
     dailyMinimumWage: number;
     dailySeniority: number;
@@ -705,6 +706,9 @@ export interface BonusEntitlementCalculationResult {
     totalEntitlementAmount: number;
     breakdown: BonusEntitlementBreakdownItem[];
 }
+
+export type BonusEntitlementSeniorityBasis = 'employment-anniversary' | 'persian-year-end';
+export type BonusEntitlementMinimumWageBasis = 'period' | 'last-covered-day-of-year';
 
 export interface SpousalAllowanceCalculationBreakdownItem {
     year: number;
@@ -2407,6 +2411,8 @@ export function calculateBonusEntitlementFromPeriodData(
     workshopType: EntitledSeniorityWorkshopType = 'unclassified',
     jobGroupNumber?: number,
     settledThrough1391 = false,
+    seniorityBasis: BonusEntitlementSeniorityBasis = 'employment-anniversary',
+    minimumWageBasis: BonusEntitlementMinimumWageBasis = 'period',
 ): BonusEntitlementCalculationResult {
     const emptyResult = {
         totalCalculatedAmount: 0,
@@ -2428,10 +2434,38 @@ export function calculateBonusEntitlementFromPeriodData(
         jobGroupNumber,
         settledThrough1391,
     );
+    const lastCoveredDaySeniorityByYear = new Map<number, number>();
+    if (seniorityBasis === 'persian-year-end') {
+        for (const segment of seniorityResult.breakdown) {
+            lastCoveredDaySeniorityByYear.set(segment.year, segment.entitlement);
+        }
+    }
     const breakdown: BonusEntitlementBreakdownItem[] = [];
 
     for (const bucket of [...periodBuckets].sort((left, right) => left.year - right.year)) {
-        for (const period of [...bucket.periods].sort((left, right) => left.period_index - right.period_index)) {
+        const sortedPeriods = [...bucket.periods].sort((left, right) => left.period_index - right.period_index);
+        const lastCoveredMonth = Math.min(
+            12,
+            endDate.year === bucket.year ? endDate.month : 12,
+        );
+        let lastCoveredDayMinimumWage: number | null = null;
+        if (minimumWageBasis === 'last-covered-day-of-year') {
+            let monthOffset = 0;
+            for (const period of sortedPeriods) {
+                const periodLength = Number(period.month_count ?? 0);
+                if (!Number.isFinite(periodLength) || periodLength <= 0) {
+                    continue;
+                }
+
+                if (monthOffset + periodLength >= lastCoveredMonth) {
+                    lastCoveredDayMinimumWage = Number(period.daily_minimum_wage ?? 0);
+                    break;
+                }
+                monthOffset += periodLength;
+            }
+        }
+
+        for (const period of sortedPeriods) {
             const periodLength = Number(period.month_count ?? 0);
             if (!Number.isFinite(periodLength) || periodLength <= 0) {
                 continue;
@@ -2444,11 +2478,26 @@ export function calculateBonusEntitlementFromPeriodData(
             const periodEndMonth = periodStartMonth + periodLength - 1;
             const periodStart = { year: bucket.year, month: periodStartMonth, day: 1 };
             const periodEnd = { year: bucket.year, month: periodEndMonth, day: jalaaliMonthLength(bucket.year, periodEndMonth) };
-            const dailyMinimumWage = Number(period.daily_minimum_wage ?? 0);
+            const dailyMinimumWage = minimumWageBasis === 'last-covered-day-of-year'
+                ? lastCoveredDayMinimumWage ?? 0
+                : Number(period.daily_minimum_wage ?? 0);
 
-            for (const senioritySegment of seniorityResult.breakdown.filter((segment) => (
-                segment.year === bucket.year && segment.periodIndex === period.period_index
-            ))) {
+            const senioritySegments = seniorityBasis === 'persian-year-end'
+                ? lastCoveredDaySeniorityByYear.has(bucket.year)
+                    ? [{
+                        year: bucket.year,
+                        periodIndex: period.period_index,
+                        startDate: periodStart,
+                        endDate: periodEnd,
+                        phase: 'calendar-year-end' as const,
+                        entitlement: lastCoveredDaySeniorityByYear.get(bucket.year) ?? 0,
+                    }]
+                    : []
+                : seniorityResult.breakdown.filter((segment) => (
+                    segment.year === bucket.year && segment.periodIndex === period.period_index
+                ));
+
+            for (const senioritySegment of senioritySegments) {
                 const overlapStart = getLaterDate(startDate, getLaterDate(periodStart, senioritySegment.startDate));
                 const overlapEnd = getEarlierDate(endDate, getEarlierDate(periodEnd, senioritySegment.endDate));
                 if (compareParsedDates(overlapStart, overlapEnd) > 0 || dailyMinimumWage <= 0) {

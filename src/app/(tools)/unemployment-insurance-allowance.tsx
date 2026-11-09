@@ -3,7 +3,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Card, Snackbar } from 'react-native-paper';
+import { Card } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button } from '@/components/font-aware-paper';
@@ -311,7 +312,7 @@ export default function UnemploymentInsuranceAllowanceScreen() {
             </ScrollView>
 
             <PersianDatePickerModal visible={pickerTarget !== null} value={selectedDate} title="انتخاب تاریخ" onClose={() => setPickerTarget(null)} onSelect={handleDateSelect} availableYears={yearPeriods.map((item) => item.year)} />
-            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false) }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
+            <Snackbar variant="error" visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false) }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
         </ThemedView>
     );
 }

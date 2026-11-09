@@ -7,13 +7,13 @@ jest.mock('@/global.css', () => ({}));
 
 describe('group calculation PDF theme colors', () => {
     it('uses the selected theme palette and centralized document canvas token', () => {
-        const colors = ColorPalettes.skyBlue.light;
+        const colors = ColorPalettes.blue.light;
         const html = buildGroupCalculationPdfHtml(
             [],
             [],
             false,
             { logo: 'logo.svg' },
-            'skyBlue',
+            'blue',
         );
 
         expect(html).toContain(`--pdf-page-bg: ${PRODUCT_COLOR_TOKENS.pdfCanvas}`);
@@ -27,5 +27,20 @@ describe('group calculation PDF theme colors', () => {
         expect(html).not.toContain('pdf-primary-container');
         expect(html).not.toContain('#087e8b');
         expect(html).not.toContain('#f5f9fa');
+    });
+
+    it('renders the header and footer logo frames as padded circles like the About screen', () => {
+        const html = buildGroupCalculationPdfHtml(
+            [],
+            [],
+            false,
+            { logo: 'logo.svg' },
+            'blue',
+        );
+
+        expect(html).toMatch(/\.header-logo-wrap\s*\{[^}]*width:\s*38px;[^}]*height:\s*38px;[^}]*padding:\s*4px;[^}]*border-radius:\s*50%;/);
+        expect(html).toMatch(/\.header-logo\s*\{[^}]*border-radius:\s*50%;/);
+        expect(html).toMatch(/\.page-footer-logo\s*\{[^}]*width:\s*18px;[^}]*height:\s*18px;[^}]*padding:\s*2px;[^}]*border-radius:\s*50%;/);
+        expect(html).toMatch(/\.watermark\s*\{[^}]*border-radius:\s*50%;/);
     });
 });

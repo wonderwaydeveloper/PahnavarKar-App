@@ -1,10 +1,73 @@
 import { Typography } from './typography';
 import { MD3DarkTheme, MD3LightTheme } from 'react-native-paper';
 
-import { Colors } from './theme';
+import { Colors, type AppColorPalette } from './theme';
 
 const lightPalette = Colors.light;
 const darkPalette = Colors.dark;
+
+function withAlpha(hex: string, alpha: number): string {
+    const red = Number.parseInt(hex.slice(1, 3), 16);
+    const green = Number.parseInt(hex.slice(3, 5), 16);
+    const blue = Number.parseInt(hex.slice(5, 7), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+export function getPaperColorRoles(
+    colors: AppColorPalette,
+    baseColors: typeof MD3LightTheme.colors,
+) {
+    return {
+        primary: colors.primary,
+        onPrimary: colors.onPrimary,
+        primaryContainer: colors.primaryContainer,
+        onPrimaryContainer: colors.onPrimaryContainer,
+        secondary: colors.secondary,
+        onSecondary: colors.onSecondary,
+        secondaryContainer: colors.secondaryContainer,
+        onSecondaryContainer: colors.onSecondaryContainer,
+        tertiary: colors.tertiary,
+        onTertiary: colors.onTertiary,
+        tertiaryContainer: colors.tertiaryContainer,
+        onTertiaryContainer: colors.onTertiaryContainer,
+        background: colors.background,
+        onBackground: colors.text,
+        surface: colors.surface,
+        onSurface: colors.text,
+        surfaceVariant: colors.surfaceVariant,
+        onSurfaceVariant: colors.textSecondary,
+        surfaceDisabled: withAlpha(colors.text, 0.12),
+        onSurfaceDisabled: withAlpha(colors.text, 0.38),
+        surfaceDim: colors.surfaceDim,
+        surfaceBright: colors.surfaceBright,
+        surfaceContainerLowest: colors.surfaceContainerLowest,
+        surfaceContainerLow: colors.surfaceContainerLow,
+        surfaceContainer: colors.surfaceContainer,
+        surfaceContainerHigh: colors.surfaceContainerHigh,
+        surfaceContainerHighest: colors.surfaceContainerHighest,
+        outline: colors.borderStrong,
+        outlineVariant: colors.border,
+        error: colors.error,
+        onError: colors.onError,
+        errorContainer: colors.errorFill,
+        onErrorContainer: colors.onErrorFill,
+        inverseSurface: colors.inverseSurface,
+        inverseOnSurface: colors.inverseOnSurface,
+        inversePrimary: colors.inversePrimary,
+        surfaceTint: colors.surfaceTint,
+        shadow: colors.shadow,
+        scrim: colors.scrim,
+        backdrop: colors.overlay,
+        elevation: {
+            ...baseColors.elevation,
+            level1: colors.surfaceContainerLow,
+            level2: colors.surfaceContainer,
+            level3: colors.surfaceContainerHigh,
+            level4: colors.surfaceContainerHighest,
+            level5: colors.surfaceContainerHighest,
+        },
+    };
+}
 
 /**
  * Light Theme - Material Design 3
@@ -14,42 +77,7 @@ export const lightTheme = {
     ...MD3LightTheme,
     colors: {
         ...MD3LightTheme.colors,
-        primary: lightPalette.primary,
-        onPrimary: lightPalette.onPrimary,
-        primaryContainer: lightPalette.primaryContainer,
-        onPrimaryContainer: lightPalette.onPrimaryContainer,
-        secondary: lightPalette.secondary,
-        onSecondary: lightPalette.onSecondary,
-        secondaryContainer: lightPalette.secondaryContainer,
-        onSecondaryContainer: lightPalette.onSecondaryContainer,
-        tertiary: lightPalette.tertiary,
-        onTertiary: lightPalette.onTertiary,
-        tertiaryContainer: lightPalette.tertiaryContainer,
-        onTertiaryContainer: lightPalette.onTertiaryContainer,
-        background: lightPalette.background,
-        onBackground: lightPalette.text,
-        surface: lightPalette.surface,
-        onSurface: lightPalette.text,
-        surfaceVariant: lightPalette.surfaceVariant,
-        onSurfaceVariant: lightPalette.textSecondary,
-        surfaceDim: lightPalette.surfaceDim,
-        surfaceBright: lightPalette.surfaceBright,
-        surfaceContainerLowest: lightPalette.surfaceContainerLowest,
-        surfaceContainerLow: lightPalette.surfaceContainerLow,
-        surfaceContainer: lightPalette.surfaceElevated,
-        surfaceContainerHigh: lightPalette.surfaceContainerHigh,
-        surfaceContainerHighest: lightPalette.surfaceContainerHighest,
-        outline: lightPalette.borderStrong,
-        outlineVariant: lightPalette.border,
-        error: lightPalette.error,
-        onError: lightPalette.onError,
-        errorContainer: lightPalette.errorFill,
-        onErrorContainer: lightPalette.onErrorFill,
-        inverseSurface: lightPalette.inverseSurface,
-        inverseOnSurface: lightPalette.inverseOnSurface,
-        inversePrimary: lightPalette.inversePrimary,
-        surfaceTint: lightPalette.surfaceTint,
-        scrim: lightPalette.scrim,
+        ...getPaperColorRoles(lightPalette, MD3LightTheme.colors),
     },
     fonts: {
         ...MD3LightTheme.fonts,
@@ -139,42 +167,7 @@ export const darkTheme = {
     ...MD3DarkTheme,
     colors: {
         ...MD3DarkTheme.colors,
-        primary: darkPalette.primary,
-        onPrimary: darkPalette.onPrimary,
-        primaryContainer: darkPalette.primaryContainer,
-        onPrimaryContainer: darkPalette.onPrimaryContainer,
-        secondary: darkPalette.secondary,
-        onSecondary: darkPalette.onSecondary,
-        secondaryContainer: darkPalette.secondaryContainer,
-        onSecondaryContainer: darkPalette.onSecondaryContainer,
-        tertiary: darkPalette.tertiary,
-        onTertiary: darkPalette.onTertiary,
-        tertiaryContainer: darkPalette.tertiaryContainer,
-        onTertiaryContainer: darkPalette.onTertiaryContainer,
-        background: darkPalette.background,
-        onBackground: darkPalette.text,
-        surface: darkPalette.surface,
-        onSurface: darkPalette.text,
-        surfaceVariant: darkPalette.surfaceVariant,
-        onSurfaceVariant: darkPalette.textSecondary,
-        surfaceDim: darkPalette.surfaceDim,
-        surfaceBright: darkPalette.surfaceBright,
-        surfaceContainerLowest: darkPalette.surfaceContainerLowest,
-        surfaceContainerLow: darkPalette.surfaceContainerLow,
-        surfaceContainer: darkPalette.surfaceElevated,
-        surfaceContainerHigh: darkPalette.surfaceContainerHigh,
-        surfaceContainerHighest: darkPalette.surfaceContainerHighest,
-        outline: darkPalette.borderStrong,
-        outlineVariant: darkPalette.border,
-        error: darkPalette.error,
-        onError: darkPalette.onError,
-        errorContainer: darkPalette.errorFill,
-        onErrorContainer: darkPalette.onErrorFill,
-        inverseSurface: darkPalette.inverseSurface,
-        inverseOnSurface: darkPalette.inverseOnSurface,
-        inversePrimary: darkPalette.inversePrimary,
-        surfaceTint: darkPalette.surfaceTint,
-        scrim: darkPalette.scrim,
+        ...getPaperColorRoles(darkPalette, MD3DarkTheme.colors),
     },
     fonts: {
         ...MD3DarkTheme.fonts,

@@ -27,12 +27,14 @@ export default function AppInfoScreen() {
         <ThemedView style={styles.container}>
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={[styles.introCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <Image
-                        source={require('@/assets/images/logo-white.png')}
-                        contentFit="contain"
-                        allowDownscaling={false}
-                        style={[styles.logo, { backgroundColor: theme.primary }]}
-                    />
+                    <View style={[styles.logoFrame, { backgroundColor: theme.primary }]}>
+                        <Image
+                            source={require('@/assets/images/logo-white.png')}
+                            contentFit="contain"
+                            allowDownscaling={false}
+                            style={styles.logo}
+                        />
+                    </View>
                     <ThemedText type="largeTitle" style={{ color: theme.text }}>پهناور کار</ThemedText>
                     <ThemedText type="small" style={[styles.introDescription, { color: theme.textSecondary }]}>
                         اطلاعات نسخه و کاربرد برنامه
@@ -78,12 +80,16 @@ const styles = StyleSheet.create({
         padding: Spacing.four,
         gap: Spacing.one,
     },
-    logo: {
-        width: 64,
-        height: 64,
-        borderRadius: 20,
+    logoFrame: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        padding: 6,
+        alignItems: 'center',
+        justifyContent: 'center',
         marginBottom: Spacing.one,
     },
+    logo: { width: '100%', height: '100%', borderRadius: 22 },
     introDescription: { lineHeight: Typography.lineHeight.body, textAlign: 'center' },
     infoCard: {
         borderWidth: 1,

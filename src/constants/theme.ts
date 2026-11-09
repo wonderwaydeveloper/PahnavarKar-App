@@ -76,6 +76,14 @@ export interface AppColorPalette {
 export type ThemeColor = keyof AppColorPalette;
 
 export const MATERIAL_TONES = Object.freeze(Array.from({ length: 101 }, (_, tone) => tone));
+export const PALETTE_VARIANT_TONES = [25, 50, 75] as const;
+export type ThemePaletteTone = (typeof PALETTE_VARIANT_TONES)[number];
+
+const DARK_MODE_PALETTE_TONES: Record<ThemePaletteTone, number> = {
+  25: 65,
+  50: 75,
+  75: 85,
+};
 
 const generatedThemes = Object.fromEntries(
   Object.entries(MATERIAL_COLOR_SEEDS).map(([palette, seed]) => [
@@ -83,6 +91,7 @@ const generatedThemes = Object.fromEntries(
     themeFromSourceColor(argbFromHex(seed)),
   ]),
 ) as Record<ThemePalette, ReturnType<typeof themeFromSourceColor>>;
+const whiteAccessibleTones = new Map<ThemePalette, number>();
 
 const STATUS_THEMES = {
   success: themeFromSourceColor(argbFromHex(colorTokens.semanticSeeds.success)),
@@ -101,11 +110,63 @@ export function getColorPaletteTone(palette: ThemePalette, tone: number): string
   return toHex(generatedThemes[palette].palettes.primary.tone(tone));
 }
 
-function createPalette(seed: ThemePalette, mode: ColorMode): AppColorPalette {
+function getRelativeLuminance(color: string): number {
+  const [red, green, blue] = [1, 3, 5].map((offset) => {
+    const channel = Number.parseInt(color.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+}
+
+function getContrastingTextColor(background: string): string {
+  const luminance = getRelativeLuminance(background);
+  const blackContrast = (luminance + 0.05) / 0.05;
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  return blackContrast >= whiteContrast ? '#000000' : '#FFFFFF';
+}
+
+function getWhiteAccessibleTone(palette: ThemePalette): number {
+  const cachedTone = whiteAccessibleTones.get(palette);
+  if (cachedTone !== undefined) return cachedTone;
+
+  for (let tone = 100; tone >= 0; tone -= 1) {
+    const color = toHex(generatedThemes[palette].palettes.primary.tone(tone));
+    const whiteContrast = 1.05 / (getRelativeLuminance(color) + 0.05);
+    if (whiteContrast >= 4.5) {
+      whiteAccessibleTones.set(palette, tone);
+      return tone;
+    }
+  }
+  throw new Error(`Palette ${palette} has no Material 3 tone accessible with white text.`);
+}
+
+function getLightModeSelectedTone(palette: ThemePalette, selectedTone: ThemePaletteTone): number {
+  const maxWhiteAccessibleTone = getWhiteAccessibleTone(palette);
+  const darkTone = Math.min(25, maxWhiteAccessibleTone - 2);
+  const mediumTone = Math.round((darkTone + maxWhiteAccessibleTone) / 2);
+  return {
+    25: darkTone,
+    50: mediumTone,
+    75: maxWhiteAccessibleTone,
+  }[selectedTone];
+}
+
+function createPalette(seed: ThemePalette, mode: ColorMode, selectedTone?: ThemePaletteTone): AppColorPalette {
   const generated = generatedThemes[seed];
   const scheme = generated.schemes[mode];
   const neutral = generated.palettes.neutral;
   const tone = (value: number) => toHex(neutral.tone(value));
+  const primaryTone = selectedTone === undefined
+    ? undefined
+    : mode === 'light'
+      ? getLightModeSelectedTone(seed, selectedTone)
+      : DARK_MODE_PALETTE_TONES[selectedTone];
+  const primary = primaryTone === undefined
+    ? toHex(scheme.primary)
+    : toHex(generated.palettes.primary.tone(primaryTone));
+  const primaryContainer = toHex(scheme.primaryContainer);
+  const onPrimary = mode === 'light' ? '#FFFFFF' : getContrastingTextColor(primary);
+  const onPrimaryContainer = toHex(scheme.onPrimaryContainer);
   const successScheme = STATUS_THEMES.success.schemes[mode];
   const warningScheme = STATUS_THEMES.warning.schemes[mode];
   const infoScheme = STATUS_THEMES.info.schemes[mode];
@@ -113,7 +174,7 @@ function createPalette(seed: ThemePalette, mode: ColorMode): AppColorPalette {
   return {
     text: toHex(scheme.onSurface),
     textSecondary: toHex(scheme.onSurfaceVariant),
-    textMuted: toHex(scheme.outline),
+    textMuted: tone(mode === 'light' ? 40 : 80),
     background: toHex(scheme.background),
     surface: toHex(scheme.surface),
     surfaceVariant: toHex(scheme.surfaceVariant),
@@ -127,11 +188,11 @@ function createPalette(seed: ThemePalette, mode: ColorMode): AppColorPalette {
     surfaceContainerHighest: tone(mode === 'light' ? 90 : 22),
     border: toHex(scheme.outlineVariant),
     borderStrong: toHex(scheme.outline),
-    primary: toHex(scheme.primary),
+    primary,
     primaryText: toHex(scheme.primary),
-    onPrimary: toHex(scheme.onPrimary),
-    primaryContainer: toHex(scheme.primaryContainer),
-    onPrimaryContainer: toHex(scheme.onPrimaryContainer),
+    onPrimary,
+    primaryContainer,
+    onPrimaryContainer,
     secondary: toHex(scheme.secondary),
     onSecondary: toHex(scheme.onSecondary),
     secondaryContainer: toHex(scheme.secondaryContainer),
@@ -157,12 +218,12 @@ function createPalette(seed: ThemePalette, mode: ColorMode): AppColorPalette {
     inverseSurface: toHex(scheme.inverseSurface),
     inverseOnSurface: toHex(scheme.inverseOnSurface),
     inversePrimary: toHex(scheme.inversePrimary),
-    surfaceTint: toHex(scheme.primary),
+    surfaceTint: primary,
     shadow: toHex(scheme.shadow),
     scrim: toHex(scheme.scrim),
     overlay: `rgba(0, 0, 0, ${colorTokens.overlayOpacity[mode]})`,
     backgroundElement: tone(mode === 'light' ? 96 : 12),
-    backgroundSelected: toHex(scheme.primaryContainer),
+    backgroundSelected: primaryContainer,
   };
 }
 
@@ -173,22 +234,41 @@ export const Colors = {
 
 export const ColorPalettes: Record<ThemePalette, Record<ColorMode, AppColorPalette>> = {
   default: Colors,
-  skyBlue: { light: createPalette('skyBlue', 'light'), dark: createPalette('skyBlue', 'dark') },
-  emerald: { light: createPalette('emerald', 'light'), dark: createPalette('emerald', 'dark') },
-  amber: { light: createPalette('amber', 'light'), dark: createPalette('amber', 'dark') },
-  ruby: { light: createPalette('ruby', 'light'), dark: createPalette('ruby', 'dark') },
-  softPurple: { light: createPalette('softPurple', 'light'), dark: createPalette('softPurple', 'dark') },
-  purple: { light: createPalette('purple', 'light'), dark: createPalette('purple', 'dark') },
-  indigo: { light: createPalette('indigo', 'light'), dark: createPalette('indigo', 'dark') },
-  deepTeal: { light: createPalette('deepTeal', 'light'), dark: createPalette('deepTeal', 'dark') },
-  burntOrange: { light: createPalette('burntOrange', 'light'), dark: createPalette('burntOrange', 'dark') },
-  dustyRose: { light: createPalette('dustyRose', 'light'), dark: createPalette('dustyRose', 'dark') },
-  brown: { light: createPalette('brown', 'light'), dark: createPalette('brown', 'dark') },
-  slateBlue: { light: createPalette('slateBlue', 'light'), dark: createPalette('slateBlue', 'dark') },
-  lightPurple: { light: createPalette('lightPurple', 'light'), dark: createPalette('lightPurple', 'dark') },
-  olive: { light: createPalette('olive', 'light'), dark: createPalette('olive', 'dark') },
-  tealBlue: { light: createPalette('tealBlue', 'light'), dark: createPalette('tealBlue', 'dark') },
+  red: { light: createPalette('red', 'light'), dark: createPalette('red', 'dark') },
+  redOrange: { light: createPalette('redOrange', 'light'), dark: createPalette('redOrange', 'dark') },
+  orange: { light: createPalette('orange', 'light'), dark: createPalette('orange', 'dark') },
+  yellowOrange: { light: createPalette('yellowOrange', 'light'), dark: createPalette('yellowOrange', 'dark') },
+  yellow: { light: createPalette('yellow', 'light'), dark: createPalette('yellow', 'dark') },
+  yellowGreen: { light: createPalette('yellowGreen', 'light'), dark: createPalette('yellowGreen', 'dark') },
+  green: { light: createPalette('green', 'light'), dark: createPalette('green', 'dark') },
+  blue: { light: createPalette('blue', 'light'), dark: createPalette('blue', 'dark') },
+  blueViolet: { light: createPalette('blueViolet', 'light'), dark: createPalette('blueViolet', 'dark') },
+  violet: { light: createPalette('violet', 'light'), dark: createPalette('violet', 'dark') },
+  redViolet: { light: createPalette('redViolet', 'light'), dark: createPalette('redViolet', 'dark') },
 };
+
+export function getAppColorPalette(
+  palette: ThemePalette,
+  mode: ColorMode,
+  selectedTone?: ThemePaletteTone | null,
+): AppColorPalette {
+  return selectedTone === undefined || selectedTone === null
+    ? ColorPalettes[palette][mode]
+    : createPalette(palette, mode, selectedTone);
+}
+
+export function getAppHeaderColors(colors: AppColorPalette, mode: ColorMode) {
+  const isLightMode = mode === 'light';
+  return {
+    background: isLightMode ? colors.primary : colors.surface,
+    foreground: isLightMode ? colors.onPrimary : colors.text,
+    toolIconBackground: isLightMode ? colors.surface : colors.primary,
+    toolIconForeground: isLightMode ? colors.primaryText : colors.onPrimary,
+    statusBarStyle: isLightMode && colors.onPrimary === '#000000'
+      ? 'dark-content' as const
+      : 'light-content' as const,
+  };
+}
 
 export const Fonts = Platform.select({
   ios: {

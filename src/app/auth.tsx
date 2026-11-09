@@ -22,6 +22,7 @@ import { OtpCodeInput } from '@/components/otp-code-input';
 import { OtpResendControl } from '@/components/otp-resend-control';
 import { ProfilePhotoField } from '@/components/profile-photo-field';
 import { ProfilePhotoPreview } from '@/components/profile-photo-preview';
+import { NetworkStatusBanner } from '@/components/network-status-banner';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -68,11 +69,15 @@ export default function AuthScreen() {
     const [code, setCode] = useState('');
     const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
     const [twoFactorCode, setTwoFactorCode] = useState('');
-    const { secondsRemaining: resendSeconds, start: startResendCountdown } = useOtpResendCountdown();
+    const {
+        secondsRemaining: resendSeconds,
+        start: startResendCountdown,
+        reset: resetResendCountdown,
+    } = useOtpResendCountdown();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<AuthError>(null);
     const [focusedField, setFocusedField] = useState<AuthField | null>(null);
-    const isVerifyingCode = useRef(false);
+    const isSubmittingRef = useRef(false);
     const nationalNumber = getIranianNationalNumber(phone);
     const normalizedPhone = normalizeIranianPhone(phone) ?? '';
 
@@ -118,6 +123,7 @@ export default function AuthScreen() {
     };
 
     const requestCode = async () => {
+        if (busy || isSubmittingRef.current) return;
         Keyboard.dismiss();
 
         if (!/^9\d{9}$/.test(nationalNumber)) {
@@ -125,6 +131,7 @@ export default function AuthScreen() {
             setError({ field: 'phone', message: 'شماره تلفن معتبر وارد کنید.' });
             return;
         }
+        isSubmittingRef.current = true;
         setBusy(true);
         setError(null);
         dismissFeedback();
@@ -149,12 +156,13 @@ export default function AuthScreen() {
                 showMessage(getErrorMessage(requestError));
             }
         } finally {
+            isSubmittingRef.current = false;
             setBusy(false);
         }
     };
 
     const verifyCode = async (submittedCode = code) => {
-        if (busy || isVerifyingCode.current) {
+        if (busy || isSubmittingRef.current) {
             return;
         }
         if (!/^\d{6}$/.test(submittedCode)) {
@@ -163,7 +171,7 @@ export default function AuthScreen() {
             return;
         }
 
-        isVerifyingCode.current = true;
+        isSubmittingRef.current = true;
         setBusy(true);
         setError(null);
         dismissFeedback();
@@ -197,19 +205,20 @@ export default function AuthScreen() {
                 showMessage(getErrorMessage(verificationError));
             }
         } finally {
-            isVerifyingCode.current = false;
+            isSubmittingRef.current = false;
             setBusy(false);
         }
     };
 
     const verifyTwoFactorCode = async () => {
-        if (!twoFactorChallenge || busy) return;
+        if (!twoFactorChallenge || busy || isSubmittingRef.current) return;
         const normalizedCode = twoFactorCode.trim().toUpperCase();
         if (!/^(?:[0-9]{6}|[A-F0-9]{10})$/.test(normalizedCode)) {
             showMessage('کد شش‌رقمی برنامه یا کد بازیابی ۱۰حرفی را وارد کنید.');
             return;
         }
 
+        isSubmittingRef.current = true;
         setBusy(true);
         setError(null);
         dismissFeedback();
@@ -220,11 +229,13 @@ export default function AuthScreen() {
         } catch (verificationError) {
             showMessage(getErrorMessage(verificationError));
         } finally {
+            isSubmittingRef.current = false;
             setBusy(false);
         }
     };
 
     const completeRegistration = async () => {
+        if (busy || isSubmittingRef.current) return;
         Keyboard.dismiss();
 
         if (!name.trim()) {
@@ -239,6 +250,7 @@ export default function AuthScreen() {
             return;
         }
 
+        isSubmittingRef.current = true;
         setBusy(true);
         setError(null);
         dismissFeedback();
@@ -288,10 +300,21 @@ export default function AuthScreen() {
                 showMessage(getErrorMessage(registrationError));
             }
         } finally {
+            isSubmittingRef.current = false;
             if (!navigatingAfterRegistration) {
                 setBusy(false);
             }
         }
+    };
+
+    const handlePhoneChange = (value: string) => {
+        const nextPhone = normalizeIranianPhone(value) ?? '';
+        if (nextPhone !== normalizedPhone) {
+            setCode('');
+            resetResendCountdown();
+        }
+        setPhone(value);
+        clearFieldError('phone');
     };
 
     const goBack = () => {
@@ -416,6 +439,7 @@ export default function AuthScreen() {
                         </ThemedText>
                     </View>
                 </Appbar.Header>
+                <NetworkStatusBanner />
 
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
@@ -507,10 +531,7 @@ export default function AuthScreen() {
                                         accessibilityLabel="شماره تلفن"
                                         error={error?.field === 'phone' ? error.message : undefined}
                                         label="شماره تلفن"
-                                        onChangeText={(value) => {
-                                            setPhone(value);
-                                            clearFieldError('phone');
-                                        }}
+                                        onChangeText={handlePhoneChange}
                                         value={phone}
                                     />
                                 ) : null}
@@ -545,10 +566,7 @@ export default function AuthScreen() {
                                     accessibilityLabel="ویرایش شماره تلفن"
                                     error={error?.field === 'phone' ? error.message : undefined}
                                     label="شماره تلفن"
-                                    onChangeText={(value) => {
-                                        setPhone(value);
-                                        clearFieldError('phone');
-                                    }}
+                                    onChangeText={handlePhoneChange}
                                     value={phone}
                                 />
                                 <Pressable

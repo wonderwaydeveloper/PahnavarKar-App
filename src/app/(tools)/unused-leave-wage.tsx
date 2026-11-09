@@ -3,7 +3,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toGregorian, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Card, Menu, Snackbar } from 'react-native-paper';
+import { Card, Menu } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
@@ -819,7 +820,7 @@ export default function UnusedLeaveWageScreen() {
                 </SafeAreaView>
             </ScrollView>
             <PersianDatePickerModal visible={pickerTarget !== null} value={pickerTarget === 'employment' ? employmentDate : pickerTarget === 'start' ? startDate : endDate} title={pickerTarget === 'employment' ? 'انتخاب تاریخ استخدام' : pickerTarget === 'start' ? 'انتخاب تاریخ شروع' : 'انتخاب تاریخ پایان'} onClose={() => setPickerTarget(null)} onSelect={handleDateSelect} availableYears={availableYears} />
-            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
+            <Snackbar variant="error" visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
         </ThemedView>
     );
 }

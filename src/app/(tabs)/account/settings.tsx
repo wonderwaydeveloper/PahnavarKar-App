@@ -2,13 +2,19 @@ import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { Snackbar } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 
 import type { CalculationSound, CurrencyPreference, FontPreference, FontSizePreference, ThemePalette } from '@/context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ColorPalettes, Radius, Spacing } from '@/constants/theme';
+import {
+    getAppColorPalette,
+    PALETTE_VARIANT_TONES,
+    Radius,
+    Spacing,
+    type ThemePaletteTone,
+} from '@/constants/theme';
 import { getScaledTextStyle } from '@/constants/font-scale';
 import { useAppContext } from '@/hooks/use-app-context';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
@@ -18,8 +24,8 @@ import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 
 type SettingRowProps = {
     icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-    colorPreview?: string;
     title: string;
+    subtitle?: string;
     selected: boolean;
     previewFont?: FontPreference;
     disabled?: boolean;
@@ -28,6 +34,12 @@ type SettingRowProps = {
 };
 
 type SettingsSectionKey = 'currency' | 'palette' | 'appearance' | 'font' | 'font-size' | 'calculation-sound';
+
+const PALETTE_VARIANT_LABELS: Record<ThemePaletteTone, string> = {
+    25: 'تیره',
+    50: 'اصلی',
+    75: 'روشن',
+};
 
 type SettingsSectionProps = {
     title: string;
@@ -92,8 +104,8 @@ function SettingsSection({
 
 function SettingRow({
     icon,
-    colorPreview,
     title,
+    subtitle,
     selected,
     previewFont,
     disabled = false,
@@ -125,14 +137,7 @@ function SettingRow({
                 ]}
             >
                 <View style={styles.optionIcon}>
-                    {colorPreview ? (
-                        <View
-                            style={[
-                                styles.paletteSwatch,
-                                { backgroundColor: colorPreview, borderColor: theme.borderStrong },
-                            ]}
-                        />
-                    ) : icon ? (
+                    {icon ? (
                         <MaterialCommunityIcons
                             name={icon}
                             size={21}
@@ -157,6 +162,11 @@ function SettingRow({
                     ) : (
                         <ThemedText type="smallBold">{title}</ThemedText>
                     )}
+                    {subtitle ? (
+                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                            {subtitle}
+                        </ThemedText>
+                    ) : null}
                 </View>
                 <MaterialCommunityIcons
                     name={selected ? 'radiobox-marked' : 'radiobox-blank'}
@@ -175,6 +185,7 @@ export default function SettingsScreen() {
         theme: themeMode,
         setTheme,
         colorPalette,
+        colorPaletteTone,
         setColorPalette,
         fontPreference,
         setFontPreference,
@@ -199,6 +210,8 @@ export default function SettingsScreen() {
     const [paletteActionError, setPaletteActionError] = useState('');
     const [calculationSoundActionError, setCalculationSoundActionError] = useState('');
     const [themeChangePending, setThemeChangePending] = useState(false);
+    const [expandedPalette, setExpandedPalette] = useState<ThemePalette | null>(null);
+    const [paletteMenuCollapsed, setPaletteMenuCollapsed] = useState(false);
     const [expandedSection, setExpandedSection] = useState<SettingsSectionKey | null>(null);
     const { showError } = useAppFeedback();
 
@@ -289,12 +302,14 @@ export default function SettingsScreen() {
         clearCurrencyError();
     };
 
-    const handleColorPaletteChange = async (value: ThemePalette) => {
-        if (value === colorPalette) return;
+    const handleColorPaletteChange = async (value: ThemePalette, tone: ThemePaletteTone | null = 50) => {
+        setExpandedPalette(value);
+        setPaletteMenuCollapsed(false);
+        if (value === colorPalette && tone === colorPaletteTone) return;
 
         setPaletteActionError('');
         try {
-            await setColorPalette(value);
+            await setColorPalette(value, tone);
         } catch (error) {
             console.error('Unable to save color palette preference', error);
             const reason = ` (${getUserFacingErrorMessage(error, 'خطای نامشخص')})`;
@@ -327,23 +342,37 @@ export default function SettingsScreen() {
         setExpandedSection((current) => current === section ? null : section);
     };
     const paletteLabels: Record<ThemePalette, string> = {
-        default: 'فیروزه‌ای پیش‌فرض',
-        skyBlue: 'آبی آسمانی',
-        emerald: 'سبز زمردی',
-        amber: 'کهربایی',
-        ruby: 'قرمز یاقوتی',
-        softPurple: 'ارغوانی ملایم',
-        purple: 'بنفش',
-        indigo: 'نیلی',
-        deepTeal: 'فیروزه‌ای تیره',
-        burntOrange: 'نارنجی سوخته',
-        dustyRose: 'صورتی چرک',
-        brown: 'قهوه‌ای',
-        slateBlue: 'آبی نفتی',
-        lightPurple: 'بنفش روشن',
-        olive: 'سبز زیتونی',
-        tealBlue: 'آبی فیروزه‌ای',
+        default: 'فیروزه‌ای (پیش‌فرض)',
+        red: 'قرمز',
+        redOrange: 'نارنجی سوخته',
+        orange: 'نارنجی',
+        yellowOrange: 'خردلی',
+        yellow: 'زرد',
+        yellowGreen: 'پسته‌ای',
+        green: 'سبز',
+        blue: 'آبی',
+        blueViolet: 'نیلی',
+        violet: 'بنفش',
+        redViolet: 'سرخابی',
     };
+    const paletteOrder: ThemePalette[] = [
+        'red',
+        'redOrange',
+        'orange',
+        'yellowOrange',
+        'yellow',
+        'yellowGreen',
+        'green',
+        'default',
+        'blue',
+        'blueViolet',
+        'violet',
+        'redViolet',
+    ];
+    const paletteSummary = `${paletteLabels[colorPalette]} · ${colorPaletteTone === null
+        ? PALETTE_VARIANT_LABELS[50]
+        : PALETTE_VARIANT_LABELS[colorPaletteTone]}`;
+    const activePalette = paletteMenuCollapsed ? null : expandedPalette ?? colorPalette;
     const fontLabels: Record<FontPreference, string> = {
         iransans: 'ایران سنس',
         vazir: 'وزیر',
@@ -362,9 +391,11 @@ export default function SettingsScreen() {
     } as const;
     const calculationSoundLabels: Record<CalculationSound, string> = {
         off: 'خاموش',
-        message: 'پیام‌رسان کوتاه',
-        messageSoft: 'پیام‌رسان ملایم',
+        pianoModernBright: 'پیانوی مدرن و روشن',
+        pianoModernSoft: 'پیانوی مدرن و ملایم',
         piano: 'پیانوی کوتاه و ملایم',
+        pianoMelody: 'پیانوی ملودیک و دل‌نشین',
+        pianoSoulful: 'پیانوی احساسی و دل‌نواز',
     };
 
     return (
@@ -400,110 +431,135 @@ export default function SettingsScreen() {
 
                 <SettingsSection
                     title="طیف رنگ برنامه"
-                    summary={paletteLabels[colorPalette]}
+                    summary={paletteSummary}
                     icon="palette-outline"
                     expanded={expandedSection === 'palette'}
                     cardStyle={sectionCardStyle}
                     onToggle={() => toggleSection('palette')}
                 >
-                    <View accessibilityRole="radiogroup" style={styles.optionsCard}>
-                        <SettingRow
-                            colorPreview={ColorPalettes.default[themeMode].primary}
-                            title="فیروزه‌ای پیش‌فرض"
-                            selected={colorPalette === 'default'}
-                            onPress={() => void handleColorPaletteChange('default')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.skyBlue[themeMode].primary}
-                            title="آبی آسمانی"
-                            selected={colorPalette === 'skyBlue'}
-                            onPress={() => void handleColorPaletteChange('skyBlue')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.emerald[themeMode].primary}
-                            title="سبز زمردی"
-                            selected={colorPalette === 'emerald'}
-                            onPress={() => void handleColorPaletteChange('emerald')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.amber[themeMode].primary}
-                            title="کهربایی"
-                            selected={colorPalette === 'amber'}
-                            onPress={() => void handleColorPaletteChange('amber')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.ruby[themeMode].primary}
-                            title="قرمز یاقوتی"
-                            selected={colorPalette === 'ruby'}
-                            onPress={() => void handleColorPaletteChange('ruby')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.softPurple[themeMode].primary}
-                            title="ارغوانی ملایم"
-                            selected={colorPalette === 'softPurple'}
-                            onPress={() => void handleColorPaletteChange('softPurple')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.purple[themeMode].primary}
-                            title="بنفش"
-                            selected={colorPalette === 'purple'}
-                            onPress={() => void handleColorPaletteChange('purple')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.indigo[themeMode].primary}
-                            title="نیلی"
-                            selected={colorPalette === 'indigo'}
-                            onPress={() => void handleColorPaletteChange('indigo')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.deepTeal[themeMode].primary}
-                            title="فیروزه‌ای تیره"
-                            selected={colorPalette === 'deepTeal'}
-                            onPress={() => void handleColorPaletteChange('deepTeal')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.burntOrange[themeMode].primary}
-                            title="نارنجی سوخته"
-                            selected={colorPalette === 'burntOrange'}
-                            onPress={() => void handleColorPaletteChange('burntOrange')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.dustyRose[themeMode].primary}
-                            title="صورتی چرک"
-                            selected={colorPalette === 'dustyRose'}
-                            onPress={() => void handleColorPaletteChange('dustyRose')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.brown[themeMode].primary}
-                            title="قهوه‌ای"
-                            selected={colorPalette === 'brown'}
-                            onPress={() => void handleColorPaletteChange('brown')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.slateBlue[themeMode].primary}
-                            title="آبی نفتی"
-                            selected={colorPalette === 'slateBlue'}
-                            onPress={() => void handleColorPaletteChange('slateBlue')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.lightPurple[themeMode].primary}
-                            title="بنفش روشن"
-                            selected={colorPalette === 'lightPurple'}
-                            onPress={() => void handleColorPaletteChange('lightPurple')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.olive[themeMode].primary}
-                            title="سبز زیتونی"
-                            selected={colorPalette === 'olive'}
-                            onPress={() => void handleColorPaletteChange('olive')}
-                        />
-                        <SettingRow
-                            colorPreview={ColorPalettes.tealBlue[themeMode].primary}
-                            title="آبی فیروزه‌ای"
-                            selected={colorPalette === 'tealBlue'}
-                            showDivider={false}
-                            onPress={() => void handleColorPaletteChange('tealBlue')}
-                        />
+                    <View style={styles.paletteFamilyList}>
+                        {paletteOrder.map((palette) => (
+                            <View key={palette} style={styles.paletteFamilyItem}>
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`${activePalette === palette ? 'بستن' : 'باز کردن'} طیف ${paletteLabels[palette]}`}
+                                    accessibilityState={{
+                                        expanded: activePalette === palette,
+                                    }}
+                                    onPress={() => {
+                                        if (activePalette === palette) {
+                                            setPaletteMenuCollapsed(true);
+                                        } else {
+                                            setExpandedPalette(palette);
+                                            setPaletteMenuCollapsed(false);
+                                        }
+                                    }}
+                                    style={({ pressed }) => [
+                                        styles.paletteFamilyRow,
+                                        {
+                                            backgroundColor: activePalette === palette
+                                                ? theme.primaryContainer
+                                                : theme.surface,
+                                            borderColor: activePalette === palette
+                                                ? theme.primary
+                                                : theme.border,
+                                        },
+                                        pressed && { opacity: 0.78 },
+                                    ]}
+                                >
+                                    <View
+                                        style={[
+                                            styles.paletteFamilySwatch,
+                                            {
+                                                backgroundColor: getAppColorPalette(palette, themeMode, 50).primary,
+                                                borderColor: theme.borderStrong,
+                                            },
+                                        ]}
+                                    />
+                                    <ThemedText
+                                        type={activePalette === palette ? 'smallBold' : 'small'}
+                                        numberOfLines={1}
+                                        style={[
+                                            styles.paletteFamilyLabel,
+                                            activePalette === palette && { color: theme.primaryText },
+                                        ]}
+                                    >
+                                        {paletteLabels[palette]}
+                                    </ThemedText>
+                                    {colorPalette === palette ? (
+                                        <MaterialCommunityIcons
+                                            name="check-circle"
+                                            size={19}
+                                            color={activePalette === palette ? theme.primaryText : theme.primary}
+                                        />
+                                    ) : null}
+                                    <MaterialCommunityIcons
+                                        name={activePalette === palette ? 'chevron-up' : 'chevron-down'}
+                                        size={21}
+                                        color={activePalette === palette ? theme.primaryText : theme.textSecondary}
+                                    />
+                                </Pressable>
+                                {activePalette === palette ? (
+                                    <Animated.View
+                                        entering={FadeIn.duration(150)}
+                                        exiting={FadeOut.duration(100)}
+                                        layout={LinearTransition.duration(180)}
+                                        accessibilityRole="radiogroup"
+                                        style={styles.paletteToneGrid}
+                                    >
+                                        {PALETTE_VARIANT_TONES.map((selectedTone) => {
+                                            const selected = colorPalette === palette && colorPaletteTone === selectedTone;
+                                            const variantColors = getAppColorPalette(palette, themeMode, selectedTone);
+                                            return (
+                                                <Pressable
+                                                    key={selectedTone}
+                                                    accessibilityRole="radio"
+                                                    accessibilityLabel={`${paletteLabels[palette]}، ${PALETTE_VARIANT_LABELS[selectedTone]}`}
+                                                    accessibilityState={{ selected }}
+                                                    onPress={() => void handleColorPaletteChange(palette, selectedTone)}
+                                                    style={({ pressed }) => [
+                                                        styles.paletteToneTile,
+                                                        {
+                                                            backgroundColor: selected ? theme.primaryContainer : theme.surface,
+                                                            borderColor: selected ? theme.primary : theme.border,
+                                                        },
+                                                        pressed && { opacity: 0.78 },
+                                                    ]}
+                                                >
+                                                    <View
+                                                        style={[
+                                                            styles.paletteToneSwatch,
+                                                            {
+                                                                backgroundColor: variantColors.primary,
+                                                                borderColor: theme.borderStrong,
+                                                            },
+                                                        ]}
+                                                    />
+                                                    {selected ? (
+                                                        <MaterialCommunityIcons
+                                                            name="check-circle"
+                                                            size={16}
+                                                            color={theme.primaryText}
+                                                            style={styles.paletteToneSelectedMark}
+                                                        />
+                                                    ) : null}
+                                                    <ThemedText
+                                                        type={selected ? 'smallBold' : 'small'}
+                                                        numberOfLines={2}
+                                                        style={[
+                                                            styles.paletteToneLabel,
+                                                            selected && { color: theme.primaryText },
+                                                        ]}
+                                                    >
+                                                        {PALETTE_VARIANT_LABELS[selectedTone]}
+                                                    </ThemedText>
+                                                </Pressable>
+                                            );
+                                        })}
+                                    </Animated.View>
+                                ) : null}
+                            </View>
+                        ))}
                     </View>
                 </SettingsSection>
 
@@ -557,23 +613,35 @@ export default function SettingsScreen() {
                             onPress={() => void handleCalculationSoundChange('off')}
                         />
                         <SettingRow
-                            icon="message-outline"
-                            title="پیام‌رسان کوتاه"
-                            selected={calculationSound === 'message'}
-                            onPress={() => void handleCalculationSoundChange('message')}
-                        />
-                        <SettingRow
-                            icon="message-processing-outline"
-                            title="پیام‌رسان ملایم"
-                            selected={calculationSound === 'messageSoft'}
-                            onPress={() => void handleCalculationSoundChange('messageSoft')}
+                            icon="music-note"
+                            title={calculationSoundLabels.pianoModernBright}
+                            selected={calculationSound === 'pianoModernBright'}
+                            onPress={() => void handleCalculationSoundChange('pianoModernBright')}
                         />
                         <SettingRow
                             icon="music-note"
-                            title="پیانوی کوتاه و ملایم"
+                            title={calculationSoundLabels.pianoModernSoft}
+                            selected={calculationSound === 'pianoModernSoft'}
+                            onPress={() => void handleCalculationSoundChange('pianoModernSoft')}
+                        />
+                        <SettingRow
+                            icon="music-note"
+                            title={calculationSoundLabels.piano}
                             selected={calculationSound === 'piano'}
-                            showDivider={false}
                             onPress={() => void handleCalculationSoundChange('piano')}
+                        />
+                        <SettingRow
+                            icon="music-note"
+                            title={calculationSoundLabels.pianoMelody}
+                            selected={calculationSound === 'pianoMelody'}
+                            onPress={() => void handleCalculationSoundChange('pianoMelody')}
+                        />
+                        <SettingRow
+                            icon="music-note"
+                            title={calculationSoundLabels.pianoSoulful}
+                            selected={calculationSound === 'pianoSoulful'}
+                            showDivider={false}
+                            onPress={() => void handleCalculationSoundChange('pianoSoulful')}
                         />
                     </View>
                 </SettingsSection>
@@ -658,7 +726,7 @@ export default function SettingsScreen() {
                 </SettingsSection>
             </ScrollView>
 
-            <Snackbar
+            <Snackbar variant="error"
                 visible={fontSizeActionError.length > 0 || fontActionError.length > 0 || !!fontLoadError || currencyActionError.length > 0 || !!currencyError || paletteActionError.length > 0 || calculationSoundActionError.length > 0 || !!calculationSoundError}
                 onDismiss={fontSizeActionError ? () => setFontSizeActionError('') : calculationSoundActionError || calculationSoundError ? () => {
                     setCalculationSoundActionError('');
@@ -718,6 +786,66 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         borderRadius: Radius.md,
     },
+    paletteFamilyList: {
+        gap: Spacing.one,
+    },
+    paletteFamilyItem: {
+        gap: Spacing.one,
+    },
+    paletteFamilyRow: {
+        minHeight: 56,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.two,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: Radius.md,
+        paddingHorizontal: Spacing.two,
+        paddingVertical: Spacing.one,
+    },
+    paletteFamilySwatch: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    paletteFamilyLabel: {
+        flex: 1,
+    },
+    paletteToneGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: Spacing.one,
+        paddingHorizontal: Spacing.two,
+        paddingVertical: Spacing.one,
+    },
+    paletteToneTile: {
+        width: '31.5%',
+        minHeight: 76,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: Spacing.one,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: Radius.md,
+        paddingHorizontal: Spacing.two,
+        paddingVertical: Spacing.one,
+        position: 'relative',
+    },
+    paletteToneSwatch: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        borderWidth: StyleSheet.hairlineWidth,
+    },
+    paletteToneLabel: {
+        textAlign: 'center',
+        lineHeight: Typography.lineHeight.label,
+    },
+    paletteToneSelectedMark: {
+        position: 'absolute',
+        top: Spacing.one,
+        end: Spacing.one,
+    },
     optionRow: {
         minHeight: 56,
         flexDirection: 'row',
@@ -737,12 +865,7 @@ const styles = StyleSheet.create({
         height: 40,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    paletteSwatch: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: StyleSheet.hairlineWidth,
+        position: 'relative',
     },
     optionText: { flex: 1 },
     fontPreview: { fontSize: Typography.fontSize.bodySmall, lineHeight: Typography.lineHeight.body },

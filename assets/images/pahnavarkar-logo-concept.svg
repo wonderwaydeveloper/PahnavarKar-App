@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="810" viewBox="0 0 1200 810" fill="none">
+  <desc>نشان فیروزه‌ای با ستون‌های رو به رشد و مسیر طلایی، نماد رشد شغلی و دسترسی روشن به حقوق کار.</desc>
+  <defs>
+    <linearGradient id="background" x1="120" y1="70" x2="1090" y2="840" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4FAF9"/>
+      <stop offset="1" stop-color="#E6F1F0"/>
+    </linearGradient>
+    <linearGradient id="teal" x1="390" y1="210" x2="805" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#087F8C"/>
+      <stop offset="1" stop-color="#004C5B"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="520" y1="380" x2="735" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D2A43B"/>
+      <stop offset="1" stop-color="#A87314"/>
+    </linearGradient>
+    <linearGradient id="bar-one" x1="508" y1="488" x2="508" y2="414" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#045765"/>
+      <stop offset=".52" stop-color="#087F8C"/>
+      <stop offset="1" stop-color="#72D1C9"/>
+    </linearGradient>
+    <linearGradient id="bar-two" x1="592" y1="488" x2="592" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#045765"/>
+      <stop offset=".52" stop-color="#087F8C"/>
+      <stop offset="1" stop-color="#72D1C9"/>
+    </linearGradient>
+    <linearGradient id="bar-three" x1="676" y1="488" x2="676" y2="306" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#045765"/>
+      <stop offset=".52" stop-color="#087F8C"/>
+      <stop offset="1" stop-color="#72D1C9"/>
+    </linearGradient>
+    <filter id="shadow" x="290" y="130" width="620" height="590" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="22"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0078 0 0 0 0 0.1686 0 0 0 0 0.2 0 0 0 0.16 0"/>
+      <feBlend in2="BackgroundImageFix" result="effect1_dropShadow"/>
+      <feBlend in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="810" rx="48" fill="url(#background)"/>
+  <circle cx="600" cy="405" r="248" fill="#D2E5E2"/>
+  <circle cx="600" cy="405" r="218" stroke="#8FBAB7" stroke-opacity=".72" stroke-width="2"/>
+
+  <g filter="url(#shadow)">
+    <path d="M600 180C724.264 180 825 280.736 825 405C825 529.264 724.264 630 600 630C475.736 630 375 529.264 375 405C375 280.736 475.736 180 600 180Z" fill="url(#teal)"/>
+    <path d="M600 226C698.859 226 779 306.141 779 405C779 503.859 698.859 584 600 584C501.141 584 421 503.859 421 405C421 306.141 501.141 226 600 226Z" stroke="#FFFFFF" stroke-opacity=".16" stroke-width="2"/>
+
+    <rect x="480" y="414" width="56" height="74" rx="12" fill="url(#bar-one)" stroke="#A8E5DF" stroke-opacity=".55" stroke-width="2"/>
+    <rect x="564" y="360" width="56" height="128" rx="12" fill="url(#bar-two)" stroke="#91D8D5" stroke-opacity=".5" stroke-width="2"/>
+    <rect x="648" y="306" width="56" height="182" rx="12" fill="url(#bar-three)" stroke="#7BC9C8" stroke-opacity=".48" stroke-width="2"/>
+    <path d="M462 500H728" stroke="#73C6C2" stroke-opacity=".55" stroke-width="5" stroke-linecap="round"/>
+
+    <path d="M508 390L592 336L676 282L710 262" stroke="#063F4B" stroke-opacity=".28" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M508 384L592 330L676 276L710 256" stroke="url(#gold)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="508" cy="384" r="12" fill="#F4FAF9" stroke="#D2A43B" stroke-width="7"/>
+    <circle cx="592" cy="330" r="12" fill="#F4FAF9" stroke="#D2A43B" stroke-width="7"/>
+    <circle cx="676" cy="276" r="12" fill="#F4FAF9" stroke="#D2A43B" stroke-width="7"/>
+    <path d="M704 245L729 250L715 272" stroke="#E4B84F" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+</svg>

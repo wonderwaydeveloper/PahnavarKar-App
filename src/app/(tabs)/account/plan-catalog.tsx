@@ -5,14 +5,13 @@ import * as Linking from 'expo-linking';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, Animated, AppState, Pressable, RefreshControl, ScrollView, Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { TabView } from 'react-native-tab-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text';
 import { ErrorNoticeCard } from '@/components/error-notice-card';
-import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -20,7 +19,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useAppContext } from '@/hooks/use-app-context';
 import { useOnlineRefetch } from '@/hooks/use-online-refetch';
-import { useOnlineStatus } from '@/hooks/use-online-status';
+import { useOnlineStatus, useServerConnectivityStatus } from '@/hooks/use-online-status';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { usePlanAccess } from '@/hooks/use-plan-access';
 import { useTheme } from '@/hooks/use-theme';
 import { CACHE_KEYS, CACHE_POLICY } from '@/services/cache-policy';
@@ -84,6 +84,10 @@ const FALLBACK_PLAN_TIER_ROUTES = [
 
 function money(value: number): string {
     return `${persianNumberFormatter.format(value)} تومان`;
+}
+
+function getCurrentTimestamp(): number {
+    return Date.now();
 }
 
 function formatDate(value: string): string {
@@ -173,6 +177,7 @@ export default function PlanCatalogScreen() {
     const { showFeedback } = useAppFeedback();
     const queryClient = useQueryClient();
     const isOnline = useOnlineStatus();
+    const serverStatus = useServerConnectivityStatus();
     const userId = user?.id ?? null;
     const financialRestricted = user?.restricted_capabilities?.includes('financial') ?? false;
     const { planAccess } = usePlanAccess();
@@ -185,17 +190,17 @@ export default function PlanCatalogScreen() {
                 ACCOUNT_OFFLINE_CACHE.planCatalog,
                 fetchPlanCatalog,
                 isPlanCatalogCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
         staleTime: CACHE_POLICY.query.resources.planCatalog.staleTimeMs,
         retry: false,
         networkMode: 'always',
+        enabled: serverStatus !== 'connecting',
     });
     const walletQuery = useQuery({
         queryKey: walletQueryKey(userId ?? 0),
-        enabled: userId !== null,
         queryFn: async (): Promise<OfflineAware<Awaited<ReturnType<typeof fetchWalletOverview>>>> => {
             if (userId === null) throw new Error('نشست کاربری برای دریافت موجودی کیف پول در دسترس نیست.');
             const result = await fetchWithOfflineFallback(
@@ -207,17 +212,18 @@ export default function PlanCatalogScreen() {
                     return fetchWalletOverview(token);
                 },
                 isWalletOverviewCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
         staleTime: CACHE_POLICY.query.resources.walletOverview.staleTimeMs,
         retry: false,
         networkMode: 'always',
+        enabled: userId !== null && serverStatus !== 'connecting',
     });
     const pendingSubscriptionOrderQuery = useQuery({
         queryKey: pendingSubscriptionOrderQueryKey(userId ?? 0),
-        enabled: userId !== null,
+        enabled: userId !== null && serverStatus !== 'connecting',
         queryFn: async (): Promise<OfflineAware<Awaited<ReturnType<typeof fetchPendingSubscriptionOrder>>>> => {
             if (userId === null) throw new Error('نشست کاربری برای بررسی سفارش در دسترس نیست.');
             const result = await fetchWithOfflineFallback(
@@ -229,7 +235,7 @@ export default function PlanCatalogScreen() {
                     return fetchPendingSubscriptionOrder(token);
                 },
                 isPendingSubscriptionOrderCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
@@ -273,6 +279,9 @@ export default function PlanCatalogScreen() {
     const purchaseActionIdRef = useRef(0);
     const restoredPendingOrderId = useRef<number | null>(null);
     const hasFocusedScreen = useRef(false);
+    const [offlineRefreshPending, setOfflineRefreshPending] = useState(
+        () => !onlineManager.isOnline() || serverStatus === 'server-unavailable',
+    );
     const pendingOrderPolling = useRef<{ orderId: number | null; checks: number; inFlight: boolean }>({
         orderId: null,
         checks: 0,
@@ -299,31 +308,38 @@ export default function PlanCatalogScreen() {
             || pendingSubscriptionOrderQuery.data?.offlineCacheSavedAt !== undefined
         );
     const purchaseUnavailableOffline = !isOnline
+        || serverStatus !== 'connected'
+        || offlineRefreshPending
         || catalogQuery.data?.offlineCacheSavedAt !== undefined
         || walletQuery.data?.offlineCacheSavedAt !== undefined
         || pendingSubscriptionOrderQuery.data?.offlineCacheSavedAt !== undefined;
-    const purchaseInformationSources = [
-        {
-            label: 'کاتالوگ پلن‌ها',
-            savedAt: catalogQuery.data?.offlineCacheSavedAt,
-            receivedAt: catalogQuery.data ? catalogQuery.dataUpdatedAt : undefined,
-        },
-        {
-            label: 'موجودی کیف پول',
-            savedAt: walletQuery.data?.offlineCacheSavedAt,
-            receivedAt: walletQuery.data ? walletQuery.dataUpdatedAt : undefined,
-        },
-        {
-            label: 'وضعیت سفارش',
-            savedAt: pendingSubscriptionOrderQuery.data?.offlineCacheSavedAt,
-            receivedAt: pendingSubscriptionOrderQuery.data ? pendingSubscriptionOrderQuery.dataUpdatedAt : undefined,
-        },
-    ].flatMap((source) => {
-        const timestamp = source.savedAt ?? source.receivedAt;
-        return timestamp === undefined || timestamp <= 0
-            ? []
-            : [{ label: source.label, timestamp, kind: source.savedAt !== undefined ? 'saved' as const : 'received' as const }];
-    });
+    const hasSavedPurchaseData = catalogQuery.data?.offlineCacheSavedAt !== undefined
+        || walletQuery.data?.offlineCacheSavedAt !== undefined
+        || pendingSubscriptionOrderQuery.data?.offlineCacheSavedAt !== undefined;
+    useOfflinePageNotice(purchaseUnavailableOffline ? {
+        hasSavedData: hasSavedPurchaseData,
+        message: hasSavedPurchaseData
+            ? 'اطلاعات ذخیره‌شدهٔ پلن ممکن است به‌روز نباشد.'
+            : isOnline
+                ? 'اطلاعات خرید هنوز از سرور تأیید نشده است.'
+                : 'سرور در دسترس نیست؛ قیمت و خرید تأیید نمی‌شود.',
+        details: hasSavedPurchaseData
+            ? [
+                'قیمت و شرایط خرید تا دریافت پاسخ سرور قطعی نیست.',
+                'خرید یا ارتقا تا برقراری اتصال انجام نمی‌شود.',
+            ]
+            : [
+                'بدون پاسخ سرور، پلن و قیمت قابل تأیید نیست.',
+                'خرید یا ارتقا پس از اتصال دوباره ممکن می‌شود.',
+            ],
+    } : null);
+
+    useEffect(() => {
+        const markRefreshPendingWhileOffline = (online: boolean) => {
+            if (!online) setOfflineRefreshPending(true);
+        };
+        return onlineManager.subscribe(markRefreshPendingWhileOffline);
+    }, []);
     const pendingOrderLookupFailed = userId !== null && pendingSubscriptionOrderQuery.isError;
     const currentPurchaseAttempt = pendingPurchaseAttempt?.userId === userId
         ? pendingPurchaseAttempt.value
@@ -464,6 +480,16 @@ export default function PlanCatalogScreen() {
         await queryClient.invalidateQueries({ queryKey: currentPlanQueryKey(targetUserId) });
     }, [queryClient, userId]);
 
+    const clearPendingOrderSnapshot = useCallback(async (targetUserId: number) => {
+        const emptyPendingOrder = { order: null, payments: [] };
+        queryClient.setQueryData(pendingSubscriptionOrderQueryKey(targetUserId), emptyPendingOrder);
+        await saveOfflineCacheValue(
+            targetUserId,
+            ACCOUNT_OFFLINE_CACHE.pendingSubscriptionOrder,
+            emptyPendingOrder,
+        );
+    }, [queryClient]);
+
     const checkOrder = useCallback((orderId: number) => {
         const targetUserId = userId;
         const existingCheck = orderCheckInFlight.current;
@@ -482,10 +508,7 @@ export default function PlanCatalogScreen() {
             if (result.order.status === 'succeeded') {
                 recordPurchaseCompletion(result.order.plan_key, result.order.subscription_change_type);
                 if (targetUserId !== null) {
-                    queryClient.setQueryData(pendingSubscriptionOrderQueryKey(targetUserId), {
-                        order: null,
-                        payments: [],
-                    });
+                    await clearPendingOrderSnapshot(targetUserId);
                     await queryClient.invalidateQueries({ queryKey: walletQueryKey(targetUserId) });
                 }
                 try {
@@ -501,10 +524,7 @@ export default function PlanCatalogScreen() {
             } else if (result.order.status === 'failed') {
                 setPendingOrderError('');
                 if (targetUserId !== null) {
-                    queryClient.setQueryData(pendingSubscriptionOrderQueryKey(targetUserId), {
-                        order: null,
-                        payments: [],
-                    });
+                    await clearPendingOrderSnapshot(targetUserId);
                     await queryClient.invalidateQueries({ queryKey: walletQueryKey(targetUserId) });
                 }
                 showMessage('پرداخت تکمیل نشد. می‌توانید دوباره برای خرید اقدام کنید.', 'error');
@@ -527,7 +547,7 @@ export default function PlanCatalogScreen() {
             },
         );
         return checkPromise;
-    }, [queryClient, recordPurchaseCompletion, refreshPlanState, showMessage, userId]);
+    }, [clearPendingOrderSnapshot, queryClient, recordPurchaseCompletion, refreshPlanState, showMessage, userId]);
 
     const processPurchaseResult = useCallback(async (
         result: Awaited<ReturnType<typeof purchaseSubscription>>,
@@ -545,10 +565,7 @@ export default function PlanCatalogScreen() {
 
         if (result.order.status === 'succeeded') {
             recordPurchaseCompletion(result.order.plan_key, result.order.subscription_change_type);
-            queryClient.setQueryData(pendingSubscriptionOrderQueryKey(targetUserId), {
-                order: null,
-                payments: [],
-            });
+            await clearPendingOrderSnapshot(targetUserId);
             try {
                 await refreshPlanState(targetUserId);
                 if (currentUserIdRef.current === targetUserId) {
@@ -565,10 +582,7 @@ export default function PlanCatalogScreen() {
         }
 
         if (result.order.status === 'failed') {
-            queryClient.setQueryData(pendingSubscriptionOrderQueryKey(targetUserId), {
-                order: null,
-                payments: [],
-            });
+            await clearPendingOrderSnapshot(targetUserId);
             invalidateQuote();
             showMessage('پرداخت تکمیل نشد. می‌توانید پس از بررسی وضعیت کیف پول، دوباره اقدام کنید.', 'error');
             return;
@@ -594,7 +608,7 @@ export default function PlanCatalogScreen() {
         if (currentUserIdRef.current === targetUserId) {
             await checkOrder(result.order.id);
         }
-    }, [checkOrder, clearPurchaseAttempt, invalidateQuote, queryClient, recordPurchaseCompletion, refreshPlanState, showMessage]);
+    }, [checkOrder, clearPendingOrderSnapshot, clearPurchaseAttempt, invalidateQuote, queryClient, recordPurchaseCompletion, refreshPlanState, showMessage]);
 
     const continuePendingOrderPayment = async () => {
         if (!pendingOrderId || purchasing || purchaseActionInProgressRef.current) return;
@@ -884,7 +898,7 @@ export default function PlanCatalogScreen() {
             attempt = {
                 idempotencyKey: Crypto.randomUUID(),
                 input,
-                createdAt: Date.now(),
+                createdAt: getCurrentTimestamp(),
             };
             await savePendingSubscriptionPurchaseAttempt(actionUserId, attempt);
             if (currentUserIdRef.current !== actionUserId) return;
@@ -1053,6 +1067,8 @@ export default function PlanCatalogScreen() {
 
     const priceLabels = (offer: PlanOffer) => offer.is_available ? money(offer.price) : 'قیمت به‌زودی';
     const queryError = pendingSubscriptionOrderQuery.error ?? walletQuery.error;
+    const showQueryError = queryError !== null
+        && (isOnline || !isTemporaryApiFailure(queryError));
     const pendingOrderOffer = catalog?.offers.find((offer) => offer.key === pendingOrderDetails?.plan_key);
     const pendingOrderTierName = catalog?.tiers.find((tier) => tier.key === pendingOrderOffer?.tier)?.name;
     const pendingOrderDurationName = catalog?.durations.find((duration) => duration.key === pendingOrderOffer?.duration)?.name;
@@ -1060,22 +1076,35 @@ export default function PlanCatalogScreen() {
         ?? (pendingOrderTierName && pendingOrderDurationName
             ? `${pendingOrderTierName} · ${pendingOrderDurationName}`
             : 'پلن اشتراک');
-    const refreshData = () => {
-        void Promise.all([
-            catalogQuery.refetch(),
-            ...(userId !== null ? [walletQuery.refetch(), pendingSubscriptionOrderQuery.refetch()] : []),
+    const refetchCatalog = catalogQuery.refetch;
+    const refetchWallet = walletQuery.refetch;
+    const refetchPendingSubscriptionOrder = pendingSubscriptionOrderQuery.refetch;
+    const refreshData = useCallback(async () => {
+        const results = await Promise.all([
+            refetchCatalog(),
+            ...(userId !== null ? [refetchWallet(), refetchPendingSubscriptionOrder()] : []),
         ]);
-    };
-    useOnlineRefetch(() => {
-        void refreshData();
+        const allDataIsLive = results.every((result) => (
+            result.isSuccess && result.data?.offlineCacheSavedAt === undefined
+        ));
+        if (!allDataIsLive || !onlineManager.isOnline()) return;
         if (userId !== null) {
-            void refreshPlanState().catch((error: unknown) => {
+            try {
+                await refreshPlanState(userId);
+            } catch (error) {
                 showMessage(
                     getUserFacingErrorMessage(error, 'به‌روزرسانی وضعیت اشتراک پس از اتصال ناموفق بود.'),
                     'error',
                 );
-            });
+                return;
+            }
         }
+        if (currentUserIdRef.current === userId && onlineManager.isOnline()) {
+            setOfflineRefreshPending(false);
+        }
+    }, [refetchCatalog, refetchPendingSubscriptionOrder, refetchWallet, refreshPlanState, showMessage, userId]);
+    useOnlineRefetch(() => {
+        void refreshData();
     }, true);
 
     const selectTier = (tierKey: string) => {
@@ -1099,7 +1128,7 @@ export default function PlanCatalogScreen() {
         if (!planCatalog || planCatalog.tiers.length === 0) {
             return (
                 <View style={[styles.loading, styles.scene]}>
-                    {catalogQuery.isPending || catalogQuery.isFetching ? (
+                    {serverStatus === 'connecting' || catalogQuery.isPending || catalogQuery.isFetching ? (
                         <>
                             <ActivityIndicator color={theme.primaryText} />
                             <ThemedText type="small" themeColor="textSecondary">
@@ -1107,7 +1136,7 @@ export default function PlanCatalogScreen() {
                             </ThemedText>
                         </>
                     ) : (
-                        catalogQuery.error ? (
+                        catalogQuery.error && (!isOnline && isTemporaryApiFailure(catalogQuery.error)) ? null : catalogQuery.error ? (
                             <ErrorNoticeCard
                                 message={getUserFacingErrorMessage(catalogQuery.error, 'دریافت اطلاعات پلن‌ها ناموفق بود.')}
                                 onRetry={() => void catalogQuery.refetch()}
@@ -1251,22 +1280,10 @@ export default function PlanCatalogScreen() {
                     />
                 )}
             >
-                {queryError ? (
+                {showQueryError ? (
                     <ErrorNoticeCard
                         message={getUserFacingErrorMessage(queryError, 'دریافت اطلاعات حساب ناموفق بود.')}
                         onRetry={refreshData}
-                    />
-                ) : null}
-                {purchaseUnavailableOffline ? (
-                    <OfflineDataNotice
-                        theme={theme}
-                        title="اطلاعات خرید به‌صورت زنده تأیید نشده است"
-                        description={purchaseInformationSources.length > 0
-                            ? 'اطلاعات زیر ممکن است به‌روز نباشند:'
-                            : undefined}
-                        sources={purchaseInformationSources}
-                        emptyMessage="برای دریافت قیمت نهایی و بررسی وضعیت سفارش، اتصال زنده لازم است."
-                        actionMessage="قیمت‌گیری نهایی، بررسی سفارش و خرید پس از اتصال و دریافت پاسخ زنده فعال می‌شوند."
                     />
                 ) : null}
                 {purchaseAttemptLoadError?.userId === userId ? (

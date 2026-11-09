@@ -2,10 +2,12 @@ import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useIsFocused, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Snackbar } from 'react-native-paper';
+import { ActivityIndicator } from 'react-native-paper';
+import { onlineManager, useQuery } from '@tanstack/react-query';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import appConfig from '@/../app.json';
@@ -20,12 +22,33 @@ import { useTheme } from '@/hooks/use-theme';
 import { useAppContext } from '@/hooks/use-app-context';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
+import { useOnlineRefetch } from '@/hooks/use-online-refetch';
+import { useOnlineStatus } from '@/hooks/use-online-status';
 import { usePlanAccess } from '@/hooks/use-plan-access';
-import { fetchNotificationUnreadCount, getProfilePhotoUrl, getStoredAuthToken } from '@/services/auth-api';
+import { fetchNotificationCounts, getProfilePhotoUrl, getStoredAuthToken } from '@/services/auth-api';
+import { CACHE_KEYS, CACHE_POLICY } from '@/services/cache-policy';
+import {
+    fetchWithOfflineFallback,
+    isNotificationCountsCacheValue,
+    withOfflineCacheMetadata,
+} from '@/services/account-offline-cache';
 import { getPlanTierColor, getPlanTierIcon, getPlanTierLogoBackground, getPlanTierLogoForeground } from '@/utils/plan-tier-visual';
 
+type ProfileActionKey =
+    | 'edit-profile'
+    | 'privacy-security'
+    | 'notifications'
+    | 'plans'
+    | 'wallet'
+    | 'financial-history'
+    | 'settings'
+    | 'support'
+    | 'about-us'
+    | 'app-info';
+
 type ProfileAction = {
-    key: string;
+    key: ProfileActionKey;
     label: string;
     subtitle: string;
     icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -73,20 +96,151 @@ export default function ProfileScreen() {
     const theme = useTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const isFocused = useIsFocused();
+    const isOnline = useOnlineStatus();
     const lastPressRef = useRef(0);
     const [snackbarVisible, setSnackbarVisible] = useState(false);
     const [snackbarMessage, setSnackbarMessage] = useState('به زودی فعال می‌شود');
     const [signOutBusy, setSignOutBusy] = useState(false);
     const [sessionRefreshBusy, setSessionRefreshBusy] = useState(false);
-    const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+    const [accountNeedsLiveRefresh, setAccountNeedsLiveRefresh] = useState(() => !onlineManager.isOnline());
+    const [accountRefreshSucceeded, setAccountRefreshSucceeded] = useState(false);
+    const [accountRefreshBusy, setAccountRefreshBusy] = useState(false);
+    const [accountRefreshFailed, setAccountRefreshFailed] = useState(false);
     const [signOutConfirmationVisible, setSignOutConfirmationVisible] = useState(false);
     const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
+    const [failedProfilePhotoUrl, setFailedProfilePhotoUrl] = useState<string | null>(null);
     const { user, isLoading: authLoading, sessionError, refreshUser, signOut } = useAuth();
+    const userId = user?.id;
     const { showError } = useAppFeedback();
-    const { planAccess } = usePlanAccess();
+    const {
+        planAccess,
+        isUsingOfflineData: planAccessOffline,
+        refresh: refreshPlanAccess,
+    } = usePlanAccess();
     const { theme: appTheme } = useAppContext();
     const appVersion = appConfig.expo?.version ?? '1.0.0';
     const profilePhotoUrl = getProfilePhotoUrl(user?.profile_photo_path ?? null);
+    const unreadCountsQuery = useQuery({
+        queryKey: CACHE_KEYS.notificationCounts(userId ?? 0),
+        enabled: user !== null && isFocused,
+        queryFn: async () => {
+            if (userId === undefined) throw new Error('برای مشاهدهٔ اعلان‌ها وارد حساب شوید.');
+            const token = await getStoredAuthToken();
+            if (!token) throw new Error('نشست کاربر پیدا نشد.');
+
+            const result = await fetchWithOfflineFallback(
+                userId,
+                {
+                    ...CACHE_POLICY.offline.entries.notificationInbox,
+                    key: 'counts',
+                },
+                () => fetchNotificationCounts(token),
+                isNotificationCountsCacheValue,
+                { isOnline: onlineManager.isOnline() },
+            );
+            return withOfflineCacheMetadata(result);
+        },
+        staleTime: CACHE_POLICY.query.resources.notificationCounts.staleTimeMs,
+        retry: false,
+        networkMode: 'always',
+    });
+    const unreadNotificationCount = unreadCountsQuery.data?.unread_count ?? 0;
+    const refreshNotificationCounts = unreadCountsQuery.refetch;
+    const notificationCountsOffline = unreadCountsQuery.data?.offlineCacheSavedAt !== undefined;
+    const hasSavedAccountData = user !== null
+        || unreadCountsQuery.data !== undefined
+        || (planAccess !== null && planAccessOffline);
+    const showAccountOfflineNotice = isFocused && (
+        !isOnline
+        || (user !== null && accountNeedsLiveRefresh && !accountRefreshSucceeded)
+        || notificationCountsOffline
+        || planAccessOffline
+    );
+    useOfflinePageNotice(showAccountOfflineNotice ? {
+        hasSavedData: hasSavedAccountData,
+        message: hasSavedAccountData
+            ? 'اطلاعات حساب ممکن است به‌روز نباشد.'
+            : 'برای دریافت اطلاعات حساب اتصال به سرور لازم است.',
+        details: hasSavedAccountData
+            ? ['اطلاعات حساب و دسترسی پلن پس از دریافت پاسخ زنده به‌روز می‌شوند.']
+            : ['پس از اتصال، صفحه را دوباره باز کنید تا اطلاعات حساب بارگیری شود.'],
+    } : null, isFocused);
+
+    const accountRefreshInProgress = useRef(false);
+    const refreshAccountData = useCallback(async () => {
+        if (
+            userId === undefined
+            || !isFocused
+            || !onlineManager.isOnline()
+            || accountRefreshInProgress.current
+        ) return;
+        accountRefreshInProgress.current = true;
+        setAccountNeedsLiveRefresh(true);
+        setAccountRefreshSucceeded(false);
+        setAccountRefreshFailed(false);
+        setAccountRefreshBusy(true);
+
+        try {
+            const results = await Promise.allSettled([
+                refreshUser(),
+                refreshNotificationCounts(),
+                refreshPlanAccess(),
+            ]);
+            const countResult = results[1];
+            const countsAreLive = countResult.status === 'fulfilled'
+                && countResult.value.isSuccess
+                && countResult.value.data?.offlineCacheSavedAt === undefined;
+            const planAccessIsLive = results[2].status === 'fulfilled'
+                && results[2].value;
+            const accountIsLive = results[0].status === 'fulfilled'
+                && countsAreLive
+                && planAccessIsLive
+                && onlineManager.isOnline();
+            setAccountRefreshSucceeded(accountIsLive);
+            setAccountRefreshFailed(!accountIsLive);
+
+            if (!accountIsLive) {
+                const failedResult = results.find((result) => result.status === 'rejected');
+                showError(
+                    failedResult?.status === 'rejected'
+                        ? failedResult.reason
+                        : countResult.status === 'fulfilled'
+                            ? countResult.value.error
+                            : undefined,
+                    'همگام‌سازی اطلاعات حساب کامل نشد.',
+                );
+            }
+        } finally {
+            accountRefreshInProgress.current = false;
+            setAccountRefreshBusy(false);
+        }
+    }, [isFocused, refreshNotificationCounts, refreshPlanAccess, refreshUser, showError, userId]);
+
+    useEffect(() => onlineManager.subscribe(() => {
+        if (!onlineManager.isOnline() && userId !== undefined) {
+            setAccountNeedsLiveRefresh(true);
+            setAccountRefreshSucceeded(false);
+            setAccountRefreshFailed(false);
+        }
+    }), [userId]);
+
+    useEffect(() => {
+        if (
+            isOnline
+            && userId !== undefined
+            && isFocused
+            && accountNeedsLiveRefresh
+            && !accountRefreshSucceeded
+            && !accountRefreshFailed
+        ) {
+            void refreshAccountData();
+        }
+    }, [accountNeedsLiveRefresh, accountRefreshFailed, accountRefreshSucceeded, isFocused, isOnline, refreshAccountData, userId]);
+
+    useOnlineRefetch(() => {
+        void refreshAccountData();
+    }, user !== null && isFocused);
     const subscriptionBadge: {
         label: string;
         icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -103,30 +257,11 @@ export default function ProfileScreen() {
         }
         : null;
 
-    useFocusEffect(useCallback(() => {
-        let active = true;
-
-        const loadUnreadCount = async () => {
-            if (!user) {
-                setUnreadNotificationCount(0);
-                return;
-            }
-
-            try {
-                const token = await getStoredAuthToken();
-                if (!token) throw new Error('نشست کاربر پیدا نشد.');
-                const count = await fetchNotificationUnreadCount(token);
-                if (active) setUnreadNotificationCount(count);
-            } catch (error) {
-                if (active) showError(error, 'دریافت تعداد اعلان‌های خوانده‌نشده ناموفق بود.');
-            }
-        };
-
-        void loadUnreadCount();
-        return () => {
-            active = false;
-        };
-    }, [showError, user]));
+    useEffect(() => {
+        if (unreadCountsQuery.error) {
+            showError(unreadCountsQuery.error, 'دریافت تعداد اعلان‌های خوانده‌نشده ناموفق بود.');
+        }
+    }, [showError, unreadCountsQuery.error]);
 
     const handleUnavailableAction = (key: string) => {
         if (key === 'notifications') {
@@ -146,12 +281,22 @@ export default function ProfileScreen() {
                 runDebouncedAction(lastPressRef, () => router.push('/auth'));
                 return;
             }
-            runDebouncedAction(lastPressRef, () => router.push(`/(tabs)/account/${key}` as any));
+            runDebouncedAction(lastPressRef, () => {
+                if (key === 'wallet') router.push('/(tabs)/account/wallet');
+                else if (key === 'financial-history') router.push('/(tabs)/account/financial-history');
+                else if (key === 'edit-profile') router.push('/(tabs)/account/edit-profile');
+                else router.push('/(tabs)/account/privacy-security');
+            });
             return;
         }
 
-        if (key === 'settings' || key === 'about-us' || key === 'app-info') {
-            runDebouncedAction(lastPressRef, () => router.push(`/(tabs)/account/${key}` as any));
+        if (key === 'settings' || key === 'support' || key === 'about-us' || key === 'app-info') {
+            runDebouncedAction(lastPressRef, () => {
+                if (key === 'settings') router.push('/(tabs)/account/settings');
+                else if (key === 'support') router.push('/(tabs)/account/support');
+                else if (key === 'about-us') router.push('/(tabs)/account/about-us');
+                else router.push('/(tabs)/account/app-info');
+            });
             return;
         }
 
@@ -213,27 +358,56 @@ export default function ProfileScreen() {
             >
                 {authLoading ? (
                     <View style={[styles.profileHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <ActivityIndicator size="small" color={theme.primary} />
                         <ThemedText type="body" style={{ color: theme.textSecondary }}>
                             در حال بررسی وضعیت حساب...
                         </ThemedText>
                     </View>
                 ) : user ? (
                     <View style={[styles.profileHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        {profilePhotoUrl ? (
+                        {profilePhotoUrl && failedProfilePhotoUrl !== profilePhotoUrl ? (
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel="پیش‌نمایش تصویر پروفایل"
                                 onPress={() => setPhotoPreviewVisible(true)}
                                 style={styles.heroAvatarButton}
                             >
-                                <Image source={{ uri: profilePhotoUrl }} contentFit="cover" style={styles.heroAvatar} />
+                                <Image
+                                    testID="profile-avatar-image"
+                                    source={{ uri: profilePhotoUrl }}
+                                    contentFit="cover"
+                                    cachePolicy="memory-disk"
+                                    onError={() => setFailedProfilePhotoUrl(profilePhotoUrl)}
+                                    style={styles.heroAvatar}
+                                />
                             </Pressable>
                         ) : (
-                            <View style={[styles.heroAvatar, { backgroundColor: theme.primary }]}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel="ویرایش پروفایل"
+                                onPress={() => runDebouncedAction(
+                                    lastPressRef,
+                                    () => router.push('/(tabs)/account/edit-profile'),
+                                )}
+                                style={({ pressed }) => [
+                                    styles.heroAvatar,
+                                    { backgroundColor: theme.primary, opacity: pressed ? 0.75 : 1 },
+                                ]}
+                            >
                                 <MaterialCommunityIcons name="account-outline" size={42} color={theme.onPrimary} />
-                            </View>
+                            </Pressable>
                         )}
-                        <ThemedText type="largeTitle" style={styles.heroName}>{user.name}</ThemedText>
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`ویرایش پروفایل ${user.name}`}
+                            onPress={() => runDebouncedAction(
+                                lastPressRef,
+                                () => router.push('/(tabs)/account/edit-profile'),
+                            )}
+                            style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+                        >
+                            <ThemedText type="largeTitle" style={styles.heroName}>{user.name}</ThemedText>
+                        </Pressable>
                         <Pressable
                             accessibilityLabel={`کپی شمارهٔ تلفن ${user.phone}`}
                             accessibilityRole="button"
@@ -287,6 +461,22 @@ export default function ProfileScreen() {
                                 onRetry={() => void handleRefreshSession()}
                                 retryLabel="همگام‌سازی دوباره"
                                 busy={sessionRefreshBusy}
+                                busyLabel="در حال همگام‌سازی…"
+                                tone="warning"
+                                style={{ marginTop: Spacing.one }}
+                            />
+                        ) : null}
+                        {isOnline && (
+                            accountRefreshFailed
+                            || notificationCountsOffline
+                            || planAccessOffline
+                        ) ? (
+                            <ErrorNoticeCard
+                                title="اطلاعات حساب هنوز همگام نشده است"
+                                message="تا دریافت پاسخ زنده از سرور، شمارندهٔ اعلان یا دسترسی پلن ممکن است به‌روز نباشد."
+                                onRetry={() => void refreshAccountData()}
+                                retryLabel="همگام‌سازی دوباره"
+                                busy={accountRefreshBusy}
                                 busyLabel="در حال همگام‌سازی…"
                                 tone="warning"
                                 style={{ marginTop: Spacing.one }}
@@ -414,7 +604,7 @@ export default function ProfileScreen() {
                 onConfirm={handleSignOut}
             />
 
-            <Snackbar
+            <Snackbar variant="error"
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}

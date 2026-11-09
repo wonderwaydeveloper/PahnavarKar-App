@@ -5,7 +5,8 @@ import { jalaaliMonthLength, toGregorian, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { EncodingType, File, Paths } from 'expo-file-system';
-import { ActivityIndicator, Card, Checkbox, Menu, Snackbar } from 'react-native-paper';
+import { ActivityIndicator, Card, Checkbox, Menu } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -917,7 +918,7 @@ async function getGroupCalculationPdfAssets(fontPreference: FontPreference): Pro
 export default function GroupCalculationScreen() {
     const theme = useTheme();
     const { showError } = useAppFeedback();
-    const { fontPreference, currencyPreference, colorPalette, notifyCalculationCompleted } = useAppContext();
+    const { fontPreference, currencyPreference, colorPalette, colorPaletteTone, notifyCalculationCompleted } = useAppContext();
     const { formatCurrency } = useCurrencyFormatter();
     const insets = useSafeAreaInsets();
     const currentJalaliDate = useMemo(() => {
@@ -1927,7 +1928,15 @@ export default function GroupCalculationScreen() {
         setPdfSnackbarVisible(false);
         try {
             const pdfAssets = await getGroupCalculationPdfAssets(fontPreference);
-            const html = buildGroupCalculationPdfHtml(pdfSections, metadata, includePdfDetails, pdfAssets, colorPalette, wageTotal);
+            const html = buildGroupCalculationPdfHtml(
+                pdfSections,
+                metadata,
+                includePdfDetails,
+                pdfAssets,
+                colorPalette,
+                wageTotal,
+                colorPaletteTone,
+            );
             if (action === 'preview') {
                 if (Platform.OS === 'web') {
                     await Print.printAsync({ html });
@@ -3391,12 +3400,13 @@ export default function GroupCalculationScreen() {
                                                                             const isEmphasized = field.format === 'range'
                                                                                 || ['amount', 'dailyWage', 'entitlement', 'entitlementAmount', 'daysCalculated', 'savedLeaveDays', 'carryAfter', 'requiredHours', 'workingDays', 'unusedLeaveDays', 'finalDailyWage', 'fridayWorkRate'].includes(field.key);
                                                                             const isWarning = field.key === 'excessUsedDays';
+                                                                            const isHighlighted = isEmphasized && !isWarning;
                                                                             return (
-                                                                                <View key={`${result.key}-${field.key}-${field.format}-${index}`} style={[styles.breakdownDetailBox, { backgroundColor: isEmphasized ? theme.primary : theme.surfaceVariant, borderColor: isEmphasized ? theme.primary : theme.border }]}>
-                                                                                    <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>
+                                                                                <View key={`${result.key}-${field.key}-${field.format}-${index}`} style={[styles.breakdownDetailBox, { backgroundColor: isHighlighted ? theme.primary : theme.surfaceVariant, borderColor: isHighlighted ? theme.primary : theme.border }]}>
+                                                                                    <ThemedText type="small" style={[styles.detailLabel, { color: isHighlighted ? theme.onPrimary : theme.textSecondary }]}>
                                                                                         {field.label}
                                                                                     </ThemedText>
-                                                                                    <ThemedText type="smallBold" style={[styles.detailValue, { color: isWarning ? theme.error : isEmphasized ? theme.primaryText : theme.text }]}>
+                                                                                    <ThemedText type="smallBold" style={[styles.detailValue, { color: isWarning ? theme.error : isHighlighted ? theme.onPrimary : theme.text }]}>
                                                                                         {detailRecord ? formatBreakdownDetail(field, detailRecord, result.key, currencyPreference) : '-'}
                                                                                     </ThemedText>
                                                                                 </View>
@@ -3461,7 +3471,7 @@ export default function GroupCalculationScreen() {
                 maxHours={8}
                 maxMinutesAtMaxHour={0}
             />
-            <Snackbar
+            <Snackbar variant="error"
                 visible={conflictSnackbarVisible}
                 onDismiss={() => setConflictSnackbarVisible(false)}
                 duration={5000}
@@ -3476,7 +3486,7 @@ export default function GroupCalculationScreen() {
                     {NIGHT_SHIFT_CONFLICT_MESSAGE}
                 </ThemedText>
             </Snackbar>
-            <Snackbar
+            <Snackbar variant={pdfSnackbarIsError ? 'error' : 'success'}
                 visible={pdfSnackbarVisible}
                 onDismiss={() => setPdfSnackbarVisible(false)}
                 duration={5000}

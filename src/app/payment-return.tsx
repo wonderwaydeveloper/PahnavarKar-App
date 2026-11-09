@@ -3,7 +3,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, View } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQueryClient } from '@tanstack/react-query';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -11,8 +11,11 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { CACHE_KEYS } from '@/services/cache-policy';
 import { useOnlineRefetch } from '@/hooks/use-online-refetch';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
+import { useOnlineStatus } from '@/hooks/use-online-status';
 import { useTheme } from '@/hooks/use-theme';
-import { fetchPaymentOrder, getStoredAuthToken, type PaymentOrderStatus } from '@/services/auth-api';
+import { ACCOUNT_OFFLINE_CACHE, saveOfflineCacheValue } from '@/services/account-offline-cache';
+import { fetchPaymentOrder, getStoredAuthToken, isTemporaryApiFailure, type PaymentOrderStatus } from '@/services/auth-api';
 import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 
 type ReturnState = 'loading' | 'pending' | 'succeeded' | 'failed' | 'error' | 'access-error';
@@ -24,31 +27,72 @@ export default function PaymentReturnScreen() {
     const queryClient = useQueryClient();
     const { user, isLoading: authLoading } = useAuth();
     const { orderId } = useLocalSearchParams<{ orderId?: string }>();
+    const isOnline = useOnlineStatus();
     const [state, setState] = useState<ReturnState>('loading');
     const [errorMessage, setErrorMessage] = useState('');
     const [attempt, setAttempt] = useState(0);
     const [autoPolling, setAutoPolling] = useState(true);
     const automaticChecks = useRef(0);
     const checkInFlight = useRef(false);
+    const [hasConfirmedPendingStatus, setHasConfirmedPendingStatus] = useState(false);
+
+    const awaitingPaymentResult = state !== 'succeeded' && state !== 'failed';
+    const hasOfflinePaymentData = hasConfirmedPendingStatus || state === 'access-error';
+    useOfflinePageNotice(!isOnline && awaitingPaymentResult ? {
+        hasSavedData: hasOfflinePaymentData,
+        message: state === 'access-error'
+            ? 'پرداخت تأیید شد؛ به‌روزرسانی اشتراک نیاز به اتصال دارد.'
+            : hasConfirmedPendingStatus
+                ? 'نتیجهٔ پرداخت هنوز قطعی نیست.'
+                : 'اتصال به سرور برای تأیید پرداخت لازم است.',
+        details: state === 'access-error'
+            ? ['پرداخت موفق بوده است؛ برای تازه‌سازی دسترسی پلن دوباره متصل شوید.']
+            : hasConfirmedPendingStatus
+            ? ['آخرین وضعیت سفارش در انتظار تأیید بوده است؛ نتیجهٔ نهایی پس از اتصال دوباره بررسی می‌شود.']
+            : ['وضعیت پرداخت هنوز از سرور دریافت نشده است.'],
+    } : null);
 
     const checkOrder = useCallback(async (keepPendingOnFailure = false) => {
-        if (authLoading) return;
-        const id = Number(orderId);
-        if (!Number.isSafeInteger(id) || id < 1) {
-            setState('error');
-            setErrorMessage('شناسهٔ سفارش پرداخت معتبر نیست.');
-            return;
-        }
-
+        if (authLoading || checkInFlight.current) return;
+        checkInFlight.current = true;
         try {
+            const id = Number(orderId);
+            if (!Number.isSafeInteger(id) || id < 1) {
+                setState('error');
+                setErrorMessage('شناسهٔ سفارش پرداخت معتبر نیست.');
+                return;
+            }
+            if (!onlineManager.isOnline()) {
+                setState('pending');
+                setErrorMessage('اتصال به سرور برقرار نیست؛ وضعیت پرداخت پس از اتصال دوباره بررسی می‌شود.');
+                return;
+            }
+
             const token = await getStoredAuthToken();
             if (!token) throw new Error('برای بررسی پرداخت، دوباره وارد حساب کاربری شوید.');
 
             const result: PaymentOrderStatus = await fetchPaymentOrder(token, id);
             setErrorMessage('');
             if (result.order.status === 'succeeded') {
+                setHasConfirmedPendingStatus(false);
                 try {
                     if (!user) throw new Error('برای به‌روزرسانی وضعیت اشتراک، دوباره وارد حساب کاربری شوید.');
+                    const emptyPendingOrder = { order: null, payments: [] };
+                    queryClient.setQueryData(CACHE_KEYS.pendingSubscriptionOrder(user.id), emptyPendingOrder);
+                    await saveOfflineCacheValue(
+                        user.id,
+                        ACCOUNT_OFFLINE_CACHE.pendingSubscriptionOrder,
+                        emptyPendingOrder,
+                    );
+                    await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: CACHE_KEYS.currentPlan(user.id) }),
+                        queryClient.invalidateQueries({ queryKey: CACHE_KEYS.walletOverview(user.id) }),
+                        queryClient.invalidateQueries({
+                            queryKey: CACHE_KEYS.pendingSubscriptionOrder(user.id),
+                            refetchType: 'none',
+                        }),
+                        queryClient.invalidateQueries({ queryKey: CACHE_KEYS.planCatalog }),
+                    ]);
                     await queryClient.refetchQueries({
                         queryKey: CACHE_KEYS.planAccess(user.id),
                         type: 'active',
@@ -63,20 +107,42 @@ export default function PaymentReturnScreen() {
                 return;
             }
             if (result.order.status === 'failed') {
+                setHasConfirmedPendingStatus(false);
+                if (user) {
+                    const emptyPendingOrder = { order: null, payments: [] };
+                    queryClient.setQueryData(CACHE_KEYS.pendingSubscriptionOrder(user.id), emptyPendingOrder);
+                    await saveOfflineCacheValue(
+                        user.id,
+                        ACCOUNT_OFFLINE_CACHE.pendingSubscriptionOrder,
+                        emptyPendingOrder,
+                    );
+                    await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: CACHE_KEYS.walletOverview(user.id) }),
+                        queryClient.invalidateQueries({
+                            queryKey: CACHE_KEYS.pendingSubscriptionOrder(user.id),
+                            refetchType: 'none',
+                        }),
+                        queryClient.invalidateQueries({ queryKey: CACHE_KEYS.planCatalog }),
+                    ]);
+                }
                 setState('failed');
                 return;
             }
+            setHasConfirmedPendingStatus(true);
             setState('pending');
         } catch (error) {
-            setState(keepPendingOnFailure ? 'pending' : 'error');
+            setState(keepPendingOnFailure || isTemporaryApiFailure(error) ? 'pending' : 'error');
             setErrorMessage(getUserFacingErrorMessage(error, 'بررسی وضعیت پرداخت ناموفق بود.'));
+        } finally {
+            checkInFlight.current = false;
         }
     }, [authLoading, orderId, queryClient, user]);
     useOnlineRefetch(() => {
+        if (state === 'succeeded' || state === 'failed') return;
         automaticChecks.current = 0;
         setAutoPolling(true);
         void checkOrder(true);
-    }, true);
+    }, !authLoading);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -91,19 +157,15 @@ export default function PaymentReturnScreen() {
 
         const checkAutomatically = async () => {
             if (checkInFlight.current) return;
+            if (!onlineManager.isOnline()) return;
             if (automaticChecks.current >= MAX_AUTOMATIC_CHECKS) {
                 setAutoPolling(false);
                 return;
             }
             automaticChecks.current += 1;
-            checkInFlight.current = true;
-            try {
-                await checkOrder(true);
-            } finally {
-                checkInFlight.current = false;
-            }
+            await checkOrder(true);
         };
-        if (!autoPolling) return;
+        if (!autoPolling || !isOnline) return;
 
         const timer = setInterval(() => void checkAutomatically(), 4000);
         const subscription = AppState.addEventListener('change', (appState) => {
@@ -114,7 +176,7 @@ export default function PaymentReturnScreen() {
             clearInterval(timer);
             subscription.remove();
         };
-    }, [autoPolling, checkOrder, state]);
+    }, [autoPolling, checkOrder, isOnline, state]);
 
     const isLoading = state === 'loading';
     const icon = state === 'succeeded'

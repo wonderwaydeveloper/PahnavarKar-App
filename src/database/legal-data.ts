@@ -2,6 +2,7 @@ import type { SQLiteBindValue } from 'expo-sqlite';
 
 import { runWithDatabaseLock } from './connection';
 import { initDatabase } from './db';
+import { normalizeSearchText } from '@/utils/search-text';
 
 export interface LegalCategory {
     id: number;
@@ -160,6 +161,8 @@ interface LegalSearchRow {
     route_id: number;
     route_title: string;
     footnote_id: number | null;
+    type: LegalSearchResultType;
+    route_type: LegalBreadcrumbType;
 }
 
 const LEGAL_DATA_SEED = 'seed_001_legal_json_fixtures';
@@ -441,21 +444,18 @@ export async function fetchLegalBreadcrumbs(
 
 export async function searchLegalContent(query: string): Promise<LegalSearchResult[]> {
     await ensureLegalDataReady();
-    const normalizedQuery = query
-        .normalize('NFKC')
-        .replace(/[يى]/g, 'ی')
-        .replace(/ك/g, 'ک')
-        .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
-        .replace(/[\u200C\u200D\s]+/g, ' ')
-        .toLocaleLowerCase('fa-IR')
-        .trim();
+    const normalizedQuery = normalizeSearchText(query);
     if (!normalizedQuery) return [];
 
     const queryVariants = new Set<string>();
-    const queryWithLatinDigits = normalizedQuery.replace(/[۰-۹]/g, (digit) =>
-        String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))
-    );
-    for (const queryVariant of [normalizedQuery, queryWithLatinDigits]) {
+    const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
+    const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+    const digitVariants = [
+        normalizedQuery,
+        normalizedQuery.replace(/[0-9]/g, (digit) => persianDigits[Number(digit)]),
+        normalizedQuery.replace(/[0-9]/g, (digit) => arabicDigits[Number(digit)]),
+    ];
+    for (const queryVariant of digitVariants) {
         for (const yehVariant of [
             queryVariant,
             queryVariant.replace(/ی/g, 'ي'),
@@ -477,85 +477,94 @@ export async function searchLegalContent(query: string): Promise<LegalSearchResu
         `(${patterns.map(() => `lower(${column}) LIKE ? ESCAPE '!'`).join(' OR ')})`;
     const searchParams = () => patterns;
 
-    const [categories, titles, chapters, topics, articles, footnotes] = await Promise.all([
-        getAll<LegalSearchRow>(`
+    const rows = await getAll<LegalSearchRow>(`
+        SELECT id, title, subtitle, route_id, route_title, footnote_id, type, route_type
+        FROM (
             SELECT id, title, 'دستهٔ قوانین و مقررات' AS subtitle,
-                id AS route_id, title AS route_title, NULL AS footnote_id
+                id AS route_id, title AS route_title, NULL AS footnote_id,
+                'category' AS type, 'category' AS route_type, 0 AS result_order
             FROM regulation_categories
-            WHERE ${searchable('title')};
-        `, ...searchParams()),
-        getAll<LegalSearchRow>(`
+            WHERE ${searchable('title')}
+
+            UNION ALL
+
             SELECT legal_title.id, legal_title.title, category.title AS subtitle,
-                legal_title.id AS route_id, legal_title.title AS route_title, NULL AS footnote_id
+                legal_title.id AS route_id, legal_title.title AS route_title, NULL AS footnote_id,
+                'title' AS type, 'title' AS route_type, 1 AS result_order
             FROM legal_titles AS legal_title
             JOIN regulation_categories AS category
                 ON category.id = legal_title.regulation_category_id
-            WHERE ${searchable('legal_title.title')};
-        `, ...searchParams()),
-        getAll<LegalSearchRow>(`
+            WHERE ${searchable('legal_title.title')}
+
+            UNION ALL
+
             SELECT chapter.id, chapter.title, legal_title.title AS subtitle,
-                chapter.id AS route_id, chapter.title AS route_title, NULL AS footnote_id
+                chapter.id AS route_id, chapter.title AS route_title, NULL AS footnote_id,
+                'chapter' AS type, 'chapter' AS route_type, 2 AS result_order
             FROM legal_chapters AS chapter
             JOIN legal_titles AS legal_title ON legal_title.id = chapter.legal_title_id
-            WHERE ${searchable('chapter.title')};
-        `, ...searchParams()),
-        getAll<LegalSearchRow>(`
+            WHERE ${searchable('chapter.title')}
+
+            UNION ALL
+
             SELECT topic.id, topic.title,
                 legal_title.title || '  ›  ' || chapter.title AS subtitle,
-                topic.id AS route_id, topic.title AS route_title, NULL AS footnote_id
+                topic.id AS route_id, topic.title AS route_title, NULL AS footnote_id,
+                'topic' AS type, 'topic' AS route_type, 3 AS result_order
             FROM legal_topics AS topic
             JOIN legal_chapters AS chapter ON chapter.id = topic.chapter_id
             JOIN legal_titles AS legal_title ON legal_title.id = chapter.legal_title_id
-            WHERE ${searchable('topic.title')};
-        `, ...searchParams()),
-        getAll<LegalSearchRow>(`
+            WHERE ${searchable('topic.title')}
+
+            UNION ALL
+
             SELECT article.id, article.title,
                 legal_title.title || COALESCE('  ›  ' || chapter.title, '')
                     || COALESCE('  ›  ' || topic.title, '') AS subtitle,
-                article.id AS route_id, article.title AS route_title, NULL AS footnote_id
+                article.id AS route_id, article.title AS route_title, NULL AS footnote_id,
+                'article' AS type, 'article' AS route_type, 4 AS result_order
             FROM legal_articles AS article
             JOIN legal_titles AS legal_title ON legal_title.id = article.legal_title_id
             LEFT JOIN legal_topics AS topic ON topic.id = article.topic_id
             LEFT JOIN legal_chapters AS chapter
                 ON chapter.id = COALESCE(article.chapter_id, topic.chapter_id)
             WHERE ${searchable('article.title')}
-                OR ${searchable('article.body')};
-        `, ...searchParams(), ...searchParams()),
-        getAll<LegalSearchRow>(`
+                OR ${searchable('article.body')}
+
+            UNION ALL
+
             SELECT footnote.id, footnote.title,
                 article.title || '  ›  تبصره' AS subtitle,
                 article.id AS route_id, article.title AS route_title,
-                footnote.id AS footnote_id
+                footnote.id AS footnote_id,
+                'footnote' AS type, 'article' AS route_type, 5 AS result_order
             FROM legal_footnotes AS footnote
             JOIN legal_articles AS article ON article.id = footnote.article_id
             WHERE ${searchable('footnote.title')}
-                OR ${searchable('footnote.body')};
-        `, ...searchParams(), ...searchParams()),
-    ]);
+                OR ${searchable('footnote.body')}
+        )
+        ORDER BY result_order, id;
+    `,
+        ...searchParams(),
+        ...searchParams(),
+        ...searchParams(),
+        ...searchParams(),
+        ...searchParams(),
+        ...searchParams(),
+        ...searchParams(),
+        ...searchParams(),
+    );
 
-    const mapResults = (
-        type: LegalSearchResultType,
-        routeType: LegalBreadcrumbType,
-        rows: LegalSearchRow[]
-    ): LegalSearchResult[] => rows.map((row) => ({
-        key: `${type}-${row.id}`,
-        type,
+    return rows.map((row) => ({
+        key: `${row.type}-${row.id}`,
+        type: row.type,
         title: row.title,
         subtitle: row.subtitle,
-        routeType,
+        routeType: row.route_type,
         routeId: row.route_id,
         routeTitle: row.route_title,
         footnoteId: row.footnote_id,
     }));
-
-    return [
-        ...mapResults('category', 'category', categories),
-        ...mapResults('title', 'title', titles),
-        ...mapResults('chapter', 'chapter', chapters),
-        ...mapResults('topic', 'topic', topics),
-        ...mapResults('article', 'article', articles),
-        ...mapResults('footnote', 'article', footnotes),
-    ];
 }
 
 export async function fetchLegalTitleContents(titleId: number): Promise<LegalTitleContents> {

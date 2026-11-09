@@ -5,6 +5,7 @@ import { AppHeader } from '@/components/app-header';
 import { ErrorState } from '@/components/error-state';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { usePlanAccess } from '@/hooks/use-plan-access';
 import { useTheme } from '@/hooks/use-theme';
 import { hasPlanFeature } from '@/utils/plan-access';
@@ -13,8 +14,16 @@ export default function HomeLayout() {
     const pathname = usePathname();
     const router = useRouter();
     const theme = useTheme();
-    const { planAccess, isLoading, error, refresh } = usePlanAccess();
+    const { planAccess, isLoading, error, refresh, isUsingOfflineData } = usePlanAccess();
     const isLegalRoute = pathname.includes('/rules/');
+    useOfflinePageNotice(isUsingOfflineData && planAccess !== null ? {
+        message: 'وضعیت دسترسی پلن ممکن است به‌روز نباشد.',
+        details: [
+            'امکانات بر اساس آخرین دسترسی تأییدشدهٔ ذخیره‌شده نمایش داده می‌شوند.',
+            'پس از اتصال، دسترسی دوباره از سرور بررسی می‌شود.',
+        ],
+        hasSavedData: true,
+    } : null);
 
     if (isLegalRoute && isLoading) {
         return (

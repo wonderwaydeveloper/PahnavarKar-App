@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
     clearOfflineCacheForUser,
+    clearOfflineCacheNamespace,
     getOfflineCacheEntry,
     setOfflineCacheEntry,
     updateOfflineCacheEntry,
@@ -49,6 +50,11 @@ jest.mock('expo-sqlite', () => ({
             } else if (sql.includes('DELETE FROM offline_cache_entries WHERE user_id = ? AND namespace = ? AND cache_key = ?')) {
                 const [userId, namespace, cacheKey] = params as [number, string, string];
                 mockRows.delete(`${userId}:${namespace}:${cacheKey}`);
+            } else if (sql.includes('DELETE FROM offline_cache_entries WHERE user_id = ? AND namespace = ?')) {
+                const [userId, namespace] = params as [number, string];
+                for (const [key, row] of mockRows) {
+                    if (row.userId === userId && row.namespace === namespace) mockRows.delete(key);
+                }
             } else if (sql.includes('DELETE FROM offline_cache_entries WHERE user_id = ?')) {
                 const [userId] = params as [number];
                 for (const [key, row] of mockRows) {
@@ -130,6 +136,20 @@ describe('offline cache', () => {
         await expect(getOfflineCacheEntry(7, 'financial-history-v1', 'history')).resolves.toBeNull();
         await expect(getOfflineCacheEntry(8, 'financial-history-v1', 'history'))
             .resolves.toMatchObject({ value: { count: 2 } });
+    });
+
+    it('clears only the requested namespace for a user', async () => {
+        await setOfflineCacheEntry(7, 'notification-inbox-v1', 'all:1', { count: 1 });
+        await setOfflineCacheEntry(7, 'financial-history-v1', 'transactions', { count: 2 });
+        await setOfflineCacheEntry(8, 'notification-inbox-v1', 'all:1', { count: 3 });
+
+        await clearOfflineCacheNamespace(7, 'notification-inbox-v1');
+
+        await expect(getOfflineCacheEntry(7, 'notification-inbox-v1', 'all:1')).resolves.toBeNull();
+        await expect(getOfflineCacheEntry(7, 'financial-history-v1', 'transactions'))
+            .resolves.toMatchObject({ value: { count: 2 } });
+        await expect(getOfflineCacheEntry(8, 'notification-inbox-v1', 'all:1'))
+            .resolves.toMatchObject({ value: { count: 3 } });
     });
 
     it('deletes entries after their maximum age', async () => {

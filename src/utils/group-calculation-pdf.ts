@@ -1,4 +1,4 @@
-import { ColorPalettes, type ThemePalette } from '@/constants/theme';
+import { getAppColorPalette, type ThemePalette, type ThemePaletteTone } from '@/constants/theme';
 import { PRODUCT_COLOR_TOKENS } from '@/constants/product-color-tokens';
 
 export interface GroupCalculationPdfDetail {
@@ -73,8 +73,9 @@ export function buildGroupCalculationPdfHtml(
     assets: GroupCalculationPdfAssets,
     palette: ThemePalette,
     wageTotal?: GroupCalculationPdfWageTotal,
+    paletteTone?: ThemePaletteTone | null,
 ) {
-    const colors = ColorPalettes[palette].light;
+    const colors = getAppColorPalette(palette, 'light', paletteTone);
     const summaryRows = sections.map((section) => `
         <tr>
             <td>${escapeHtml(section.title)}</td>
@@ -282,11 +283,12 @@ export function buildGroupCalculationPdfHtml(
             height: 38px;
             align-items: center;
             justify-content: center;
+            padding: 4px;
             overflow: hidden;
-            border-radius: 10px;
+            border-radius: 50%;
             background-color: var(--pdf-primary);
         }
-        .header-logo { width: 100%; height: 100%; object-fit: contain; }
+        .header-logo { width: 100%; height: 100%; border-radius: 50%; object-fit: contain; }
         .brand { color: var(--pdf-primary); font-size: 21px; font-weight: bold; }
         h1 { margin: 2px 0 0; font-size: 18px; }
         .generated {
@@ -465,7 +467,8 @@ export function buildGroupCalculationPdfHtml(
         .page-footer-logo {
             width: 18px;
             height: 18px;
-            border-radius: 4px;
+            padding: 2px;
+            border-radius: 50%;
             background: var(--pdf-primary);
         }
         .page-footer-rights { flex: 1 1 220px; }

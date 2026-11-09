@@ -11,14 +11,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorNoticeCard } from '@/components/error-notice-card';
 import { DateInputField } from '@/components/date-input-field';
-import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { PersianDatePickerModal } from '@/components/persian-date-picker-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
-import { useOnlineRefetch } from '@/hooks/use-online-refetch';
+import { useOnlineStatus } from '@/hooks/use-online-status';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { useTheme } from '@/hooks/use-theme';
 import {
     fetchPaymentOrderHistory,
@@ -1070,6 +1070,7 @@ export default function FinancialHistoryScreen() {
     const queryClient = useQueryClient();
     const { user, isLoading: authLoading } = useAuth();
     const { showError } = useAppFeedback();
+    const isOnline = useOnlineStatus();
     const userId = user?.id ?? null;
     const [activeTab, setActiveTab] = useState<HistoryTab>('transactions');
     const activeTabIndex = tabs.findIndex((tab) => tab.key === activeTab);
@@ -1256,6 +1257,23 @@ export default function FinancialHistoryScreen() {
         payments: paymentsHistoryView,
         withdrawals: withdrawalsHistoryView,
     }), [transactionsHistoryView, paymentsHistoryView, withdrawalsHistoryView]);
+    const historyQueryKeys = useMemo<Record<HistoryTab, string>>(() => ({
+        transactions: JSON.stringify(financialHistoryQueryKey(userId ?? 0, 'transactions', dateRange.from, dateRange.to)),
+        payments: JSON.stringify(financialHistoryQueryKey(userId ?? 0, 'payments', dateRange.from, dateRange.to)),
+        withdrawals: JSON.stringify(financialHistoryQueryKey(userId ?? 0, 'withdrawals', dateRange.from, dateRange.to)),
+    }), [dateRange.from, dateRange.to, userId]);
+    const [offlineHistoryQueryKeys, setOfflineHistoryQueryKeys] = useState<Set<string>>(() => {
+        if (onlineManager.isOnline()) return new Set();
+        return new Set(tabs
+            .filter((tab) => queryClient.getQueryData(financialHistoryQueryKey(
+                userId ?? 0,
+                tab.key,
+                dateRange.from,
+                dateRange.to,
+            )) !== undefined)
+            .map((tab) => historyQueryKeys[tab.key]));
+    });
+    const refetchingHistoryQueryKeys = useRef(new Set<string>());
     const historyRowsByTab = useMemo<Record<HistoryTab, HistoryRow[]>>(() => ({
         transactions: transactionsHistoryQuery.data?.pages.flatMap((page) => page.data) ?? [],
         payments: paymentsHistoryQuery.data?.pages.flatMap((page) => page.data) ?? [],
@@ -1271,6 +1289,71 @@ export default function FinancialHistoryScreen() {
         withdrawals: groupHistoryRows(historyRowsByTab.withdrawals),
     }), [historyRowsByTab]);
     const historyQuery = historyQueries[activeTab];
+    const refetchActiveHistory = historyQuery.refetch;
+    const activeHistoryHasOfflineCacheData = historyQuery.data?.pages.some(
+        (page) => page.offlineCacheSavedAt !== undefined,
+    ) ?? false;
+    const activeHistoryHasData = historyQuery.data !== undefined;
+    const activeHistoryNeedsRefresh = offlineHistoryQueryKeys.has(historyQueryKeys[activeTab]);
+    useEffect(() => {
+        const markCachedHistoryAsOffline = () => {
+            if (onlineManager.isOnline()) return;
+            const tabsWithData = tabs
+                .filter((tab) => queryClient.getQueryData(financialHistoryQueryKey(
+                    userId ?? 0,
+                    tab.key,
+                    dateRange.from,
+                    dateRange.to,
+                )) !== undefined)
+                .map((tab) => historyQueryKeys[tab.key]);
+            if (tabsWithData.length === 0) return;
+
+            setOfflineHistoryQueryKeys((current) => {
+                const next = new Set(current);
+                tabsWithData.forEach((key) => next.add(key));
+                return next.size === current.size ? current : next;
+            });
+        };
+        const unsubscribeOnline = onlineManager.subscribe(markCachedHistoryAsOffline);
+        const unsubscribeCache = queryClient.getQueryCache().subscribe(markCachedHistoryAsOffline);
+        return () => {
+            unsubscribeOnline();
+            unsubscribeCache();
+        };
+    }, [dateRange.from, dateRange.to, historyQueryKeys, queryClient, userId]);
+    useEffect(() => {
+        const queryKey = historyQueryKeys[activeTab];
+        if (!isOnline || !offlineHistoryQueryKeys.has(queryKey) || refetchingHistoryQueryKeys.current.has(queryKey)) {
+            return;
+        }
+
+        refetchingHistoryQueryKeys.current.add(queryKey);
+        void refetchActiveHistory().then((result) => {
+            if (!result.isSuccess || result.data?.pages.some((page) => page.offlineCacheSavedAt !== undefined)) {
+                return;
+            }
+
+            setOfflineHistoryQueryKeys((current) => {
+                if (!current.has(queryKey)) return current;
+                const next = new Set(current);
+                next.delete(queryKey);
+                return next;
+            });
+        }).finally(() => {
+            refetchingHistoryQueryKeys.current.delete(queryKey);
+        });
+    }, [activeTab, historyQueryKeys, isOnline, offlineHistoryQueryKeys, refetchActiveHistory]);
+    const showOfflineHistoryNotice = activeHistoryHasOfflineCacheData
+        || activeHistoryNeedsRefresh
+        || (!isOnline && activeHistoryHasData);
+    useOfflinePageNotice(showOfflineHistoryNotice ? {
+        hasSavedData: true,
+        message: 'تاریخچهٔ ذخیره‌شده ممکن است به‌روز نباشد.',
+        details: [
+            'فقط سوابقی که قبلاً بارگیری شده‌اند نمایش داده می‌شوند.',
+            'برای دریافت سوابق تازه‌تر، اتصال به سرور لازم است.',
+        ],
+    } : null);
     const handleDateRangeApply = useCallback(() => {
         if (draftRange.from && draftRange.to && draftRange.from > draftRange.to) {
             setRangeError('تاریخ شروع باید پیش از تاریخ پایان باشد.');
@@ -1320,10 +1403,6 @@ export default function FinancialHistoryScreen() {
             ),
         });
     }, [queryClient, user]));
-    useOnlineRefetch(() => {
-        void historyQuery.refetch();
-    }, user !== null);
-
     const renderHistoryScene = useCallback((tab: HistoryTab) => {
         const sceneQuery = historyQueries[tab];
         const rows = historyRowsByTab[tab];
@@ -1348,22 +1427,8 @@ export default function FinancialHistoryScreen() {
                 : dateRange.to
                     ? `تا ${formatHistoryDate(dateRange.to)}`
                     : 'همهٔ سوابق';
-        const offlineCacheSavedAt = sceneQuery.data?.pages.reduce<number | undefined>(
-            (latest, page) => page.offlineCacheSavedAt === undefined
-                ? latest
-                : Math.max(latest ?? page.offlineCacheSavedAt, page.offlineCacheSavedAt),
-            undefined,
-        );
         const listHeader = (
             <View style={styles.listHeader}>
-                {offlineCacheSavedAt !== undefined ? (
-                    <OfflineDataNotice
-                        theme={theme}
-                        title="نسخهٔ ذخیره‌شدهٔ تاریخچه نمایش داده می‌شود"
-                        description="این سوابق ممکن است جدیدترین وضعیت سرور نباشند."
-                        sources={[{ label: 'این زبانه', timestamp: offlineCacheSavedAt, kind: 'saved' }]}
-                    />
-                ) : null}
                 <View style={[styles.filterCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                     <Pressable
                         accessibilityRole="button"

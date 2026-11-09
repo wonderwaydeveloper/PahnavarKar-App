@@ -1,5 +1,6 @@
 import {
     isTemporaryApiFailure,
+    type NotificationCounts,
     type PlanCatalog,
     type WalletOverview,
 } from '@/services/auth-api';
@@ -36,6 +37,15 @@ export function isWalletOverviewCacheValue(value: unknown): value is WalletOverv
         && typeof wallet.withdrawals?.enabled === 'boolean'
         && typeof wallet.withdrawals?.max_per_request === 'number'
         && typeof wallet.withdrawals?.max_per_day === 'number';
+}
+
+export function isNotificationCountsCacheValue(value: unknown): value is NotificationCounts {
+    if (!value || typeof value !== 'object') return false;
+    const counts = value as Partial<NotificationCounts>;
+    return Number.isSafeInteger(counts.unread_count)
+        && (counts.unread_count ?? -1) >= 0
+        && Number.isSafeInteger(counts.read_count)
+        && (counts.read_count ?? -1) >= 0;
 }
 
 export function isPendingSubscriptionOrderCacheValue(

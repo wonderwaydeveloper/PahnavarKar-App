@@ -16,7 +16,11 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
   return (
     <AppText
       style={[
-        { color: type === 'linkPrimary' ? theme.primaryText : theme[themeColor ?? 'text'] },
+        {
+          color: type === 'linkPrimary'
+            ? theme.primaryText
+            : theme[themeColor ?? (type === 'description' ? 'textSecondary' : 'text')],
+        },
         type === 'default' && styles.default,
         type === 'title' && styles.title,
         type === 'small' && styles.small,
@@ -86,7 +90,6 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.bodySmall,
     lineHeight: Typography.lineHeight.body,
     fontFamily: 'AppFont-Regular',
-    opacity: 0.7,
   },
   body: {
     fontSize: Typography.fontSize.bodyLarge,

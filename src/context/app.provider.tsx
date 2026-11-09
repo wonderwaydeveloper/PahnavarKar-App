@@ -1,4 +1,4 @@
-import { ColorPalettes, type ThemePalette } from '@/constants/theme';
+import { ColorPalettes, getAppColorPalette, type ThemePalette, type ThemePaletteTone } from '@/constants/theme';
 import { FONT_SIZE_PREFERENCES, type FontSizePreference } from '@/constants/font-scale';
 import { CalculationFeedbackHost } from '@/components/calculation-feedback-host';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -22,6 +22,7 @@ interface AppProviderProps {
 
 const THEME_PREFERENCE_STORAGE_KEY = '@pahnavarkar/theme-preference';
 const COLOR_PALETTE_STORAGE_KEY = '@pahnavarkar/color-palette';
+const COLOR_PALETTE_TONE_STORAGE_KEY = '@pahnavarkar/color-palette-tone';
 const FONT_PREFERENCE_STORAGE_KEY = '@pahnavarkar/font-preference';
 const FONT_SIZE_PREFERENCE_STORAGE_KEY = '@pahnavarkar/font-size-preference';
 const CURRENCY_PREFERENCE_STORAGE_KEY = '@pahnavarkar/currency-preference';
@@ -31,24 +32,26 @@ function isThemePreference(value: string | null): value is ThemePreference {
     return value === 'light' || value === 'dark' || value === 'system';
 }
 
-function isThemePalette(value: string): value is ThemePalette {
+function isThemePalette(value: string | null): value is ThemePalette {
+    if (value === null) return false;
     return Object.prototype.hasOwnProperty.call(ColorPalettes, value);
 }
 
-function migrateThemePalette(value: string | null): ThemePalette | null {
-    const legacyPalettes: Record<string, ThemePalette> = {
-        blue: 'skyBlue',
-        green: 'emerald',
-        yellow: 'amber',
-        red: 'ruby',
-        pink: 'softPurple',
-    };
-
-    if (value && Object.prototype.hasOwnProperty.call(legacyPalettes, value)) {
-        return legacyPalettes[value]!;
+function parseThemePaletteTone(value: string | null): ThemePaletteTone | null {
+    switch (value) {
+        case '25':
+            return 25;
+        case '50':
+            return 50;
+        case '75':
+            return 75;
+        case '35':
+            return 25;
+        case '65':
+            return 75;
+        default:
+            return 50;
     }
-
-    return value && isThemePalette(value) ? value : null;
 }
 
 function isFontPreference(value: string | null): value is FontPreference {
@@ -66,18 +69,32 @@ function isCurrencyPreference(value: string | null): value is CurrencyPreference
 function migrateCalculationSound(value: string | null): CalculationSound | null {
     switch (value) {
         case 'off':
-        case 'message':
-        case 'messageSoft':
+        case 'pianoModernBright':
+        case 'pianoModernSoft':
         case 'piano':
+        case 'pianoMelody':
+        case 'pianoSoulful':
             return value;
+        case 'pianoChord':
+        case 'waterDrop':
+            return 'pianoSoulful';
+        case 'message':
+            return 'pianoModernBright';
+        case 'messageSoft':
+            return 'pianoModernSoft';
+        case 'notesBright':
+        case 'violin':
+            return 'pianoMelody';
+        case 'notesSoft':
+            return 'pianoSoulful';
         case 'alert':
-            return 'message';
+            return 'pianoModernBright';
         case 'gentle':
             return 'piano';
         case 'bright':
-            return 'messageSoft';
+            return 'pianoModernSoft';
         case 'system':
-            return 'message';
+            return 'pianoModernBright';
         default:
             return null;
     }
@@ -87,12 +104,13 @@ export function AppProvider({ children }: AppProviderProps) {
     const colorScheme = useColorScheme();
     const [themePreference, setThemePreference] = useState<ThemePreference>('system');
     const [colorPalette, setColorPaletteState] = useState<ThemePalette>('default');
+    const [colorPaletteTone, setColorPaletteToneState] = useState<ThemePaletteTone | null>(50);
     const [fontPreference, setFontPreference] = useState<FontPreference>('vazir');
     const [fontSizePreference, setFontSizePreferenceState] = useState<FontSizePreference>('standard');
     const [fontError, setFontError] = useState<string | null>(null);
     const [currencyPreference, setCurrencyPreference] = useState<CurrencyPreference>('rial');
     const [currencyError, setCurrencyError] = useState<string | null>(null);
-    const [calculationSound, setCalculationSoundState] = useState<CalculationSound>('message');
+    const [calculationSound, setCalculationSoundState] = useState<CalculationSound>('pianoModernBright');
     const [calculationSoundError, setCalculationSoundError] = useState<string | null>(null);
     const [calculationFeedbackSequence, setCalculationFeedbackSequence] = useState(0);
     const [themeReady, setThemeReady] = useState(false);
@@ -105,9 +123,10 @@ export function AppProvider({ children }: AppProviderProps) {
             let storedFontPreference: FontPreference = 'vazir';
 
             try {
-                const [storedTheme, storedPalette, storedFont, storedFontSize, storedCurrency, storedCalculationSound] = await Promise.all([
+                const [storedTheme, storedPalette, storedPaletteTone, storedFont, storedFontSize, storedCurrency, storedCalculationSound] = await Promise.all([
                     AsyncStorage.getItem(THEME_PREFERENCE_STORAGE_KEY),
                     AsyncStorage.getItem(COLOR_PALETTE_STORAGE_KEY),
+                    AsyncStorage.getItem(COLOR_PALETTE_TONE_STORAGE_KEY),
                     AsyncStorage.getItem(FONT_PREFERENCE_STORAGE_KEY),
                     AsyncStorage.getItem(FONT_SIZE_PREFERENCE_STORAGE_KEY),
                     AsyncStorage.getItem(CURRENCY_PREFERENCE_STORAGE_KEY),
@@ -116,11 +135,12 @@ export function AppProvider({ children }: AppProviderProps) {
                 if (isMounted && isThemePreference(storedTheme)) {
                     setThemePreference(storedTheme);
                 }
-                const migratedPalette = migrateThemePalette(storedPalette);
-                if (isMounted && migratedPalette) {
-                    setColorPaletteState(migratedPalette);
-                    if (storedPalette !== migratedPalette) {
-                        await AsyncStorage.setItem(COLOR_PALETTE_STORAGE_KEY, migratedPalette);
+                if (isMounted && isThemePalette(storedPalette)) {
+                    setColorPaletteState(storedPalette);
+                    const parsedPaletteTone = parseThemePaletteTone(storedPaletteTone);
+                    setColorPaletteToneState(parsedPaletteTone);
+                    if (storedPaletteTone !== String(parsedPaletteTone)) {
+                        await AsyncStorage.setItem(COLOR_PALETTE_TONE_STORAGE_KEY, String(parsedPaletteTone));
                     }
                 }
                 if (isMounted && isFontPreference(storedFont)) {
@@ -170,11 +190,11 @@ export function AppProvider({ children }: AppProviderProps) {
                 } else if (isMounted) {
                     setFontError('بارگذاری فونت‌ها انجام نشد؛ لطفاً برنامه را دوباره اجرا کنید.');
                 }
-            } finally {
-                if (isMounted) {
-                    setFontPreference(resolvedFontPreference);
-                    setThemeReady(true);
-                }
+            }
+
+            if (isMounted) {
+                setFontPreference(resolvedFontPreference);
+                setThemeReady(true);
             }
         };
 
@@ -198,9 +218,16 @@ export function AppProvider({ children }: AppProviderProps) {
         setThemePreference(nextTheme);
     }, []);
 
-    const handleSetColorPalette = useCallback(async (nextPalette: ThemePalette) => {
-        await AsyncStorage.setItem(COLOR_PALETTE_STORAGE_KEY, nextPalette);
+    const handleSetColorPalette = useCallback(async (
+        nextPalette: ThemePalette,
+        nextTone: ThemePaletteTone | null = null,
+    ) => {
+        await AsyncStorage.multiSet([
+            [COLOR_PALETTE_STORAGE_KEY, nextPalette],
+            [COLOR_PALETTE_TONE_STORAGE_KEY, nextTone === null ? '' : String(nextTone)],
+        ]);
         setColorPaletteState(nextPalette);
+        setColorPaletteToneState(nextTone);
     }, []);
 
     const handleSetFontPreference = useCallback(async (nextFont: FontPreference) => {
@@ -227,12 +254,12 @@ export function AppProvider({ children }: AppProviderProps) {
     }, []);
 
     const colors = useMemo(
-        () => ColorPalettes[colorPalette][resolvedTheme],
-        [colorPalette, resolvedTheme],
+        () => getAppColorPalette(colorPalette, resolvedTheme, colorPaletteTone),
+        [colorPalette, colorPaletteTone, resolvedTheme],
     );
     const paperTheme = useMemo(
-        () => getAppPaperTheme(resolvedTheme, fontPreference, colorPalette, fontSizePreference),
-        [colorPalette, fontPreference, fontSizePreference, resolvedTheme]
+        () => getAppPaperTheme(resolvedTheme, fontPreference, colors, fontSizePreference),
+        [colors, fontPreference, fontSizePreference, resolvedTheme]
     );
     const clearFontError = useCallback(() => setFontError(null), []);
     const clearCurrencyError = useCallback(() => setCurrencyError(null), []);
@@ -245,6 +272,7 @@ export function AppProvider({ children }: AppProviderProps) {
         theme: resolvedTheme,
         themePreference,
         colorPalette,
+        colorPaletteTone,
         fontPreference,
         fontSizePreference,
         fontError,

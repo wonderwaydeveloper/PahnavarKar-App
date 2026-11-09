@@ -22,6 +22,14 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 jest.mock('@/services/auth-api', () => ({
+    AuthApiError: class AuthApiError extends Error {
+        readonly status: number;
+
+        constructor(message: string, status: number) {
+            super(message);
+            this.status = status;
+        }
+    },
     fetchPlanCatalog: jest.fn(),
     isTemporaryApiFailure: jest.fn(),
 }));
@@ -64,10 +72,12 @@ describe('guest plan access offline cache', () => {
         await expect(loadGuestPlanAccess()).resolves.toEqual({
             plan: freePlan,
             validUntil: now + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS,
+            isOffline: false,
         });
         await expect(getCachedGuestPlanAccess()).resolves.toEqual({
             plan: freePlan,
             validUntil: now + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS,
+            isOffline: true,
         });
     });
 
@@ -79,7 +89,7 @@ describe('guest plan access offline cache', () => {
         fetchPlanCatalogMock.mockRejectedValue(networkError);
         isTemporaryApiFailureMock.mockReturnValue(true);
 
-        await expect(loadGuestPlanAccess()).resolves.toMatchObject({ plan: freePlan });
+        await expect(loadGuestPlanAccess()).resolves.toMatchObject({ plan: freePlan, isOffline: true });
     });
 
     it('fails closed when no valid cached free tier exists', async () => {
@@ -89,12 +99,13 @@ describe('guest plan access offline cache', () => {
         await expect(loadGuestPlanAccess()).rejects.toThrow('دسترسی آفلاین معتبری در دستگاه ذخیره نشده است');
     });
 
-    it('expires the cached free tier after 24 hours', async () => {
+    it('expires the cached free tier after 30 days', async () => {
         const now = 1_800_000_000_000;
         jest.spyOn(Date, 'now').mockReturnValue(now);
         fetchPlanCatalogMock.mockResolvedValue(catalog);
         await loadGuestPlanAccess();
 
+        expect(GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS).toBe(30 * 24 * 60 * 60 * 1000);
         jest.spyOn(Date, 'now').mockReturnValue(now + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS);
         await expect(getCachedGuestPlanAccess()).resolves.toBeNull();
     });
@@ -120,5 +131,6 @@ describe('guest plan access offline cache', () => {
         expect(access.plan).toEqual(freePlan);
         expect(access.validUntil).toBeGreaterThan(Date.now());
         expect(access.validUntil).toBeLessThanOrEqual(Date.now() + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS);
+        expect(access.isOffline).toBe(false);
     });
 });

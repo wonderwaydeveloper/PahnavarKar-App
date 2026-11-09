@@ -1,10 +1,10 @@
 import { loadAsync } from 'expo-font';
 import { type StyleProp, type TextStyle } from 'react-native';
 
-import { ColorPalettes, type ThemePalette } from '@/constants/theme';
+import type { AppColorPalette } from '@/constants/theme';
 import { getScaledTextStyle, type FontSizePreference } from '@/constants/font-scale';
 import type { FontPreference, ThemeType } from '@/context/app.context';
-import { darkTheme, lightTheme } from '@/constants/themes';
+import { darkTheme, getPaperColorRoles, lightTheme } from '@/constants/themes';
 
 export type AppFontWeight = 'Light' | 'Regular' | 'Medium' | 'SemiBold' | 'Bold';
 type CustomFontPreference = Exclude<FontPreference, 'system'>;
@@ -128,51 +128,13 @@ export function getAppFontStyle(
 export function getAppPaperTheme(
     theme: ThemeType,
     preference: FontPreference,
-    palette: ThemePalette = 'default',
+    colors: AppColorPalette,
     fontSizePreference: FontSizePreference = 'standard',
 ) {
     const baseTheme = theme === 'dark' ? darkTheme : lightTheme;
-    const colors = ColorPalettes[palette][theme];
     const paperColors = {
         ...baseTheme.colors,
-        primary: colors.primary,
-        onPrimary: colors.onPrimary,
-        primaryContainer: colors.primaryContainer,
-        onPrimaryContainer: colors.onPrimaryContainer,
-        secondary: colors.secondary,
-        onSecondary: colors.onSecondary,
-        secondaryContainer: colors.secondaryContainer,
-        onSecondaryContainer: colors.onSecondaryContainer,
-        tertiary: colors.tertiary,
-        onTertiary: colors.onTertiary,
-        tertiaryContainer: colors.tertiaryContainer,
-        onTertiaryContainer: colors.onTertiaryContainer,
-        background: colors.background,
-        onBackground: colors.text,
-        surface: colors.surface,
-        onSurface: colors.text,
-        surfaceVariant: colors.surfaceVariant,
-        onSurfaceVariant: colors.textSecondary,
-        surfaceDim: colors.surfaceDim,
-        surfaceBright: colors.surfaceBright,
-        surfaceContainerLowest: colors.surfaceContainerLowest,
-        surfaceContainerLow: colors.surfaceContainerLow,
-        surfaceContainer: colors.surfaceElevated,
-        surfaceContainerHigh: colors.surfaceContainerHigh,
-        surfaceContainerHighest: colors.surfaceContainerHighest,
-        outline: colors.borderStrong,
-        outlineVariant: colors.border,
-        error: colors.error,
-        onError: colors.onError,
-        errorContainer: colors.errorFill,
-        onErrorContainer: colors.onErrorFill,
-        inverseSurface: colors.inverseSurface,
-        inverseOnSurface: colors.inverseOnSurface,
-        inversePrimary: colors.inversePrimary,
-        surfaceTint: colors.surfaceTint,
-        shadow: colors.shadow,
-        scrim: colors.scrim,
-        backdrop: colors.overlay,
+        ...getPaperColorRoles(colors, baseTheme.colors),
     };
     const fonts = Object.fromEntries(
         Object.entries(baseTheme.fonts).map(([variant, baseFont]) => {

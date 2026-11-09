@@ -1,6 +1,7 @@
 import { preload, useAudioPlayer } from 'expo-audio';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
-import { Portal, Snackbar } from 'react-native-paper';
+import { Portal } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,13 +9,17 @@ import type { CalculationSound } from '@/context/app.context';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-const MESSAGE_SOUND_SOURCE = require('../../assets/sounds/calculation-message.wav');
-const MESSAGE_SOFT_SOUND_SOURCE = require('../../assets/sounds/calculation-message-soft.wav');
+const PIANO_MODERN_BRIGHT_SOUND_SOURCE = require('../../assets/sounds/calculation-piano-modern-bright.wav');
+const PIANO_MODERN_SOFT_SOUND_SOURCE = require('../../assets/sounds/calculation-piano-modern-soft.wav');
 const PIANO_SOUND_SOURCE = require('../../assets/sounds/calculation-piano.wav');
+const PIANO_MELODY_SOUND_SOURCE = require('../../assets/sounds/calculation-piano-melody.wav');
+const PIANO_SOULFUL_SOUND_SOURCE = require('../../assets/sounds/calculation-piano-soulful.wav');
 const SOUND_PRELOAD = Promise.all([
-    Promise.resolve(preload(MESSAGE_SOUND_SOURCE)),
-    Promise.resolve(preload(MESSAGE_SOFT_SOUND_SOURCE)),
+    Promise.resolve(preload(PIANO_MODERN_BRIGHT_SOUND_SOURCE)),
+    Promise.resolve(preload(PIANO_MODERN_SOFT_SOUND_SOURCE)),
     Promise.resolve(preload(PIANO_SOUND_SOURCE)),
+    Promise.resolve(preload(PIANO_MELODY_SOUND_SOURCE)),
+    Promise.resolve(preload(PIANO_SOULFUL_SOUND_SOURCE)),
 ]);
 
 void SOUND_PRELOAD.catch((error: unknown) => {
@@ -32,18 +37,29 @@ export function CalculationFeedbackHost({
 }: CalculationFeedbackHostProps) {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
-    const messagePlayer = useAudioPlayer(MESSAGE_SOUND_SOURCE);
-    const messageSoftPlayer = useAudioPlayer(MESSAGE_SOFT_SOUND_SOURCE);
+    const pianoModernBrightPlayer = useAudioPlayer(PIANO_MODERN_BRIGHT_SOUND_SOURCE);
+    const pianoModernSoftPlayer = useAudioPlayer(PIANO_MODERN_SOFT_SOUND_SOURCE);
     const pianoPlayer = useAudioPlayer(PIANO_SOUND_SOURCE);
+    const pianoMelodyPlayer = useAudioPlayer(PIANO_MELODY_SOUND_SOURCE);
+    const pianoSoulfulPlayer = useAudioPlayer(PIANO_SOULFUL_SOUND_SOURCE);
     const lastHandledSequence = useRef(0);
     const [visible, setVisible] = useState(false);
     const [message, setMessage] = useState('محاسبه انجام شد');
 
-    const getPlayer = useEffectEvent((selectedSound: Exclude<CalculationSound, 'off'>) => (
-        selectedSound === 'message'
-            ? messagePlayer
-            : selectedSound === 'messageSoft' ? messageSoftPlayer : pianoPlayer
-    ));
+    const getPlayer = useEffectEvent((selectedSound: Exclude<CalculationSound, 'off'>) => {
+        switch (selectedSound) {
+            case 'pianoModernBright':
+                return pianoModernBrightPlayer;
+            case 'pianoModernSoft':
+                return pianoModernSoftPlayer;
+            case 'piano':
+                return pianoPlayer;
+            case 'pianoMelody':
+                return pianoMelodyPlayer;
+            case 'pianoSoulful':
+                return pianoSoulfulPlayer;
+        }
+    });
 
     const playSound = useEffectEvent(() => {
         if (sound === 'off') return;
@@ -70,7 +86,7 @@ export function CalculationFeedbackHost({
 
     return (
         <Portal>
-            <Snackbar
+            <Snackbar variant="error"
                 visible={visible}
                 onDismiss={() => setVisible(false)}
                 duration={2800}

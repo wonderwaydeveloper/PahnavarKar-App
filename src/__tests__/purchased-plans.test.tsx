@@ -1,12 +1,11 @@
-import { act, cleanup, fireEvent, render } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { useAppContext } from '@/hooks/use-app-context';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useAuth } from '@/hooks/use-auth';
-import { useOnlineStatus } from '@/hooks/use-online-status';
 import { useTheme } from '@/hooks/use-theme';
 import {
     fetchCurrentPlan,
@@ -16,8 +15,10 @@ import {
     updateAutoRenew,
 } from '@/services/auth-api';
 import PurchasedPlansScreen from '@/app/(tabs)/account/purchased-plans';
+import { getOfflinePageNotices } from '@/services/offline-page-status';
 
 jest.mock('expo-router', () => ({
+    usePathname: () => '/account/purchased-plans',
     useFocusEffect: jest.fn(),
     useRouter: () => ({ push: jest.fn() }),
 }));
@@ -42,9 +43,9 @@ jest.mock('react-native-reanimated', () => {
 jest.mock('@/hooks/use-auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/hooks/use-app-context', () => ({ useAppContext: jest.fn() }));
 jest.mock('@/hooks/use-app-feedback', () => ({ useAppFeedback: jest.fn() }));
-jest.mock('@/hooks/use-online-refetch', () => ({ useOnlineRefetch: jest.fn() }));
-jest.mock('@/hooks/use-online-status', () => ({ useOnlineStatus: jest.fn() }));
-jest.mock('@/hooks/use-plan-access', () => ({ usePlanAccess: () => ({ refresh: jest.fn() }) }));
+jest.mock('@/hooks/use-plan-access', () => ({
+    usePlanAccess: () => ({ refresh: jest.fn(async () => true) }),
+}));
 jest.mock('@/hooks/use-theme', () => ({ useTheme: jest.fn() }));
 jest.mock('@/services/auth-api', () => ({
     AuthApiError: class AuthApiError extends Error {
@@ -60,25 +61,47 @@ jest.mock('@/services/auth-api', () => ({
     getStoredAuthToken: jest.fn(),
     updateAutoRenew: jest.fn(),
 }));
-jest.mock('@/services/account-offline-cache', () => ({
-    ACCOUNT_OFFLINE_CACHE: {
-        currentPlan: { namespace: 'subscription-account-v1', key: 'current-plan', maxAgeMs: 2592000000 },
-        planCatalog: { namespace: 'subscription-catalog-v1', key: 'catalog', maxAgeMs: 2592000000 },
-        wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 2592000000 },
-    },
-    fetchWithOfflineFallback: jest.fn(async (_userId: number, _cache: unknown, fetcher: () => Promise<unknown>) => ({
-        value: await fetcher(),
-        offlineCacheSavedAt: 1234,
-    })),
-    isCurrentPlanCacheValue: jest.fn(() => true),
-    isPlanCatalogCacheValue: jest.fn(() => true),
-    isWalletOverviewCacheValue: jest.fn(() => true),
-    withOfflineCacheMetadata: jest.fn((result: { value: object; offlineCacheSavedAt?: number }) => (
-        result.offlineCacheSavedAt === undefined
-            ? result.value
-            : { ...result.value, offlineCacheSavedAt: result.offlineCacheSavedAt }
-    )),
-}));
+jest.mock('@/services/account-offline-cache', () => {
+    const cachedValues = new Map<string, unknown>();
+
+    return {
+        ACCOUNT_OFFLINE_CACHE: {
+            currentPlan: { namespace: 'subscription-account-v1', key: 'current-plan', maxAgeMs: 2592000000 },
+            planCatalog: { namespace: 'subscription-catalog-v1', key: 'catalog', maxAgeMs: 2592000000 },
+            wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 2592000000 },
+        },
+        fetchWithOfflineFallback: jest.fn(async (
+            _userId: number,
+            cache: { namespace: string; key: string },
+            fetcher: () => Promise<unknown>,
+            _isValid: (value: unknown) => boolean,
+            options: { isOnline?: boolean } = {},
+        ) => {
+            const cacheKey = `${cache.namespace}:${cache.key}`;
+            try {
+                const value = await fetcher();
+                cachedValues.set(cacheKey, value);
+                return options.isOnline === false
+                    ? { value, offlineCacheSavedAt: 1234 }
+                    : { value };
+            } catch (error) {
+                const cachedValue = cachedValues.get(cacheKey);
+                if (error instanceof TypeError && options.isOnline !== false && cachedValue !== undefined) {
+                    return { value: cachedValue, offlineCacheSavedAt: 1234 };
+                }
+                throw error;
+            }
+        }),
+        isCurrentPlanCacheValue: jest.fn(() => true),
+        isPlanCatalogCacheValue: jest.fn(() => true),
+        isWalletOverviewCacheValue: jest.fn(() => true),
+        withOfflineCacheMetadata: jest.fn((result: { value: object; offlineCacheSavedAt?: number }) => (
+            result.offlineCacheSavedAt === undefined
+                ? result.value
+                : { ...result.value, offlineCacheSavedAt: result.offlineCacheSavedAt }
+        )),
+    };
+});
 jest.mock('@/constants/theme', () => ({
     Radius: { sm: 8, md: 12, lg: 16, xl: 24 },
     Spacing: { half: 2, one: 4, two: 8, three: 16, four: 24, five: 32, six: 64 },
@@ -235,10 +258,10 @@ async function renderScreen() {
 
 beforeEach(() => {
     jest.clearAllMocks();
+    onlineManager.setOnline(false);
     jest.mocked(useAppContext).mockReturnValue({ theme: 'light' } as ReturnType<typeof useAppContext>);
     jest.mocked(useTheme).mockReturnValue(lightThemeColors as ReturnType<typeof useTheme>);
     jest.mocked(useAuth).mockReturnValue({ user, isLoading: false } as ReturnType<typeof useAuth>);
-    jest.mocked(useOnlineStatus).mockReturnValue(false);
     jest.mocked(useAppFeedback).mockReturnValue({
         showFeedback: jest.fn(),
         dismissFeedback: jest.fn(),
@@ -258,7 +281,10 @@ beforeEach(() => {
     });
 });
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    onlineManager.setOnline(true);
+});
 
 describe('PurchasedPlansScreen', () => {
     it('does not stay loading when the current-plan request fails', async () => {
@@ -273,10 +299,15 @@ describe('PurchasedPlansScreen', () => {
     it('shows cached plans offline and disables subscription changes', async () => {
         const view = await renderScreen();
 
-        expect(await view.findByText('اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود')).toBeTruthy();
-        expect(view.getByText(/وضعیت اشتراک · آخرین ذخیره‌سازی:/)).toBeTruthy();
-        expect(view.getByText(/نام و اطلاعات پلن‌ها · آخرین ذخیره‌سازی:/)).toBeTruthy();
-        expect(view.getByText(/نمایش پلن رزروشده به‌تنهایی مجوز استفاده از امکانات آن نیست/)).toBeTruthy();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().filter((notice) => (
+                notice.pathname === '/account/purchased-plans'
+            ))).toHaveLength(1);
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/purchased-plans'
+                && notice.message === 'اطلاعات ذخیره‌شدهٔ اشتراک ممکن است به‌روز نباشد.'
+            ))).toBe(true);
+        });
         expect(view.getByText('پایان دسترسی پلن فعلی')).toBeTruthy();
         expect(view.getByText('روز مانده')).toBeTruthy();
         expect(view.getByTestId('remaining-days-badge').props.style).toEqual(
@@ -312,7 +343,9 @@ describe('PurchasedPlansScreen', () => {
 
         const view = await renderScreen();
 
-        expect(await view.findByText('اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود')).toBeTruthy();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/purchased-plans')).toBe(true);
+        });
         expect(view.getByTestId('remaining-validity-progress').props.style).toEqual(
             expect.arrayContaining([expect.objectContaining({ backgroundColor: darkThemeColors.primary })]),
         );
@@ -325,15 +358,109 @@ describe('PurchasedPlansScreen', () => {
         expect(view.queryByLabelText(/پیش‌نمایش رنگ/)).toBeNull();
     });
 
-    it('shows cached plan details when online fetches fall back to offline snapshots', async () => {
-        jest.mocked(useOnlineStatus).mockReturnValue(true);
+    it('uses live plan data when the server is available', async () => {
+        onlineManager.setOnline(true);
 
         const view = await renderScreen();
 
-        expect(await view.findByText('اطلاعات ذخیره‌شدهٔ پلن و اشتراک نمایش داده می‌شود')).toBeTruthy();
-        expect(view.getByText(/وضعیت اشتراک · آخرین ذخیره‌سازی:/)).toBeTruthy();
+        await waitFor(() => expect(fetchCurrentPlan).toHaveBeenCalled());
+        await waitFor(() => expect(view.getByText('برنزی')).toBeTruthy());
         fireEvent.press(view.getByText('برنزی'));
         const autoRenewSwitch = await view.findByLabelText('تمدید خودکار با کیف پول');
+        expect(autoRenewSwitch.props.disabled).toBe(false);
+    });
+
+    it('shows offline status immediately when the server disconnects from live plan data', async () => {
+        onlineManager.setOnline(true);
+
+        const view = await renderScreen();
+        await waitFor(() => expect(view.getByText('برنزی')).toBeTruthy());
+        fireEvent.press(view.getByText('برنزی'));
+        const autoRenewSwitch = await view.findByLabelText('تمدید خودکار با کیف پول');
+        expect(autoRenewSwitch.props.disabled).toBe(false);
+
+        await act(async () => {
+            onlineManager.setOnline(false);
+        });
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/purchased-plans'
+            ))).toBe(true);
+            expect(view.getByLabelText('تمدید خودکار با کیف پول').props.disabled).toBe(true);
+        });
+    });
+
+    it('keeps offline notice and subscription actions pending until live plan data is refreshed', async () => {
+        const view = await renderScreen();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/purchased-plans'
+                && notice.hasSavedData
+            ))).toBe(true);
+        });
+        fireEvent.press(view.getByText('برنزی'));
+        const autoRenewSwitch = await view.findByLabelText('تمدید خودکار با کیف پول');
+        expect(autoRenewSwitch.props.disabled).toBe(true);
+
+        let resolveCurrentPlan: ((value: Awaited<ReturnType<typeof fetchCurrentPlan>>) => void) | undefined;
+        let resolveCatalog: ((value: Awaited<ReturnType<typeof fetchPlanCatalog>>) => void) | undefined;
+        jest.mocked(fetchCurrentPlan).mockImplementationOnce(() => new Promise((resolve) => {
+            resolveCurrentPlan = resolve;
+        }));
+        jest.mocked(fetchPlanCatalog).mockImplementationOnce(() => new Promise((resolve) => {
+            resolveCatalog = resolve;
+        }));
+
+        await act(async () => {
+            onlineManager.setOnline(true);
+        });
+        await waitFor(() => {
+            expect(fetchCurrentPlan).toHaveBeenCalledTimes(2);
+            expect(fetchPlanCatalog).toHaveBeenCalledTimes(2);
+        });
+        expect(autoRenewSwitch.props.disabled).toBe(true);
+        expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/purchased-plans')).toBe(true);
+
+        await act(async () => {
+            resolveCurrentPlan?.(currentPlan);
+        });
+        await waitFor(() => {
+            expect(fetchCurrentPlan).toHaveBeenCalledTimes(2);
+        });
+        expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/purchased-plans')).toBe(true);
+
+        await act(async () => {
+            resolveCatalog?.(catalog);
+        });
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/purchased-plans')).toBe(false);
+            expect(view.getByLabelText('تمدید خودکار با کیف پول').props.disabled).toBe(false);
+        });
+    });
+
+    it('keeps the offline notice when reconnect still falls back to saved plan data', async () => {
+        const view = await renderScreen();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/purchased-plans'
+                && notice.hasSavedData
+            ))).toBe(true);
+        });
+        fireEvent.press(view.getByText('برنزی'));
+        const autoRenewSwitch = await view.findByLabelText('تمدید خودکار با کیف پول');
+        jest.mocked(fetchCurrentPlan).mockRejectedValueOnce(new TypeError('Server unavailable'));
+
+        await act(async () => {
+            onlineManager.setOnline(true);
+        });
+        await waitFor(() => {
+            expect(fetchCurrentPlan).toHaveBeenCalledTimes(2);
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/purchased-plans'
+                && notice.hasSavedData
+            ))).toBe(true);
+            expect(view.getByLabelText('تمدید خودکار با کیف پول').props.disabled).toBe(true);
+        });
         expect(autoRenewSwitch.props.disabled).toBe(true);
     });
 

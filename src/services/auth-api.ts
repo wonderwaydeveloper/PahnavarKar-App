@@ -465,6 +465,11 @@ function getApiBaseUrl(): string {
     return baseUrl;
 }
 
+export function getServerHealthCheckUrl(): string {
+    const apiRoot = getApiBaseUrl().replace(/\/api\/v1$/i, '');
+    return `${apiRoot}/up`;
+}
+
 export function getProfilePhotoUrl(path: string | null): string | null {
     if (!path) {
         return null;
@@ -569,7 +574,7 @@ async function request<T>(
             : error instanceof Error && error.name === 'AbortError'
                 ? new AuthApiError('زمان انتظار برای پاسخ سرور به پایان رسید. دوباره تلاش کنید.', 408)
                 : error instanceof TypeError
-                    ? new AuthApiError('ارتباط با سرور برقرار نشد. اتصال اینترنت خود را بررسی کنید و دوباره تلاش کنید.', 0)
+                    ? new AuthApiError('ارتباط با سرور برقرار نشد. دوباره تلاش کنید.', 0)
                     : error;
 
         if (
@@ -1129,6 +1134,10 @@ export function revokeCurrentSession(token: string): Promise<void> {
 
 export function revokeAllSessions(token: string): Promise<void> {
     return request('/auth/logout-all', { method: 'POST', token });
+}
+
+export function revokeOtherSessions(token: string): Promise<void> {
+    return request('/auth/logout-others', { method: 'POST', token });
 }
 
 export async function fetchDevices(token: string): Promise<AuthDevice[]> {

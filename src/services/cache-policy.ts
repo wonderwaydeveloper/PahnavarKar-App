@@ -55,12 +55,16 @@ export const CACHE_POLICY = {
                 namespace: 'financial-history-v1',
                 maxAgeMs: 30 * DAY,
             },
+            notificationInbox: {
+                namespace: 'notification-inbox-v1',
+                maxAgeMs: 30 * DAY,
+            },
         },
     },
     storage: {
         guestPlanAccess: {
             key: '@pahnavarkar/guest-plan-access-v1',
-            maxAgeMs: DAY,
+            maxAgeMs: 30 * DAY,
         },
         authenticatedPlanAccess: {
             key: 'pahnavarkar.plan-access.cache',

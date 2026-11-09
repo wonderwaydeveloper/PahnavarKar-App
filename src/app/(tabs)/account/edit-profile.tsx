@@ -1,9 +1,11 @@
 import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Snackbar } from 'react-native-paper';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { onlineManager } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppTextInput } from '@/components/app-text';
@@ -17,6 +19,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
+import { useOnlineStatus } from '@/hooks/use-online-status';
 import { useOtpResendCountdown } from '@/hooks/use-otp-resend-countdown';
 import { useTheme } from '@/hooks/use-theme';
 import { getProfilePhotoUrl, sendOtp } from '@/services/auth-api';
@@ -26,8 +30,11 @@ import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 export default function EditProfileScreen() {
     const theme = useTheme();
     const router = useRouter();
+    const isFocused = useIsFocused();
+    const isOnline = useOnlineStatus();
     const {
         user,
+        refreshUser,
         updateProfile,
         uploadProfilePhoto,
         removeProfilePhoto,
@@ -36,11 +43,15 @@ export default function EditProfileScreen() {
     const { showError, showFeedback } = useAppFeedback();
     const profileRestricted = user?.restricted_capabilities?.includes('profile') ?? false;
     const securityRestricted = user?.restricted_capabilities?.includes('security') ?? false;
+    const userId = user?.id ?? null;
     const [name, setName] = useState(user?.name ?? '');
     const [photoUri, setPhotoUri] = useState<string | null>(null);
     const [photoPreviewVisible, setPhotoPreviewVisible] = useState(false);
     const [photoRemoved, setPhotoRemoved] = useState(false);
+    const [photoPicking, setPhotoPicking] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [profileNeedsLiveRefresh, setProfileNeedsLiveRefresh] = useState(() => !onlineManager.isOnline());
+    const [profileRefreshBusy, setProfileRefreshBusy] = useState(false);
     const [phoneInput, setPhoneInput] = useState('');
     const [phoneCode, setPhoneCode] = useState('');
     const [phoneCodeSent, setPhoneCodeSent] = useState(false);
@@ -49,11 +60,52 @@ export default function EditProfileScreen() {
     const [snackbar, setSnackbar] = useState('');
     const [snackbarKind, setSnackbarKind] = useState<'success' | 'error'>('success');
     const phoneVerificationInProgress = useRef(false);
-    const busy = saving || phoneBusy;
+    const profileRefreshInProgress = useRef(false);
+    const busy = saving || phoneBusy || photoPicking;
 
     const showMessage = (message: string, kind: 'success' | 'error' = 'success') => {
         setSnackbarKind(kind);
         setSnackbar(message);
+    };
+
+    useOfflinePageNotice(profileNeedsLiveRefresh || !isOnline ? {
+        hasSavedData: user !== null,
+        message: user
+            ? 'اطلاعات پروفایل ممکن است به‌روز نباشد.'
+            : 'اتصال به سرور برای اطلاعات پروفایل لازم است.',
+        details: user
+            ? ['تغییرات ذخیره‌نشده فقط در همین صفحه نگه داشته می‌شوند.', 'پس از اتصال، اطلاعات حساب دوباره از سرور دریافت می‌شود.']
+            : ['برای دریافت اطلاعات حساب و ذخیرهٔ تغییرات دوباره متصل شوید.'],
+    } : null, isFocused);
+
+    useEffect(() => onlineManager.subscribe((online) => {
+        if (!online) setProfileNeedsLiveRefresh(true);
+    }), []);
+
+    const refreshProfile = useCallback(async () => {
+        if (userId === null || !onlineManager.isOnline() || profileRefreshInProgress.current) return;
+        profileRefreshInProgress.current = true;
+        setProfileRefreshBusy(true);
+        try {
+            await refreshUser();
+            setProfileNeedsLiveRefresh(false);
+        } catch (refreshError) {
+            setProfileNeedsLiveRefresh(true);
+            showError(refreshError, 'همگام‌سازی اطلاعات پروفایل ناموفق بود.');
+        } finally {
+            profileRefreshInProgress.current = false;
+            setProfileRefreshBusy(false);
+        }
+    }, [refreshUser, showError, userId]);
+
+    useFocusEffect(useCallback(() => {
+        if (isOnline && profileNeedsLiveRefresh) void refreshProfile();
+    }, [isOnline, profileNeedsLiveRefresh, refreshProfile]));
+
+    const requireOnline = () => {
+        if (onlineManager.isOnline()) return true;
+        showMessage('برای ذخیره یا تغییر اطلاعات حساب به اتصال سرور نیاز است.', 'error');
+        return false;
     };
 
     const hasUnsavedChanges = Boolean(
@@ -65,6 +117,9 @@ export default function EditProfileScreen() {
     );
 
     const choosePhoto = async () => {
+        if (busy || profileRestricted) return;
+
+        setPhotoPicking(true);
         setSnackbar('');
         try {
             const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -87,33 +142,53 @@ export default function EditProfileScreen() {
             }
         } catch (pickerError) {
             showError(pickerError, 'انتخاب تصویر پروفایل ناموفق بود.');
+        } finally {
+            setPhotoPicking(false);
         }
     };
 
     const save = async () => {
-        if (!user || busy || !hasUnsavedChanges) {
+        if (!user || busy || !hasUnsavedChanges || !requireOnline()) {
             return;
         }
-        if (!name.trim()) {
+        const trimmedName = name.trim();
+        const nameChanged = trimmedName !== user.name;
+        if (nameChanged && !trimmedName) {
             showMessage('نام و نام خانوادگی را وارد کنید.', 'error');
             return;
         }
         setSaving(true);
         setSnackbar('');
+        let nameSaved = false;
         try {
-            await updateProfile({ name: name.trim() });
+            if (nameChanged) {
+                await updateProfile({ name: trimmedName });
+                nameSaved = true;
+            }
             if (photoUri) {
                 try {
                     await uploadProfilePhoto(photoUri);
                 } catch (photoError) {
                     showFeedback({
-                        message: `اطلاعات متنی ذخیره شد، اما تصویر بارگذاری نشد: ${getUserFacingErrorMessage(photoError, 'خطای نامشخص')}`,
+                        message: `${nameSaved ? 'نام ذخیره شد، اما تصویر بارگذاری نشد' : 'بارگذاری تصویر ناموفق بود'}: ${getUserFacingErrorMessage(photoError, 'خطای نامشخص')}`,
                         variant: 'error',
                     });
                     return;
                 }
             } else if (photoRemoved) {
-                await removeProfilePhoto();
+                try {
+                    await removeProfilePhoto();
+                } catch (photoError) {
+                    if (nameSaved) {
+                        showFeedback({
+                            message: `نام ذخیره شد، اما حذف تصویر ناموفق بود: ${getUserFacingErrorMessage(photoError, 'خطای نامشخص')}`,
+                            variant: 'error',
+                        });
+                    } else {
+                        showError(photoError, 'حذف تصویر پروفایل ناموفق بود.');
+                    }
+                    return;
+                }
             }
             router.back();
         } catch (saveError) {
@@ -124,6 +199,7 @@ export default function EditProfileScreen() {
     };
 
     const requestPhoneCode = async () => {
+        if (!requireOnline()) return;
         const normalizedPhone = normalizeIranianPhone(phoneInput);
         if (!normalizedPhone) {
             showMessage('شمارهٔ موبایل معتبر وارد کنید.', 'error');
@@ -151,7 +227,7 @@ export default function EditProfileScreen() {
     };
 
     const verifyPhoneChange = async (submittedCode = phoneCode) => {
-        if (phoneBusy || phoneVerificationInProgress.current) return;
+        if (phoneBusy || phoneVerificationInProgress.current || !requireOnline()) return;
         const normalizedPhone = normalizeIranianPhone(phoneInput);
         const normalizedCode = normalizeOtpCode(submittedCode);
         if (!normalizedPhone || !/^\d{6}$/.test(normalizedCode)) {
@@ -189,7 +265,11 @@ export default function EditProfileScreen() {
 
     return (
         <ThemedView style={styles.container}>
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <ScrollView
+                contentContainerStyle={styles.content}
+                keyboardDismissMode="on-drag"
+                keyboardShouldPersistTaps="handled"
+            >
                 <View style={styles.section}>
                     <View style={styles.sectionHeading}>
                         <ThemedText type="smallBold" style={{ color: theme.textSecondary }}>تصویر پروفایل</ThemedText>
@@ -203,7 +283,7 @@ export default function EditProfileScreen() {
                                 onSelect={() => void choosePhoto()}
                                 onRemove={() => {
                                     setPhotoUri(null);
-                                    setPhotoRemoved(true);
+                                    setPhotoRemoved(Boolean(user.profile_photo_path));
                                 }}
                             />
                         </View>
@@ -220,7 +300,10 @@ export default function EditProfileScreen() {
                             <AppTextInput
                                 accessibilityLabel="نام و نام خانوادگی"
                                 autoComplete="name"
-                                editable={!profileRestricted}
+                                autoCapitalize="words"
+                                autoCorrect={false}
+                                editable={!busy && !profileRestricted}
+                                maxLength={255}
                                 onChangeText={setName}
                                 placeholder="نام و نام خانوادگی"
                                 placeholderTextColor={theme.textMuted}
@@ -254,7 +337,7 @@ export default function EditProfileScreen() {
                             <ThemedText type="smallBold">شمارهٔ تلفن جدید</ThemedText>
                             <IranianPhoneInput
                                 accessibilityLabel="شمارهٔ تلفن جدید"
-                                disabled={busy || securityRestricted}
+                                disabled={!isOnline || busy || securityRestricted}
                                 onChangeText={(value) => {
                                     setPhoneInput(value);
                                     setPhoneCode('');
@@ -267,14 +350,14 @@ export default function EditProfileScreen() {
                                 <>
                                     <OtpCodeInput
                                         accessibilityLabel="کد تأیید شمارهٔ جدید"
-                                        disabled={busy || securityRestricted}
+                                        disabled={!isOnline || busy || securityRestricted}
                                         label="کد ۶ رقمی پیامک‌شده"
                                         onChangeText={setPhoneCode}
                                         onComplete={(value) => void verifyPhoneChange(value)}
                                         value={phoneCode}
                                     />
                                     <OtpResendControl
-                                        disabled={phoneBusy || securityRestricted}
+                                        disabled={!isOnline || phoneBusy || securityRestricted}
                                         onPress={() => void requestPhoneCode()}
                                         secondsRemaining={resendSeconds}
                                     />
@@ -282,13 +365,14 @@ export default function EditProfileScreen() {
                             ) : null}
                             <Pressable
                                 accessibilityRole="button"
-                                disabled={busy || securityRestricted}
+                                accessibilityLabel={phoneCodeSent ? 'تأیید و تغییر شماره' : 'ارسال کد به شمارهٔ جدید'}
+                                disabled={!isOnline || busy || securityRestricted}
                                 onPress={() => void (phoneCodeSent ? verifyPhoneChange() : requestPhoneCode())}
                                 style={({ pressed }) => [
                                     styles.phoneAction,
                                     {
                                         backgroundColor: theme.primary,
-                                        opacity: busy || securityRestricted || pressed ? 0.65 : 1,
+                                        opacity: !isOnline || busy || securityRestricted || pressed ? 0.65 : 1,
                                     },
                                 ]}
                             >
@@ -308,13 +392,14 @@ export default function EditProfileScreen() {
 
                 <Pressable
                     accessibilityRole="button"
-                    disabled={busy || profileRestricted || !hasUnsavedChanges}
+                    accessibilityLabel="ذخیرهٔ تغییرات پروفایل"
+                    disabled={!isOnline || busy || profileRestricted || !hasUnsavedChanges}
                     onPress={() => void save()}
                     style={({ pressed }) => [
                         styles.saveButton,
                         {
                             backgroundColor: hasUnsavedChanges ? theme.primary : theme.surfaceVariant,
-                            opacity: pressed || busy ? 0.72 : 1,
+                            opacity: pressed || busy || !isOnline ? 0.55 : 1,
                         },
                     ]}
                 >
@@ -328,13 +413,29 @@ export default function EditProfileScreen() {
                         {saving ? 'در حال ذخیره...' : profileRestricted ? 'ویرایش به‌دلیل محدودیت غیرفعال است' : 'ذخیرهٔ تغییرات'}
                     </ThemedText>
                 </Pressable>
+                {profileNeedsLiveRefresh && isOnline ? (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="همگام‌سازی دوبارهٔ اطلاعات حساب"
+                        disabled={profileRefreshBusy}
+                        onPress={() => void refreshProfile()}
+                        style={({ pressed }) => [styles.refreshButton, { borderColor: theme.border, opacity: pressed || profileRefreshBusy ? 0.6 : 1 }]}
+                    >
+                        {profileRefreshBusy
+                            ? <ActivityIndicator size="small" color={theme.primaryText} />
+                            : <MaterialCommunityIcons name="refresh" size={18} color={theme.primaryText} />}
+                        <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                            {profileRefreshBusy ? 'در حال همگام‌سازی...' : 'همگام‌سازی دوبارهٔ اطلاعات حساب'}
+                        </ThemedText>
+                    </Pressable>
+                ) : null}
             </ScrollView>
             <ProfilePhotoPreview
                 uri={photoPreviewUri}
                 visible={photoPreviewVisible}
                 onClose={() => setPhotoPreviewVisible(false)}
             />
-            <Snackbar
+            <Snackbar variant="error"
                 visible={Boolean(snackbar)}
                 onDismiss={() => setSnackbar('')}
                 duration={4500}
@@ -385,4 +486,5 @@ const styles = StyleSheet.create({
     phoneChangeFields: { gap: Spacing.two },
     phoneAction: { minHeight: 48, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
     saveButton: { minHeight: 50, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
+    refreshButton: { minHeight: 44, borderWidth: 1, borderRadius: Radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
 });

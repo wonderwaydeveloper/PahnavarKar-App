@@ -7,6 +7,8 @@ import { Appbar } from 'react-native-paper';
 
 import { ThemedText } from '@/components/themed-text';
 import { NetworkStatusBanner } from '@/components/network-status-banner';
+import { OfflinePageStatusBanner } from '@/components/offline-page-status-banner';
+import { getAppHeaderColors } from '@/constants/theme';
 import { Typography } from '@/constants/typography';
 import { TOOL_DEFINITIONS } from '@/constants/tool-definitions';
 
@@ -93,8 +95,9 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
   const pathname = usePathname();
   const { headerTitle: rawHeaderTitle } = useGlobalSearchParams<{ headerTitle?: string | string[] }>();
   const isLightTheme = appTheme === 'light';
-  const headerBackgroundColor = isLightTheme ? colors.primary : colors.surface;
-  const titleColor = isLightTheme ? colors.surface : colors.text;
+  const headerColors = getAppHeaderColors(colors, appTheme);
+  const headerBackgroundColor = headerColors.background;
+  const titleColor = headerColors.foreground;
 
   const normalizeRoute = (input?: string) => {
     const value = input ?? pathname ?? route?.name ?? 'home';
@@ -310,7 +313,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                   borderRadius: 16,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  backgroundColor: colors.primary,
+                  backgroundColor: headerColors.toolIconBackground,
                   borderColor: colors.border,
                   borderWidth: 1,
                 }}
@@ -318,7 +321,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
                 <MaterialCommunityIcons
                   name={activeTool.icon}
                   size={18}
-                  color={colors.onPrimary}
+                  color={headerColors.toolIconForeground}
                 />
               </View>
             ) : null}
@@ -359,6 +362,7 @@ export function AppHeader({ route, formatYear, selectedYear, centerContent }: Ap
       </View>
     </Appbar.Header>
     <NetworkStatusBanner />
+    <OfflinePageStatusBanner />
     </View>
   );
 }

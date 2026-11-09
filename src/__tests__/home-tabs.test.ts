@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 
 import { PLAN_FEATURE_DETAILS } from '@/constants/generated-plan-feature-details';
 import { TOOL_DEFINITIONS } from '@/constants/tool-definitions';
-import { filterHomeActions, HOME_ROUTES } from '@/utils/home-tabs';
+import { filterHomeActions, groupHomeActions, HOME_ROUTES } from '@/utils/home-tabs';
 
 describe('home tab definitions and filters', () => {
     it('uses the generated plan catalog descriptions for every home tool', () => {
@@ -32,6 +32,31 @@ describe('home tab definitions and filters', () => {
             TOOL_DEFINITIONS.map((action) => action.key),
         );
         expect(new Set(allActions.map((action) => action.key)).size).toBe(allActions.length);
+    });
+
+    it('groups all available tools once while preserving their order within each home section', () => {
+        const groups = groupHomeActions(TOOL_DEFINITIONS, 'all');
+        const groupedKeys = [
+            ...groups.yearlyInfo,
+            ...groups.wageContinuous,
+            ...groups.wageNonContinuous,
+            ...groups.nonWage,
+        ].map((action) => action.key);
+
+        expect(groupedKeys).toHaveLength(TOOL_DEFINITIONS.length);
+        expect(new Set(groupedKeys).size).toBe(TOOL_DEFINITIONS.length);
+        expect(groups.wageContinuous.map((action) => action.key)).toEqual(
+            TOOL_DEFINITIONS
+                .filter((action) => action.category === 'wageContinuous')
+                .map((action) => action.key),
+        );
+    });
+
+    it('only includes actions for the selected category tab', () => {
+        const groups = groupHomeActions(TOOL_DEFINITIONS, 'wageNonContinuous');
+
+        expect(Object.values(groups).flat().length).toBeGreaterThan(0);
+        expect(Object.values(groups).flat().every((action) => action.category === 'wageNonContinuous')).toBe(true);
     });
 
     it.each([

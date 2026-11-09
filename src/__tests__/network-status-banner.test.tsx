@@ -1,14 +1,16 @@
 import { act, cleanup, render } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { onlineManager } from '@tanstack/react-query';
 import { StyleSheet } from 'react-native';
 import { NetworkStatusBanner } from '@/components/network-status-banner';
+import {
+    getServerConnectivityStatus,
+    subscribeToServerConnectivity,
+    type ServerConnectivityStatus,
+} from '@/services/server-connectivity';
 
-jest.mock('@tanstack/react-query', () => ({
-    onlineManager: {
-        isOnline: jest.fn(),
-        subscribe: jest.fn(),
-    },
+jest.mock('@/services/server-connectivity', () => ({
+    getServerConnectivityStatus: jest.fn(),
+    subscribeToServerConnectivity: jest.fn(),
 }));
 
 jest.mock('@expo/vector-icons', () => ({
@@ -39,19 +41,26 @@ jest.mock('@/constants/theme', () => ({
     Spacing: { one: 4, two: 8, three: 12 },
 }));
 
-const isOnlineMock = jest.mocked(onlineManager.isOnline);
-const subscribeMock = jest.mocked(onlineManager.subscribe);
-let updateNetworkStatus: ((isOnline: boolean) => void) | undefined;
+const getStatusMock = jest.mocked(getServerConnectivityStatus);
+const subscribeMock = jest.mocked(subscribeToServerConnectivity);
+let serverStatus: ServerConnectivityStatus = 'connected';
+let updateServerStatus: (() => void) | undefined;
+
+function publishStatus(nextStatus: ServerConnectivityStatus) {
+    serverStatus = nextStatus;
+    updateServerStatus?.();
+}
 
 describe('NetworkStatusBanner', () => {
     beforeEach(() => {
         jest.useFakeTimers();
-        updateNetworkStatus = undefined;
-        isOnlineMock.mockReturnValue(true);
+        serverStatus = 'connected';
+        updateServerStatus = undefined;
+        getStatusMock.mockImplementation(() => serverStatus);
         subscribeMock.mockImplementation((listener) => {
-            updateNetworkStatus = listener;
+            updateServerStatus = listener;
             return () => {
-                updateNetworkStatus = undefined;
+                updateServerStatus = undefined;
             };
         });
     });
@@ -62,33 +71,26 @@ describe('NetworkStatusBanner', () => {
         jest.restoreAllMocks();
     });
 
-    it('shows a compact offline notice and a temporary reconnection notice', async () => {
+    it('shows server connection state and hides after the server responds', async () => {
         const { getByText, queryByText } = await render(<NetworkStatusBanner />);
 
-        expect(queryByText('اتصال اینترنتی ندارید')).toBeNull();
-
-        await act(async () => updateNetworkStatus?.(false));
-        expect(getByText('اتصال اینترنتی ندارید')).toBeTruthy();
-
-        await act(async () => updateNetworkStatus?.(true));
-        expect(getByText('دوباره متصل شدید')).toBeTruthy();
+        await act(async () => publishStatus('server-unavailable'));
+        expect(getByText('ارتباط با سرور برقرار نیست')).toBeTruthy();
 
         await act(async () => {
-            jest.advanceTimersByTime(3000);
+            publishStatus('connected');
+            jest.advanceTimersByTime(120);
         });
-        await act(async () => {
-            jest.advanceTimersByTime(220);
-        });
-        expect(queryByText('دوباره متصل شدید')).toBeNull();
+        expect(queryByText('ارتباط با سرور برقرار نیست')).toBeNull();
     });
 
-    it('shows offline state immediately when mounted without network', async () => {
-        isOnlineMock.mockReturnValue(false);
+    it('shows a connecting state while the server health check is pending', async () => {
+        serverStatus = 'connecting';
 
         const { getByText } = await render(<NetworkStatusBanner />);
 
-        expect(getByText('اتصال اینترنتی ندارید')).toBeTruthy();
-        const banner = getByText('اتصال اینترنتی ندارید').parent;
+        expect(getByText('در حال اتصال به سرور…')).toBeTruthy();
+        const banner = getByText('در حال اتصال به سرور…').parent;
         const bannerStyle = StyleSheet.flatten(banner?.props.style);
         expect(bannerStyle).toMatchObject({
             width: '100%',

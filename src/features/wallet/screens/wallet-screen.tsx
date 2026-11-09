@@ -6,15 +6,14 @@ import * as Linking from 'expo-linking';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Share, StyleSheet, TextInputInstance, View } from 'react-native';
-import { Snackbar } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppTextInput } from '@/components/app-text';
 import { BankAmountInput } from '@/components/bank-amount-input';
 import { ErrorNoticeCard } from '@/components/error-notice-card';
-import { OfflineDataNotice } from '@/components/offline-data-notice';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
@@ -22,6 +21,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
 import { useOnlineRefetch } from '@/hooks/use-online-refetch';
 import { useOnlineStatus } from '@/hooks/use-online-status';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { useTheme } from '@/hooks/use-theme';
 import { CACHE_KEYS, CACHE_POLICY } from '@/services/cache-policy';
 import {
@@ -42,6 +42,7 @@ import {
     ACCOUNT_OFFLINE_CACHE,
     fetchWithOfflineFallback,
     isWalletOverviewCacheValue,
+    saveOfflineCacheValue,
     type OfflineAware,
     withOfflineCacheMetadata,
 } from '@/services/account-offline-cache';
@@ -203,7 +204,7 @@ export default function WalletScreen() {
                     return fetchWalletOverview(token);
                 },
                 isWalletOverviewCacheValue,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return withOfflineCacheMetadata(result);
         },
@@ -225,7 +226,7 @@ export default function WalletScreen() {
                     return (await fetchPendingWalletTopUp(token)).payment;
                 },
                 isWalletTopUpPayment,
-                { isOnline },
+                { isOnline: onlineManager.isOnline() },
             );
             return result.offlineCacheSavedAt === undefined
                 ? { payment: result.value }
@@ -291,7 +292,27 @@ export default function WalletScreen() {
     const pendingTopUp = pendingTopUpQuery.data?.payment ?? null;
     const offlineCacheSavedAt = walletQuery.data?.offlineCacheSavedAt
         ?? pendingTopUpQuery.data?.offlineCacheSavedAt;
-    const financialOperationsUnavailable = !isOnline || offlineCacheSavedAt !== undefined;
+    const financialOperationsUnavailable = !isOnline
+        || offlineCacheSavedAt !== undefined
+        || walletQuery.isPending
+        || walletQuery.isFetching
+        || walletQuery.isError
+        || walletQuery.data === undefined
+        || pendingTopUpQuery.isPending
+        || pendingTopUpQuery.isFetching
+        || pendingTopUpQuery.isError
+        || pendingTopUpQuery.data === undefined;
+    const showOfflineWalletNotice = !isOnline || offlineCacheSavedAt !== undefined;
+    useOfflinePageNotice(showOfflineWalletNotice ? {
+        hasSavedData: offlineCacheSavedAt !== undefined,
+        message: offlineCacheSavedAt !== undefined
+            ? 'موجودی ذخیره‌شدهٔ کیف پول ممکن است به‌روز نباشد.'
+            : 'سرور در دسترس نیست؛ عملیات مالی غیرفعال است.',
+        details: [
+            'موجودی یا وضعیت پرداخت ممکن است به‌روز نباشد.',
+            'شارژ، برداشت و پیگیری پرداخت تا اتصال دوباره در دسترس نیست.',
+        ],
+    } : null);
     const pendingTopUpId = pendingTopUp?.id ?? null;
     const loading = authLoading || (user !== null && walletQuery.isPending);
     const topUpDisabled = financialActionInProgress
@@ -429,6 +450,8 @@ export default function WalletScreen() {
         const { status } = payment;
         if (status === 'succeeded') {
             updatePendingTopUpCache(null);
+            await saveOfflineCacheValue(actionUserId, ACCOUNT_OFFLINE_CACHE.pendingTopUp, null);
+            if (currentUserIdRef.current !== actionUserId) return;
             setTopUpAmount('');
             if (userId !== null) {
                 await queryClient.invalidateQueries({ queryKey: walletQueryKey(userId) });
@@ -437,6 +460,8 @@ export default function WalletScreen() {
             showMessage('شارژ کیف پول تأیید و به موجودی اضافه شد.');
         } else if (status === 'failed') {
             updatePendingTopUpCache(null);
+            await saveOfflineCacheValue(actionUserId, ACCOUNT_OFFLINE_CACHE.pendingTopUp, null);
+            if (currentUserIdRef.current !== actionUserId) return;
             showMessage('درگاه پرداخت ناموفق‌بودن شارژ را تأیید کرد؛ اکنون می‌توانید دوباره شارژ کنید.');
         } else {
             updatePendingTopUpCache(payment);
@@ -748,27 +773,6 @@ export default function WalletScreen() {
                     />
                 )}
             >
-                {financialOperationsUnavailable ? (
-                    <OfflineDataNotice
-                        theme={theme}
-                        title={offlineCacheSavedAt !== undefined
-                            ? 'اطلاعات ذخیره‌شده نمایش داده می‌شود'
-                            : 'اتصال زنده به سرور در دسترس نیست'}
-                        description={offlineCacheSavedAt !== undefined
-                            ? 'این اطلاعات ممکن است به‌روز نباشد.'
-                            : 'وضعیت کیف پول تا دریافت پاسخ زندهٔ سرور قابل تأیید نیست.'}
-                        sources={[
-                            ...(walletQuery.data?.offlineCacheSavedAt !== undefined
-                                ? [{ label: 'موجودی کیف پول', timestamp: walletQuery.data.offlineCacheSavedAt, kind: 'saved' as const }]
-                                : []),
-                            ...(pendingTopUpQuery.data?.offlineCacheSavedAt !== undefined
-                                ? [{ label: 'وضعیت شارژ در انتظار', timestamp: pendingTopUpQuery.data.offlineCacheSavedAt, kind: 'saved' as const }]
-                                : []),
-                        ]}
-                        emptyMessage="اطلاعات ذخیره‌شدهٔ قابل‌نمایشی برای کیف پول در دسترس نیست."
-                        actionMessage="شارژ، برداشت، ذخیرهٔ شبا و استعلام پرداخت فقط با اتصال و اطلاعات زنده فعال می‌شوند."
-                    />
-                ) : null}
                 {walletError && !wallet ? (
                     <ErrorNoticeCard
                         message={walletError}
@@ -1168,7 +1172,7 @@ export default function WalletScreen() {
                 ) : null}
             </ScrollView>
 
-            <Snackbar
+            <Snackbar variant="error"
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}

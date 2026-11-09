@@ -1,7 +1,7 @@
 import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, LayoutChangeEvent, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,7 +18,7 @@ import { TOOL_DEFINITIONS, type ToolDefinition } from '@/constants/tool-definiti
 import { getToolRoute } from '@/constants/tool-routes';
 import { useTheme } from '@/hooks/use-theme';
 import { usePlanAccess } from '@/hooks/use-plan-access';
-import { HOME_ROUTES, filterHomeActions, type HomeRoute, type HomeTab } from '@/utils/home-tabs';
+import { HOME_ROUTES, groupHomeActions, type HomeRoute, type HomeTab } from '@/utils/home-tabs';
 import { hasPlanFeature } from '@/utils/plan-access';
 
 type HomeAction = ToolDefinition & { onPress: () => void };
@@ -38,13 +38,18 @@ function createHomeActions(router: ReturnType<typeof useRouter>): HomeAction[] {
 type HomeTabItemProps = {
     route: HomeRoute;
     isActive: boolean;
-    onPress: () => void;
+    onSelect: (key: string) => void;
     theme: ReturnType<typeof useTheme>;
-    onLayout: (event: LayoutChangeEvent) => void;
+    onLayout: (key: string, event: LayoutChangeEvent) => void;
 };
 
-function HomeTabItem({ route, isActive, onPress, theme, onLayout }: HomeTabItemProps) {
+const HomeTabItem = memo(function HomeTabItem({ route, isActive, onSelect, theme, onLayout }: HomeTabItemProps) {
     const [indicatorProgress] = useState(() => new Animated.Value(isActive ? 1 : 0));
+    const handlePress = useCallback(() => onSelect(route.key), [onSelect, route.key]);
+    const handleLayout = useCallback(
+        (event: LayoutChangeEvent) => onLayout(route.key, event),
+        [onLayout, route.key],
+    );
 
     useEffect(() => {
         Animated.spring(indicatorProgress, {
@@ -58,12 +63,12 @@ function HomeTabItem({ route, isActive, onPress, theme, onLayout }: HomeTabItemP
 
     return (
         <Pressable
-            onPress={onPress}
+            onPress={handlePress}
             style={({ pressed }) => [
                 styles.tabItem,
                 { backgroundColor: pressed ? theme.surfaceVariant : theme.surface },
             ]}
-            onLayout={onLayout}
+            onLayout={handleLayout}
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={route.label}
@@ -87,12 +92,16 @@ function HomeTabItem({ route, isActive, onPress, theme, onLayout }: HomeTabItemP
             />
         </Pressable>
     );
-}
+});
 
 function HomeTabBar({ navigationState, jumpTo, theme }: HomeTabBarProps) {
     const scrollViewRef = useRef<ScrollViewInstance>(null);
     const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
     const [viewportWidth, setViewportWidth] = useState(0);
+    const handleTabLayout = useCallback((key: string, event: LayoutChangeEvent) => {
+        const { x, width } = event.nativeEvent.layout;
+        tabLayouts.current[key] = { x, width };
+    }, []);
 
     useEffect(() => {
         const activeTab = navigationState.routes[navigationState.index];
@@ -123,12 +132,9 @@ function HomeTabBar({ navigationState, jumpTo, theme }: HomeTabBarProps) {
                         key={route.key}
                         route={route}
                         isActive={navigationState.index === index}
-                        onPress={() => jumpTo(route.key)}
+                        onSelect={jumpTo}
                         theme={theme}
-                        onLayout={(event) => {
-                            const { x, width } = event.nativeEvent.layout;
-                            tabLayouts.current[route.key] = { x, width };
-                        }}
+                        onLayout={handleTabLayout}
                     />
                 ))}
             </ScrollView>
@@ -148,18 +154,19 @@ type SceneProps = {
     legalAccess: boolean;
 };
 
+const HomeToolRow = memo(function HomeToolRow({ action }: { action: HomeAction }) {
+    return <ToolListItem tool={action} onPress={action.onPress} compactIcon />;
+});
+
 const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset, accessLoading, accessError, accessResolved, refreshAccess, legalAccess }: SceneProps) {
-    const tabActions = filterHomeActions(actions, tab);
-    const continuousWageActions = tabActions.filter((action) => action.category === 'wageContinuous');
-    const nonContinuousWageActions = tabActions.filter((action) => action.category === 'wageNonContinuous');
-    const nonWageActions = tabActions.filter((action) => action.category === 'nonWage');
-    const yearlyInfoActions = tabActions.filter((action) => action.category === 'yearlyInfo');
+    const actionGroups = useMemo(() => groupHomeActions(actions, tab), [actions, tab]);
+    const tabActionCount = Object.values(actionGroups).reduce((total, items) => total + items.length, 0);
 
     const renderActionList = (items: HomeAction[]) => (
         <View style={[styles.listCard, { backgroundColor: theme.surface }]}>
             {items.map((action, index) => (
                 <Fragment key={action.key}>
-                    <ToolListItem tool={action} onPress={action.onPress} compactIcon />
+                    <HomeToolRow action={action} />
                     {index < items.length - 1 ? <View style={[styles.chatSeparator, { backgroundColor: theme.border }]} /> : null}
                 </Fragment>
             ))}
@@ -210,13 +217,13 @@ const HomeScene = memo(function HomeScene({ tab, actions, theme, bottomInset, ac
                             <ThemedText type="smallBold" style={{ color: theme.text }}>دسترسی به قوانین و مقررات در پلن فعلی فعال نیست</ThemedText>
                         </View>
                     </View>
-                ) : tabActions.length > 0 ? (
+                ) : tabActionCount > 0 ? (
                     <>
-                        {tab === 'all' ? renderSection(yearlyInfoActions) : null}
-                        {renderSection(continuousWageActions)}
-                        {renderSection(nonContinuousWageActions)}
-                        {renderSection(nonWageActions)}
-                        {tab !== 'all' ? renderSection(yearlyInfoActions) : null}
+                        {tab === 'all' ? renderSection(actionGroups.yearlyInfo) : null}
+                        {renderSection(actionGroups.wageContinuous)}
+                        {renderSection(actionGroups.wageNonContinuous)}
+                        {renderSection(actionGroups.nonWage)}
+                        {tab !== 'all' ? renderSection(actionGroups.yearlyInfo) : null}
                     </>
                 ) : (
                     <View style={[styles.listCard, { backgroundColor: theme.surface }]}>
@@ -239,6 +246,22 @@ export default function HomeTabScreen() {
     const { width } = useWindowDimensions();
     const [tabIndex, setTabIndex] = useState(0);
     const { planAccess, isLoading: accessLoading, error: accessError, refresh: refreshAccess } = usePlanAccess();
+    const hasFocusedHome = useRef(false);
+    const handleRefreshAccess = useCallback(async () => {
+        try {
+            await refreshAccess();
+        } catch (error) {
+            console.error('بازخوانی دستی دسترسی امکانات ناموفق بود.', error);
+        }
+    }, [refreshAccess]);
+    useFocusEffect(useCallback(() => {
+        if (!hasFocusedHome.current) {
+            hasFocusedHome.current = true;
+            return;
+        }
+
+        void handleRefreshAccess();
+    }, [handleRefreshAccess]));
     const hasResolvedAccess = !accessLoading && !accessError && planAccess !== null;
     const actions = useMemo(
         () => hasResolvedAccess
@@ -246,8 +269,10 @@ export default function HomeTabScreen() {
             : [],
         [hasResolvedAccess, planAccess, router],
     );
+    const legalAccess = hasResolvedAccess && hasPlanFeature(planAccess, 'legal_library');
+    const canAccessGroupCalculation = hasResolvedAccess && hasPlanFeature(planAccess, 'group-calculation');
 
-    const renderScene = ({ route }: { route: HomeRoute }) => (
+    const renderScene = useCallback(({ route }: { route: HomeRoute }) => (
         <HomeScene
             tab={route.key}
             actions={actions}
@@ -256,14 +281,22 @@ export default function HomeTabScreen() {
             accessLoading={accessLoading}
             accessError={accessError}
             accessResolved={hasResolvedAccess}
-            refreshAccess={refreshAccess}
-            legalAccess={hasResolvedAccess && hasPlanFeature(planAccess, 'legal_library')}
+            refreshAccess={handleRefreshAccess}
+            legalAccess={legalAccess}
         />
-    );
+    ), [accessError, accessLoading, actions, handleRefreshAccess, hasResolvedAccess, insets.bottom, legalAccess, theme]);
 
-    const renderTabBar = (props: SceneRendererProps & { navigationState: NavigationState<HomeRoute> }) => (
+    const renderTabBar = useCallback((props: SceneRendererProps & { navigationState: NavigationState<HomeRoute> }) => (
         <HomeTabBar {...props} theme={theme} />
-    );
+    ), [theme]);
+    const commonOptions = useMemo(() => ({
+        label: ({ route, color }: { route: HomeRoute; color: string }) => (
+            <ThemedText type="smallBold" style={[styles.tabLabel, { color }]}>{route.label}</ThemedText>
+        ),
+    }), []);
+    const handleGroupCalculationPress = useCallback(() => {
+        router.push('/group-calculation' as never);
+    }, [router]);
 
     return (
         <ThemedView style={styles.container}>
@@ -276,17 +309,13 @@ export default function HomeTabScreen() {
                 swipeEnabled
                 lazy
                 lazyPreloadDistance={1}
-                commonOptions={{
-                    label: ({ route, color }) => (
-                        <ThemedText type="smallBold" style={[styles.tabLabel, { color }]}>{route.label}</ThemedText>
-                    ),
-                }}
+                commonOptions={commonOptions}
                 initialLayout={{ width }}
                 style={styles.tabView}
             />
-            {HOME_ROUTES[tabIndex]?.key !== 'rules' && hasResolvedAccess && hasPlanFeature(planAccess, 'group-calculation') ? (
+            {HOME_ROUTES[tabIndex]?.key !== 'rules' && canAccessGroupCalculation ? (
                 <Pressable
-                    onPress={() => router.push('/group-calculation' as never)}
+                    onPress={handleGroupCalculationPress}
                     accessibilityRole="button"
                     accessibilityLabel="محاسبات جامع"
                     style={({ pressed }) => [

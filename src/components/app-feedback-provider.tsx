@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type PropsWithChildren } from 'react';
-import { Portal, Snackbar } from 'react-native-paper';
+import { Portal } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -59,7 +60,7 @@ export function AppFeedbackProvider({ children }: PropsWithChildren) {
             <Portal.Host>
                 {children}
                 <Portal>
-                    <Snackbar
+                    <Snackbar variant="error"
                         key={feedback?.id ?? 'app-feedback'}
                         visible={feedback !== null}
                         onDismiss={dismissFeedback}

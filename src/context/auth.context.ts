@@ -23,6 +23,7 @@ export interface AuthContextType {
     deleteAccount: (code: string) => Promise<void>;
     signOut: () => Promise<void>;
     signOutAll: () => Promise<void>;
+    signOutOtherDevices: () => Promise<void>;
     getDevices: () => Promise<AuthDevice[]>;
     revokeUserDevice: (deviceId: number) => Promise<void>;
 }

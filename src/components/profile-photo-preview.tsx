@@ -8,7 +8,6 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { AppText } from '@/components/app-text';
 import { Typography } from '@/constants/typography';
-import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useAppContext } from '@/hooks/use-app-context';
 
@@ -146,7 +145,6 @@ function ProfilePhotoPreviewContent({ uri, visible, onClose }: ProfilePhotoPrevi
                 <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="بازگشت"
-                    hitSlop={8}
                     onPress={onClose}
                     style={styles.backButton}
                 >
@@ -164,7 +162,7 @@ function ProfilePhotoPreviewContent({ uri, visible, onClose }: ProfilePhotoPrevi
                         },
                     ]}
                 >
-                    تصویر
+                    تصویر پروفایل
                 </AppText>
             </View>
             <Animated.View entering={ZoomIn.duration(220)} style={styles.previewContent}>
@@ -203,15 +201,14 @@ const styles = StyleSheet.create({
         direction: 'rtl',
         justifyContent: 'flex-start',
         alignItems: 'center',
-        minHeight: 56,
-        paddingHorizontal: Spacing.three,
+        height: 64,
+        paddingHorizontal: 4,
     },
     backButton: {
-        width: 44,
-        height: 44,
+        width: 40,
+        height: 40,
         alignItems: 'center',
         justifyContent: 'center',
-        marginEnd: Spacing.two,
     },
     title: {
         flexShrink: 1,

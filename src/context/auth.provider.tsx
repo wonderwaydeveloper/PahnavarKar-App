@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
-import { AuthApiError, changePhone as changePhoneRequest, deleteAccount as deleteAccountRequest, deleteProfilePhoto as deleteProfilePhotoRequest, fetchCurrentUser, fetchDevices, getCachedAuthenticatedUser, getDeviceId, getStoredAuthToken, isTemporaryApiFailure, removeStoredAuthToken, revokeAllSessions, revokeCurrentSession, revokeDevice, storeAuthToken, storeCachedAuthenticatedUser, updateInactivityDeletion as updateInactivityDeletionRequest, updateProfile as updateProfileRequest, uploadProfilePhoto as uploadProfilePhotoRequest, verifyOtp, verifyTwoFactorLogin as verifyTwoFactorLoginRequest, type AuthenticatedUser, type AuthDevice } from '@/services/auth-api';
+import { AuthApiError, changePhone as changePhoneRequest, deleteAccount as deleteAccountRequest, deleteProfilePhoto as deleteProfilePhotoRequest, fetchCurrentUser, fetchDevices, getCachedAuthenticatedUser, getDeviceId, getStoredAuthToken, isTemporaryApiFailure, removeStoredAuthToken, revokeAllSessions, revokeCurrentSession, revokeDevice, revokeOtherSessions, storeAuthToken, storeCachedAuthenticatedUser, updateInactivityDeletion as updateInactivityDeletionRequest, updateProfile as updateProfileRequest, uploadProfilePhoto as uploadProfilePhotoRequest, verifyOtp, verifyTwoFactorLogin as verifyTwoFactorLoginRequest, type AuthenticatedUser, type AuthDevice } from '@/services/auth-api';
 import { clearCachedPlanAccess } from '@/services/plan-access-cache';
 import { clearOfflineCacheForUser } from '@/services/offline-cache';
-import { CACHE_KEYS } from '@/services/cache-policy';
+import { clearUserScopedQueries, runSignOutCleanup } from '@/services/auth-query-cache';
 import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 import { useAuthSessionStore } from '@/stores/auth-session.store';
 import { AuthContext, type AuthContextType } from './auth.context';
@@ -26,6 +26,26 @@ async function clearUserOfflineCacheSafely(userId: number | undefined): Promise<
     }
 }
 
+async function persistUpdatedUser(
+    updatedUser: AuthenticatedUser,
+    activeToken: string,
+    setUser: (user: AuthenticatedUser | null) => void,
+    setToken: (token: string | null) => void,
+): Promise<void> {
+    if (useAuthSessionStore.getState().token !== activeToken) {
+        return;
+    }
+
+    setToken(activeToken);
+    setUser(updatedUser);
+
+    try {
+        await storeCachedAuthenticatedUser(updatedUser, activeToken);
+    } catch (error) {
+        console.error('ذخیرهٔ تغییرات حساب در حافظهٔ امن ناموفق بود.', error);
+    }
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
     const queryClient = useQueryClient();
     const user = useAuthSessionStore((state) => state.user);
@@ -40,25 +60,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const setAccountSuspension = useAuthSessionStore((state) => state.setAccountSuspension);
     const clearSession = useAuthSessionStore((state) => state.clearSession);
     const previousAuthenticatedUserId = useRef(user?.id ?? null);
+    const sessionVersion = useRef(0);
 
     useEffect(() => {
         const nextUserId = user?.id ?? null;
         const previousUserId = previousAuthenticatedUserId.current;
-        if (previousUserId !== null && nextUserId !== null && previousUserId !== nextUserId) {
+        if (previousUserId !== null && previousUserId !== nextUserId) {
             void clearUserOfflineCacheSafely(previousUserId);
+            void clearUserScopedQueries(queryClient, [previousUserId]);
         }
         previousAuthenticatedUserId.current = nextUserId;
-    }, [user?.id]);
+    }, [queryClient, user?.id]);
 
-    const clearPlanAccessQueries = useCallback(async () => {
-        await queryClient.cancelQueries({ queryKey: CACHE_KEYS.planAccessPrefix });
-        queryClient.removeQueries({ queryKey: CACHE_KEYS.planAccessPrefix });
+    const clearUserQueries = useCallback(async (userIds?: number[]) => {
+        const ids = userIds ?? [useAuthSessionStore.getState().user?.id].filter(
+            (userId): userId is number => userId !== undefined,
+        );
+        await clearUserScopedQueries(queryClient, ids);
     }, [queryClient]);
 
+    const clearLocalSession = useCallback(() => {
+        sessionVersion.current += 1;
+        clearSession();
+        setIsLoading(false);
+    }, [clearSession, setIsLoading]);
+
     const withActiveSession = useCallback(async <T,>(request: Promise<T>): Promise<T> => {
+        const requestVersion = sessionVersion.current;
         try {
             return await request;
         } catch (error) {
+            if (requestVersion !== sessionVersion.current) throw error;
             if (error instanceof AuthApiError && error.code === 'account_disabled') {
                 const activeToken = token ?? await getStoredAuthToken();
                 let cachedUser: AuthenticatedUser | null = null;
@@ -102,49 +134,61 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     }
                 }
             } else if (error instanceof AuthApiError && error.status === 401) {
-                await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
-                clearSession();
+                const userId = useAuthSessionStore.getState().user?.id;
+                clearLocalSession();
+                await clearUserOfflineCacheSafely(userId);
                 await removeStoredAuthToken();
                 await clearCachedPlanAccess();
-                await clearPlanAccessQueries();
+                await clearUserQueries(userId === undefined ? [] : [userId]);
             }
             throw error;
         }
-    }, [clearPlanAccessQueries, clearSession, setAccountSuspension, setSessionError, setToken, setUser, token]);
+    }, [clearLocalSession, clearUserQueries, setAccountSuspension, setSessionError, setToken, setUser, token]);
 
     const refreshUser = useCallback(async () => {
+        const requestVersion = sessionVersion.current;
         const savedToken = token ?? await getStoredAuthToken();
+        if (requestVersion !== sessionVersion.current) return;
         if (!savedToken) {
-            await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
-            clearSession();
+            const userId = useAuthSessionStore.getState().user?.id;
+            clearLocalSession();
+            await Promise.all([
+                clearUserOfflineCacheSafely(userId),
+                clearUserQueries(userId === undefined ? [] : [userId]),
+            ]);
             setSessionError(null);
             return;
         }
 
         try {
             const currentUser = await fetchCurrentUser(savedToken);
+            if (requestVersion !== sessionVersion.current) return;
             setToken(savedToken);
             setUser(currentUser);
             setAccountSuspension(null);
             setSessionError(null);
             await storeCachedAuthenticatedUser(currentUser, savedToken);
         } catch (error) {
+            if (requestVersion !== sessionVersion.current) throw error;
             if (error instanceof AuthApiError && error.code === 'account_disabled') {
                 const cachedUser = await getCachedAuthenticatedUser(savedToken);
+                if (requestVersion !== sessionVersion.current) throw error;
                 setToken(savedToken);
                 if (cachedUser) setUser(cachedUser);
                 setAccountSuspension({ reason: error.reason, until: error.restrictedUntil });
                 setSessionError(null);
             } else if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
-                await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
+                const userId = useAuthSessionStore.getState().user?.id;
+                clearLocalSession();
+                await clearUserOfflineCacheSafely(userId);
                 await removeStoredAuthToken();
                 await clearCachedPlanAccess();
-                await clearPlanAccessQueries();
-                clearSession();
+                await clearUserQueries(userId === undefined ? [] : [userId]);
                 setSessionError(null);
             } else {
                 if (isTemporaryApiFailure(error)) {
                     const cachedUser = await getCachedAuthenticatedUser(savedToken);
+                    if (requestVersion !== sessionVersion.current) throw error;
                     if (cachedUser) {
                         setToken(savedToken);
                         setUser(cachedUser);
@@ -154,7 +198,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
             throw error;
         }
-    }, [clearPlanAccessQueries, clearSession, setAccountSuspension, setSessionError, setToken, setUser, token]);
+    }, [clearLocalSession, clearUserQueries, setAccountSuspension, setSessionError, setToken, setUser, token]);
 
     useEffect(() => {
         if (!token) return;
@@ -174,13 +218,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     useEffect(() => {
         let isMounted = true;
+        const restoreVersion = sessionVersion.current;
+        const isCurrentRestore = () => isMounted && restoreVersion === sessionVersion.current;
 
         const restoreSession = async () => {
             try {
                 const savedToken = await getStoredAuthToken();
+                if (!isCurrentRestore()) return;
                 if (savedToken) {
                     const currentUser = await fetchCurrentUser(savedToken);
-                    if (isMounted) {
+                    if (isCurrentRestore()) {
                         setToken(savedToken);
                         setUser(currentUser);
                         setAccountSuspension(null);
@@ -189,6 +236,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     }
                 }
             } catch (error) {
+                if (!isCurrentRestore()) return;
                 if (error instanceof AuthApiError && error.code === 'account_disabled') {
                     const savedToken = await getStoredAuthToken();
                     let cachedUser: AuthenticatedUser | null = null;
@@ -197,18 +245,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     } catch (cacheError) {
                         console.error('بازیابی اطلاعات حساب معلق از حافظهٔ امن ناموفق بود.', cacheError);
                     }
-                    if (isMounted && savedToken) {
+                    if (isCurrentRestore() && savedToken) {
                         setToken(savedToken);
                         if (cachedUser) setUser(cachedUser);
                         setAccountSuspension({ reason: error.reason, until: error.restrictedUntil });
                         setSessionError(null);
                     }
                 } else if (error instanceof AuthApiError && (error.status === 401 || error.status === 403)) {
-                    await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
+                    const userId = useAuthSessionStore.getState().user?.id;
+                    clearLocalSession();
+                    await clearUserOfflineCacheSafely(userId);
                     await removeStoredAuthToken();
                     await clearCachedPlanAccess();
-                    await clearPlanAccessQueries();
-                    clearSession();
+                    await clearUserQueries(userId === undefined ? [] : [userId]);
                     setSessionError(null);
                 } else if (isTemporaryApiFailure(error)) {
                     const savedToken = await getStoredAuthToken();
@@ -218,16 +267,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     } catch (cacheError) {
                         console.error('بازیابی هویت آفلاین از حافظهٔ امن ناموفق بود.', cacheError);
                     }
-                    if (isMounted && savedToken && cachedUser) {
+                    if (isCurrentRestore() && savedToken && cachedUser) {
                         setToken(savedToken);
                         setUser(cachedUser);
                     }
                 }
-                if (isMounted && !(error instanceof AuthApiError && error.code === 'account_disabled')) {
+                if (isCurrentRestore() && !(error instanceof AuthApiError && error.code === 'account_disabled')) {
                     setSessionError(errorMessage(error));
                 }
             } finally {
-                if (isMounted) {
+                if (isCurrentRestore()) {
                     setIsLoading(false);
                 }
             }
@@ -238,9 +287,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return () => {
             isMounted = false;
         };
-    }, [clearPlanAccessQueries, clearSession, setAccountSuspension, setIsLoading, setSessionError, setToken, setUser]);
+    }, [clearLocalSession, clearUserQueries, setAccountSuspension, setIsLoading, setSessionError, setToken, setUser]);
 
     const signInWithOtp = useCallback<AuthContextType['signInWithOtp']>(async (input) => {
+        const requestVersion = sessionVersion.current;
         const result = await verifyOtp(input);
         if (result.status === 'profile_required') {
             return 'profile_required';
@@ -250,6 +300,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         const session = result;
+        if (requestVersion !== sessionVersion.current) {
+            throw new Error('درخواست ورود پس از تغییر نشست لغو شد.');
+        }
 
         try {
             await storeAuthToken(session.token, session.user);
@@ -266,19 +319,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         const previousUserId = useAuthSessionStore.getState().user?.id;
+        if (requestVersion !== sessionVersion.current) {
+            await removeStoredAuthToken();
+            throw new Error('درخواست ورود پس از تغییر نشست لغو شد.');
+        }
         if (previousUserId !== undefined && previousUserId !== session.user.id) {
             await clearUserOfflineCacheSafely(previousUserId);
         }
-        await clearPlanAccessQueries();
+        await clearUserQueries([previousUserId, session.user.id].filter(
+            (userId): userId is number => userId !== undefined,
+        ));
+        await clearCachedPlanAccess();
+        if (requestVersion !== sessionVersion.current) {
+            await removeStoredAuthToken();
+            throw new Error('درخواست ورود پس از تغییر نشست لغو شد.');
+        }
+        sessionVersion.current += 1;
         setToken(session.token);
         setUser(session.user);
         setAccountSuspension(null);
         setSessionError(null);
         return 'authenticated';
-    }, [clearPlanAccessQueries, setAccountSuspension, setSessionError, setToken, setUser]);
+    }, [clearUserQueries, setAccountSuspension, setSessionError, setToken, setUser]);
 
     const verifyTwoFactorLogin = useCallback(async (challengeToken: string, code: string) => {
+        const requestVersion = sessionVersion.current;
         const session = await verifyTwoFactorLoginRequest(challengeToken, code);
+        if (requestVersion !== sessionVersion.current) {
+            throw new Error('درخواست ورود پس از تغییر نشست لغو شد.');
+        }
         try {
             await storeAuthToken(session.token, session.user);
         } catch (storageError) {
@@ -294,15 +363,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         const previousUserId = useAuthSessionStore.getState().user?.id;
+        if (requestVersion !== sessionVersion.current) {
+            await removeStoredAuthToken();
+            throw new Error('درخواست ورود پس از تغییر نشست لغو شد.');
+        }
         if (previousUserId !== undefined && previousUserId !== session.user.id) {
             await clearUserOfflineCacheSafely(previousUserId);
         }
-        await clearPlanAccessQueries();
+        await clearUserQueries([previousUserId, session.user.id].filter(
+            (userId): userId is number => userId !== undefined,
+        ));
+        await clearCachedPlanAccess();
+        if (requestVersion !== sessionVersion.current) {
+            await removeStoredAuthToken();
+            throw new Error('درخواست ورود پس از تغییر نشست لغو شد.');
+        }
+        sessionVersion.current += 1;
         setToken(session.token);
         setUser(session.user);
         setAccountSuspension(null);
         setSessionError(null);
-    }, [clearPlanAccessQueries, setAccountSuspension, setSessionError, setToken, setUser]);
+    }, [clearUserQueries, setAccountSuspension, setSessionError, setToken, setUser]);
 
     const uploadProfilePhoto = useCallback(async (uri: string) => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -311,8 +392,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         const updatedUser = await withActiveSession(uploadProfilePhotoRequest(activeToken, uri));
-        setToken(activeToken);
-        setUser(updatedUser);
+        await persistUpdatedUser(updatedUser, activeToken, setUser, setToken);
     }, [setToken, setUser, token, withActiveSession]);
 
     const updateProfile = useCallback(async (input: { name: string }) => {
@@ -320,10 +400,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!activeToken) {
             throw new Error('برای ویرایش پروفایل ابتدا وارد حساب شوید.');
         }
-
         const updatedUser = await withActiveSession(updateProfileRequest(activeToken, input));
-        setToken(activeToken);
-        setUser(updatedUser);
+        await persistUpdatedUser(updatedUser, activeToken, setUser, setToken);
     }, [setToken, setUser, token, withActiveSession]);
 
     const updateInactivityDeletion = useCallback(async (periodMonths: 6 | 12 | 18 | null) => {
@@ -331,10 +409,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!activeToken) {
             throw new Error('برای تغییر تنظیم حذف خودکار ابتدا وارد حساب شوید.');
         }
-
         const updatedUser = await withActiveSession(updateInactivityDeletionRequest(activeToken, periodMonths));
-        setToken(activeToken);
-        setUser(updatedUser);
+        await persistUpdatedUser(updatedUser, activeToken, setUser, setToken);
     }, [setToken, setUser, token, withActiveSession]);
 
     const removeProfilePhoto = useCallback(async () => {
@@ -342,10 +418,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!activeToken) {
             throw new Error('برای ویرایش پروفایل ابتدا وارد حساب شوید.');
         }
-
         const updatedUser = await withActiveSession(deleteProfilePhotoRequest(activeToken));
-        setToken(activeToken);
-        setUser(updatedUser);
+        await persistUpdatedUser(updatedUser, activeToken, setUser, setToken);
     }, [setToken, setUser, token, withActiveSession]);
 
     const changePhone = useCallback(async (phone: string, code: string) => {
@@ -353,10 +427,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!activeToken) {
             throw new Error('برای تغییر شماره ابتدا وارد حساب شوید.');
         }
-
         const updatedUser = await withActiveSession(changePhoneRequest(activeToken, phone, code));
-        setToken(activeToken);
-        setUser(updatedUser);
+        await persistUpdatedUser(updatedUser, activeToken, setUser, setToken);
     }, [setToken, setUser, token, withActiveSession]);
 
     const deleteAccount = useCallback(async (code: string) => {
@@ -366,50 +438,98 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
 
         await withActiveSession(deleteAccountRequest(activeToken, code));
-        await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
-        clearSession();
+        const userId = useAuthSessionStore.getState().user?.id;
+        clearLocalSession();
+        await clearUserOfflineCacheSafely(userId);
         await removeStoredAuthToken();
         await clearCachedPlanAccess();
-        await clearPlanAccessQueries();
-    }, [clearPlanAccessQueries, clearSession, token, withActiveSession]);
+        await clearUserQueries(userId === undefined ? [] : [userId]);
+    }, [clearLocalSession, clearUserQueries, token, withActiveSession]);
 
     const signOut = useCallback(async () => {
-        const activeToken = token ?? await getStoredAuthToken();
-        if (activeToken) {
+        const userId = useAuthSessionStore.getState().user?.id;
+        let activeToken = token;
+        let tokenLookupError: unknown;
+
+        await runSignOutCleanup(async () => {
+            clearLocalSession();
+            if (!activeToken) {
+                try {
+                    activeToken = await getStoredAuthToken();
+                } catch (error) {
+                    tokenLookupError = error;
+                }
+            }
+            const results = await Promise.allSettled([
+                clearUserOfflineCacheSafely(userId),
+                removeStoredAuthToken(),
+                clearCachedPlanAccess(),
+                clearUserQueries(userId === undefined ? [] : [userId]),
+            ]);
+            const failures = results
+                .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+                .map((result) => result.reason);
+            if (tokenLookupError) failures.push(tokenLookupError);
+            if (failures.length > 0) {
+                throw new AggregateError(failures, 'پاک‌سازی محلی نشست کامل نشد.');
+            }
+        }, async () => {
+            if (tokenLookupError) throw tokenLookupError;
+            if (!activeToken) return;
             try {
                 await revokeCurrentSession(activeToken);
             } catch (error) {
-                if (!(error instanceof AuthApiError && error.status === 401)) {
-                    throw error;
-                }
+                if (!(error instanceof AuthApiError && error.status === 401)) throw error;
             }
-        }
-
-        await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
-        clearSession();
-        await removeStoredAuthToken();
-        await clearCachedPlanAccess();
-        await clearPlanAccessQueries();
-    }, [clearPlanAccessQueries, clearSession, token]);
+        });
+    }, [clearLocalSession, clearUserQueries, token]);
 
     const signOutAll = useCallback(async () => {
-        const activeToken = token ?? await getStoredAuthToken();
-        if (activeToken) {
+        const userId = useAuthSessionStore.getState().user?.id;
+        let activeToken = token;
+        let tokenLookupError: unknown;
+
+        await runSignOutCleanup(async () => {
+            clearLocalSession();
+            if (!activeToken) {
+                try {
+                    activeToken = await getStoredAuthToken();
+                } catch (error) {
+                    tokenLookupError = error;
+                }
+            }
+            const results = await Promise.allSettled([
+                clearUserOfflineCacheSafely(userId),
+                removeStoredAuthToken(),
+                clearCachedPlanAccess(),
+                clearUserQueries(userId === undefined ? [] : [userId]),
+            ]);
+            const failures = results
+                .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+                .map((result) => result.reason);
+            if (tokenLookupError) failures.push(tokenLookupError);
+            if (failures.length > 0) {
+                throw new AggregateError(failures, 'پاک‌سازی محلی نشست کامل نشد.');
+            }
+        }, async () => {
+            if (tokenLookupError) throw tokenLookupError;
+            if (!activeToken) return;
             try {
                 await revokeAllSessions(activeToken);
             } catch (error) {
-                if (!(error instanceof AuthApiError && error.status === 401)) {
-                    throw error;
-                }
+                if (!(error instanceof AuthApiError && error.status === 401)) throw error;
             }
+        });
+    }, [clearLocalSession, clearUserQueries, token]);
+
+    const signOutOtherDevices = useCallback(async () => {
+        const activeToken = token ?? await getStoredAuthToken();
+        if (!activeToken) {
+            throw new Error('برای خروج از سایر دستگاه‌ها ابتدا وارد حساب شوید.');
         }
 
-        await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
-        clearSession();
-        await removeStoredAuthToken();
-        await clearCachedPlanAccess();
-        await clearPlanAccessQueries();
-    }, [clearPlanAccessQueries, clearSession, token]);
+        await withActiveSession(revokeOtherSessions(activeToken));
+    }, [token, withActiveSession]);
 
     const getDevices = useCallback(async (): Promise<AuthDevice[]> => {
         const activeToken = token ?? await getStoredAuthToken();
@@ -432,14 +552,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const deviceToRevoke = activeDevices.find((device) => device.id === deviceId);
             await revokeDevice(activeToken, deviceId);
             if (deviceToRevoke?.device_id === currentDeviceId) {
-                await clearUserOfflineCacheSafely(useAuthSessionStore.getState().user?.id);
-                clearSession();
+                const userId = useAuthSessionStore.getState().user?.id;
+                clearLocalSession();
+                await clearUserOfflineCacheSafely(userId);
                 await removeStoredAuthToken();
                 await clearCachedPlanAccess();
-                await clearPlanAccessQueries();
+                await clearUserQueries(userId === undefined ? [] : [userId]);
             }
         })());
-    }, [clearPlanAccessQueries, clearSession, token, withActiveSession]);
+    }, [clearLocalSession, clearUserQueries, token, withActiveSession]);
 
     const value = useMemo<AuthContextType>(() => ({
         user,
@@ -457,9 +578,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         deleteAccount,
         signOut,
         signOutAll,
+        signOutOtherDevices,
         getDevices,
         revokeUserDevice,
-    }), [accountSuspension, changePhone, deleteAccount, getDevices, isLoading, refreshUser, removeProfilePhoto, revokeUserDevice, sessionError, signInWithOtp, signOut, signOutAll, updateInactivityDeletion, updateProfile, uploadProfilePhoto, user, verifyTwoFactorLogin]);
+    }), [accountSuspension, changePhone, deleteAccount, getDevices, isLoading, refreshUser, removeProfilePhoto, revokeUserDevice, sessionError, signInWithOtp, signOut, signOutAll, signOutOtherDevices, updateInactivityDeletion, updateProfile, uploadProfilePhoto, user, verifyTwoFactorLogin]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

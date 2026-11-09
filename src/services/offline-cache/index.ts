@@ -78,6 +78,18 @@ export async function removeOfflineCacheEntry(
     await withOfflineCacheDatabaseLock((database) => deleteEntry(database, userId, namespace, cacheKey));
 }
 
+export async function clearOfflineCacheNamespace(userId: number, namespace: string): Promise<void> {
+    validateCacheAddress(userId, namespace, 'namespace-clear');
+    if (Platform.OS === 'web') return;
+
+    await withOfflineCacheDatabaseLock(async (database) => {
+        await database.runAsync(
+            'DELETE FROM offline_cache_entries WHERE user_id = ? AND namespace = ?;',
+            [userId, namespace],
+        );
+    });
+}
+
 export async function clearOfflineCacheForUser(userId: number): Promise<void> {
     if (!Number.isSafeInteger(userId) || userId < 1) {
         throw new TypeError('شناسهٔ کاربر برای پاک‌کردن داده‌های آفلاین معتبر نیست.');

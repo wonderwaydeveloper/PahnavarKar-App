@@ -1,9 +1,11 @@
 import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Snackbar } from 'react-native-paper';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { onlineManager } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ConfirmationModal } from '@/components/confirmation-modal';
@@ -15,10 +17,12 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
+import { useOnlineStatus } from '@/hooks/use-online-status';
 import { useOtpResendCountdown } from '@/hooks/use-otp-resend-countdown';
 import { useTheme } from '@/hooks/use-theme';
 import { beginTwoFactorEnrollment, confirmTwoFactorEnrollment, disableTwoFactor, fetchTwoFactorStatus, getDeviceId, getStoredAuthToken, sendOtp, type AuthDevice, type TwoFactorEnrollment, type TwoFactorStatus } from '@/services/auth-api';
-import { normalizeOtpCode } from '@/services/iranian-phone';
+import { normalizeOtpCode, toLatinDigits } from '@/services/iranian-phone';
 import { formatPersianDate } from '@/utils/persian-date';
 
 function platformLabel(platform: AuthDevice['platform']): string {
@@ -51,7 +55,7 @@ type ConfirmationAction =
     | { type: 'delete-account'; code: string }
     | { type: 'enable-inactivity-deletion'; period: 6 | 12 | 18 }
     | { type: 'sign-out-current' }
-    | { type: 'sign-out-all' }
+    | { type: 'sign-out-others' }
     | { type: 'revoke-device'; device: AuthDevice };
 
 type SnackbarKind = 'info' | 'success' | 'error';
@@ -60,12 +64,14 @@ type InactivityDeletionPeriod = 6 | 12 | 18 | null;
 export default function PrivacySecurityScreen() {
     const theme = useTheme();
     const router = useRouter();
+    const isFocused = useIsFocused();
+    const isOnline = useOnlineStatus();
     const {
         user,
         getDevices,
         revokeUserDevice,
         signOut,
-        signOutAll,
+        signOutOtherDevices,
         deleteAccount,
         updateInactivityDeletion,
     } = useAuth();
@@ -74,6 +80,11 @@ export default function PrivacySecurityScreen() {
     const securityRestricted = restrictedCapabilities.includes('security');
     const profileRestricted = restrictedCapabilities.includes('profile');
     const [devices, setDevices] = useState<AuthDevice[]>([]);
+    const devicesLoadedRef = useRef(false);
+    const [devicesLoaded, setDevicesLoaded] = useState(false);
+    const [devicesOffline, setDevicesOffline] = useState(false);
+    const [devicesLoading, setDevicesLoading] = useState(true);
+    const [devicesLoadFailed, setDevicesLoadFailed] = useState(false);
     const [deleteCode, setDeleteCode] = useState('');
     const [deleteCodeSent, setDeleteCodeSent] = useState(false);
     const { secondsRemaining: resendSeconds, start: startResendCountdown } = useOtpResendCountdown();
@@ -81,6 +92,11 @@ export default function PrivacySecurityScreen() {
     const [busyAction, setBusyAction] = useState<BusyAction>(null);
     const [pendingInactivityPeriod, setPendingInactivityPeriod] = useState<InactivityDeletionPeriod>(null);
     const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null);
+    const twoFactorStatusLoadedRef = useRef(false);
+    const [twoFactorStatusLoaded, setTwoFactorStatusLoaded] = useState(false);
+    const [twoFactorOffline, setTwoFactorOffline] = useState(false);
+    const [twoFactorStatusLoading, setTwoFactorStatusLoading] = useState(true);
+    const [twoFactorStatusLoadFailed, setTwoFactorStatusLoadFailed] = useState(false);
     const [twoFactorEnrollment, setTwoFactorEnrollment] = useState<TwoFactorEnrollment | null>(null);
     const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState<string[]>([]);
     const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -89,65 +105,120 @@ export default function PrivacySecurityScreen() {
     const [snackbarKind, setSnackbarKind] = useState<SnackbarKind>('info');
     const [confirmationAction, setConfirmationAction] = useState<ConfirmationAction | null>(null);
 
+    const hasOfflineSecurityData = devicesOffline
+        || twoFactorOffline
+        || (!isOnline && (devicesLoaded || twoFactorStatusLoaded));
+    useOfflinePageNotice(!isOnline || hasOfflineSecurityData ? {
+        hasSavedData: hasOfflineSecurityData,
+        message: hasOfflineSecurityData
+            ? 'اطلاعات امنیتی ممکن است به‌روز نباشد.'
+            : 'اتصال به سرور برای اطلاعات امنیتی لازم است.',
+        details: hasOfflineSecurityData
+            ? ['وضعیت نشست‌ها و تأیید دومرحله‌ای تا دریافت پاسخ زنده قابل تأیید نیست.']
+            : ['برای دریافت اطلاعات امنیتی و انجام تغییرات دوباره متصل شوید.'],
+    } : null, isFocused);
+
     const showMessage = (message: string, kind: SnackbarKind = 'info') => {
         setSnackbarKind(kind);
         setSnackbar(message);
     };
 
-    const refreshDevices = useCallback(async () => {
+    const requireOnline = () => {
+        if (onlineManager.isOnline()) return true;
+        showMessage('برای انجام این تغییر امنیتی به اتصال سرور نیاز است.', 'error');
+        return false;
+    };
+
+    const refreshDevices = useCallback(async (isActive: () => boolean = () => true) => {
+        if (!onlineManager.isOnline()) return;
+        setDevicesLoading(true);
+        setDevicesLoadFailed(false);
         try {
-            setDevices(await getDevices());
+            const activeDevices = await getDevices();
+            if (isActive()) {
+                devicesLoadedRef.current = true;
+                setDevicesLoaded(true);
+                setDevices(activeDevices);
+                setDevicesOffline(false);
+            }
         } catch (loadError) {
-            showError(loadError, 'دریافت فهرست دستگاه‌ها ناموفق بود.');
+            if (isActive()) {
+                setDevicesLoadFailed(true);
+                showError(loadError, 'دریافت فهرست دستگاه‌ها ناموفق بود.');
+            }
+        } finally {
+            if (isActive()) setDevicesLoading(false);
         }
     }, [getDevices, showError]);
 
-    useEffect(() => {
-        let isMounted = true;
-        if (user) {
-            void getDevices()
-                .then((activeDevices) => {
-                    if (isMounted) setDevices(activeDevices);
-                })
-                .catch((loadError: unknown) => {
-                    if (isMounted) {
-                        showError(loadError, 'دریافت فهرست دستگاه‌ها ناموفق بود.');
-                    }
-                });
+    const refreshTwoFactorStatus = useCallback(async (isActive: () => boolean = () => true) => {
+        if (!onlineManager.isOnline()) return;
+        setTwoFactorStatusLoading(true);
+        setTwoFactorStatusLoadFailed(false);
+        try {
+            const token = await getStoredAuthToken();
+            if (!token) throw new Error('نشست کاربری برای دریافت وضعیت امنیتی در دسترس نیست.');
+            const status = await fetchTwoFactorStatus(token);
+            if (isActive()) {
+                twoFactorStatusLoadedRef.current = true;
+                setTwoFactorStatusLoaded(true);
+                setTwoFactorStatus(status);
+                setTwoFactorOffline(false);
+            }
+        } catch (loadError) {
+            if (isActive()) {
+                setTwoFactorStatusLoadFailed(true);
+                showError(loadError, 'وضعیت تأیید دومرحله‌ای دریافت نشد.');
+            }
+        } finally {
+            if (isActive()) setTwoFactorStatusLoading(false);
         }
+    }, [showError]);
+
+    useEffect(() => onlineManager.subscribe(() => {
+        if (!onlineManager.isOnline()) {
+            if (devicesLoadedRef.current) setDevicesOffline(true);
+            if (twoFactorStatusLoadedRef.current) setTwoFactorOffline(true);
+        }
+    }), []);
+
+    useFocusEffect(useCallback(() => {
+        let isActive = true;
+        if (user?.id === undefined) {
+            setDevices([]);
+            devicesLoadedRef.current = false;
+            setDevicesLoaded(false);
+            setDevicesOffline(false);
+            setDevicesLoading(false);
+            setTwoFactorStatus(null);
+            twoFactorStatusLoadedRef.current = false;
+            setTwoFactorStatusLoaded(false);
+            setTwoFactorOffline(false);
+            setTwoFactorStatusLoading(false);
+            return () => {
+                isActive = false;
+            };
+        }
+
+        if (!isOnline) {
+            setDevicesLoading(false);
+            setTwoFactorStatusLoading(false);
+            if (!devicesLoadedRef.current) setDevicesLoadFailed(true);
+            if (!twoFactorStatusLoadedRef.current) setTwoFactorStatusLoadFailed(true);
+            return () => {
+                isActive = false;
+            };
+        }
+
+        void refreshDevices(() => isActive);
+        void refreshTwoFactorStatus(() => isActive);
         return () => {
-            isMounted = false;
+            isActive = false;
         };
-    }, [getDevices, showError, user]);
-
-    useEffect(() => {
-        let isMounted = true;
-
-        const loadTwoFactorStatus = async () => {
-            if (!user) {
-                setTwoFactorStatus(null);
-                return;
-            }
-
-            try {
-                const token = await getStoredAuthToken();
-                if (!token) throw new Error('نشست کاربری برای دریافت وضعیت امنیتی در دسترس نیست.');
-                const status = await fetchTwoFactorStatus(token);
-                if (isMounted) setTwoFactorStatus(status);
-            } catch (loadError) {
-                if (isMounted) {
-                    showError(loadError, 'وضعیت تأیید دومرحله‌ای دریافت نشد.');
-                }
-            }
-        };
-
-        void loadTwoFactorStatus();
-        return () => {
-            isMounted = false;
-        };
-    }, [showError, user]);
+    }, [isOnline, refreshDevices, refreshTwoFactorStatus, user?.id]));
 
     const beginTwoFactorSetup = async () => {
+        if (!requireOnline()) return;
         setTwoFactorBusy(true);
         try {
             const token = await getStoredAuthToken();
@@ -163,7 +234,7 @@ export default function PrivacySecurityScreen() {
     };
 
     const confirmTwoFactorSetup = async () => {
-        if (twoFactorBusy) return;
+        if (twoFactorBusy || !requireOnline()) return;
         setTwoFactorBusy(true);
         try {
             const token = await getStoredAuthToken();
@@ -175,6 +246,9 @@ export default function PrivacySecurityScreen() {
                 enabled_at: new Date().toISOString(),
                 recovery_codes_remaining: recoveryCodes.length,
             });
+            twoFactorStatusLoadedRef.current = true;
+            setTwoFactorStatusLoaded(true);
+            setTwoFactorOffline(false);
             setTwoFactorEnrollment(null);
             setTwoFactorCode('');
             showMessage('تأیید دومرحله‌ای فعال شد. کدهای بازیابی را در جای امن نگه دارید.', 'success');
@@ -189,20 +263,22 @@ export default function PrivacySecurityScreen() {
         if (!twoFactorEnrollment) return;
         try {
             await Clipboard.setStringAsync(twoFactorEnrollment.secret);
-            showMessage('کلید راه‌اندازی کپی شد.', 'success');
         } catch (copyError) {
             showError(copyError, 'کپی کلید راه‌اندازی ناموفق بود.');
         }
     };
 
     const turnOffTwoFactor = async () => {
-        if (twoFactorBusy) return;
+        if (twoFactorBusy || !requireOnline()) return;
         setTwoFactorBusy(true);
         try {
             const token = await getStoredAuthToken();
             if (!token) throw new Error('برای تغییر امنیت حساب دوباره وارد شوید.');
-            await disableTwoFactor(token, twoFactorCode.trim().toUpperCase());
+            await disableTwoFactor(token, toLatinDigits(twoFactorCode).trim().toUpperCase());
+            twoFactorStatusLoadedRef.current = true;
+            setTwoFactorStatusLoaded(true);
             setTwoFactorStatus({ enabled: false, enabled_at: null, recovery_codes_remaining: 0 });
+            setTwoFactorOffline(false);
             setTwoFactorCode('');
             setTwoFactorRecoveryCodes([]);
             showMessage('تأیید دومرحله‌ای خاموش شد.', 'success');
@@ -214,6 +290,7 @@ export default function PrivacySecurityScreen() {
     };
 
     const saveInactivityDeletionPeriod = async (period: InactivityDeletionPeriod) => {
+        if (!requireOnline()) return;
         setBusy(true);
         setBusyAction('inactivity');
         setPendingInactivityPeriod(period);
@@ -236,7 +313,7 @@ export default function PrivacySecurityScreen() {
     };
 
     const chooseInactivityDeletionPeriod = async (period: InactivityDeletionPeriod) => {
-        if (busy || period === user?.inactivity_deletion_period_months) return;
+        if (busy || period === user?.inactivity_deletion_period_months || !requireOnline()) return;
 
         if (period !== null) {
             setConfirmationAction({ type: 'enable-inactivity-deletion', period });
@@ -247,6 +324,7 @@ export default function PrivacySecurityScreen() {
     };
 
     const requestDeleteCode = async () => {
+        if (!requireOnline()) return;
         if (!user?.phone) {
             showMessage('شمارهٔ تأییدشده‌ای برای حساب پیدا نشد.', 'error');
             return;
@@ -279,6 +357,7 @@ export default function PrivacySecurityScreen() {
     };
 
     const revokeDevice = async (device: AuthDevice) => {
+        if (!requireOnline()) return;
         setBusy(true);
         try {
             await revokeUserDevice(device.id);
@@ -309,12 +388,14 @@ export default function PrivacySecurityScreen() {
         }
     };
 
-    const confirmSignOutAllDevices = () => {
-        setConfirmationAction({ type: 'sign-out-all' });
+    const confirmSignOutOtherDevices = () => {
+        if (!requireOnline()) return;
+        setConfirmationAction({ type: 'sign-out-others' });
     };
 
     const performConfirmation = async () => {
         if (!confirmationAction || busy) return;
+        if (confirmationAction.type !== 'sign-out-current' && !requireOnline()) return;
 
         if (confirmationAction.type === 'delete-account') {
             setBusy(true);
@@ -336,14 +417,15 @@ export default function PrivacySecurityScreen() {
             return;
         }
 
-        if (confirmationAction.type === 'sign-out-all') {
+        if (confirmationAction.type === 'sign-out-others') {
             setBusy(true);
             try {
-                await signOutAll();
+                await signOutOtherDevices();
                 setConfirmationAction(null);
-                router.replace('/auth');
+                await refreshDevices();
+                showMessage('از سایر دستگاه‌ها خارج شدید. نشست این دستگاه فعال ماند.', 'success');
             } catch (signOutError) {
-                showError(signOutError, 'خروج از همهٔ دستگاه‌ها ناموفق بود.');
+                showError(signOutError, 'خروج از سایر دستگاه‌ها ناموفق بود.');
                 setConfirmationAction(null);
             } finally {
                 setBusy(false);
@@ -371,8 +453,8 @@ export default function PrivacySecurityScreen() {
         ? 'حذف دائمی حساب؟'
         : confirmationAction?.type === 'enable-inactivity-deletion'
             ? 'تأیید فعال‌سازی حذف خودکار؟'
-            : confirmationAction?.type === 'sign-out-all'
-                ? 'خروج از همهٔ دستگاه‌ها؟'
+            : confirmationAction?.type === 'sign-out-others'
+                ? 'خروج از سایر دستگاه‌ها؟'
                 : confirmationAction?.type === 'sign-out-current'
                     ? 'خروج از این دستگاه؟'
                     : 'لغو این نشست؟';
@@ -380,8 +462,8 @@ export default function PrivacySecurityScreen() {
         ? 'با تأیید، حساب شما به‌صورت دائمی حذف خواهد شد:'
         : confirmationAction?.type === 'enable-inactivity-deletion'
             ? `با فعال‌سازی این گزینه و رسیدن مدت بی‌فعالیتی به ${confirmationAction.period} ماه، حذف حساب پس از هشدار پیامکی و مهلت ۳۰روزه انجام خواهد شد:`
-            : confirmationAction?.type === 'sign-out-all'
-                ? 'نشست شما در همهٔ دستگاه‌ها لغو می‌شود و برای استفادهٔ دوباره باید وارد شوید.'
+            : confirmationAction?.type === 'sign-out-others'
+                ? 'نشست‌های فعال در سایر دستگاه‌ها لغو می‌شوند و نشست همین دستگاه برای ادامهٔ استفاده باز می‌ماند.'
                 : confirmationAction?.type === 'sign-out-current'
                     ? 'از این دستگاه خارج می‌شوید. برای استفادهٔ دوباره باید وارد حساب شوید.'
                     : confirmationAction?.type === 'revoke-device'
@@ -403,8 +485,8 @@ export default function PrivacySecurityScreen() {
         ? 'حذف دائمی'
         : confirmationAction?.type === 'enable-inactivity-deletion'
             ? 'فعال‌سازی'
-            : confirmationAction?.type === 'sign-out-all'
-                ? 'خروج از همه'
+            : confirmationAction?.type === 'sign-out-others'
+                ? 'خروج از بقیه'
                 : confirmationAction?.type === 'sign-out-current'
                     ? 'خروج'
                     : 'لغو نشست';
@@ -431,7 +513,14 @@ export default function PrivacySecurityScreen() {
                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
                         با برنامهٔ احراز هویت، ورود به حساب را ایمن‌تر کنید. این گزینه اختیاری و در حالت پیش‌فرض خاموش است.
                     </ThemedText>
-                    {twoFactorStatus?.enabled ? (
+                    {twoFactorStatusLoading && twoFactorStatus === null ? (
+                        <View style={styles.loadingRow}>
+                            <ActivityIndicator size="small" color={theme.primary} />
+                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                در حال بررسی وضعیت تأیید دومرحله‌ای…
+                            </ThemedText>
+                        </View>
+                    ) : twoFactorStatus?.enabled ? (
                         <>
                             <ThemedText type="smallBold" style={{ color: theme.success }}>
                                 فعال است · {twoFactorStatus.recovery_codes_remaining} کد بازیابی باقی مانده
@@ -455,40 +544,58 @@ export default function PrivacySecurityScreen() {
                                 label="خاموش‌کردن تأیید دومرحله‌ای"
                                 icon="shield-off-outline"
                                 busy={twoFactorBusy}
-                                disabled={securityRestricted}
+                                disabled={!isOnline || twoFactorOffline || twoFactorStatusLoading || twoFactorStatusLoadFailed || securityRestricted}
                                 onPress={() => void turnOffTwoFactor()}
                                 theme={theme}
                             />
                         </>
                     ) : (
                         <>
-                            {twoFactorEnrollment ? (
+                            {twoFactorStatusLoadFailed && twoFactorStatus === null ? (
+                                <>
+                                    {!isOnline ? (
+                                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                            برای بررسی وضعیت تأیید دومرحله‌ای اتصال به سرور لازم است.
+                                        </ThemedText>
+                                    ) : null}
+                                    <ActionButton
+                                        label="تلاش دوباره برای دریافت وضعیت"
+                                        icon="refresh"
+                                        disabled={!isOnline}
+                                        onPress={() => void refreshTwoFactorStatus()}
+                                        theme={theme}
+                                    />
+                                </>
+                            ) : twoFactorEnrollment ? (
                                 <>
                                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
                                         این کلید را در برنامهٔ احراز هویت خود وارد کنید. راه‌اندازی تا ۱۰ دقیقه معتبر است.
                                     </ThemedText>
-                                    <ThemedText selectable type="code" style={[styles.twoFactorSecret, { color: theme.text, backgroundColor: theme.surfaceContainerHigh }]}>
-                                        {twoFactorEnrollment.secret}
-                                    </ThemedText>
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        accessibilityLabel="کپی کلید راه‌اندازی تأیید دومرحله‌ای"
-                                        onPress={() => void copyTwoFactorSecret()}
-                                        style={({ pressed }) => [
-                                            styles.copySecretButton,
-                                            {
-                                                backgroundColor: theme.primary,
-                                                borderColor: theme.border,
-                                                opacity: pressed ? 0.7 : 1,
-                                            },
-                                        ]}
-                                    >
-                                        <MaterialCommunityIcons name="content-copy" size={18} color={theme.onPrimary} />
-                                        <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>کپی کلید</ThemedText>
-                                    </Pressable>
+                                    <View style={[styles.twoFactorSecretCard, { borderColor: theme.border }]}>
+                                        <ThemedText selectable type="code" style={[styles.twoFactorSecret, { color: theme.text }]}>
+                                            {twoFactorEnrollment.secret}
+                                        </ThemedText>
+                                        <View style={[styles.twoFactorSecretDivider, { backgroundColor: theme.border }]} />
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="کپی کلید راه‌اندازی تأیید دومرحله‌ای"
+                                            onPress={() => void copyTwoFactorSecret()}
+                                            style={({ pressed }) => [
+                                                styles.copySecretButton,
+                                                {
+                                                    backgroundColor: theme.primary,
+                                                    borderColor: theme.primary,
+                                                    opacity: pressed ? 0.7 : 1,
+                                                },
+                                            ]}
+                                        >
+                                            <MaterialCommunityIcons name="content-copy" size={18} color={theme.onPrimary} />
+                                            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>کپی کلید</ThemedText>
+                                        </Pressable>
+                                    </View>
                                     <OtpCodeInput
                                         accessibilityLabel="کد برنامه برای فعال‌سازی تأیید دومرحله‌ای"
-                                        disabled={twoFactorBusy || securityRestricted}
+                                        disabled={twoFactorBusy || !isOnline || twoFactorOffline || twoFactorStatusLoading || twoFactorStatusLoadFailed || securityRestricted}
                                         label="کد ۶ رقمی برنامه"
                                         onChangeText={setTwoFactorCode}
                                         value={twoFactorCode}
@@ -497,7 +604,7 @@ export default function PrivacySecurityScreen() {
                                         label="تأیید و فعال‌سازی"
                                         icon="check"
                                         busy={twoFactorBusy}
-                                        disabled={securityRestricted || twoFactorCode.length !== 6}
+                                        disabled={!isOnline || twoFactorOffline || twoFactorStatusLoading || twoFactorStatusLoadFailed || securityRestricted || twoFactorCode.length !== 6}
                                         onPress={() => void confirmTwoFactorSetup()}
                                         theme={theme}
                                     />
@@ -507,13 +614,30 @@ export default function PrivacySecurityScreen() {
                                     label="راه‌اندازی تأیید دومرحله‌ای"
                                     icon="shield-key-outline"
                                     busy={twoFactorBusy || twoFactorStatus === null}
-                                    disabled={securityRestricted || twoFactorStatus === null}
+                                    disabled={!isOnline || twoFactorOffline || twoFactorStatusLoading || twoFactorStatusLoadFailed || securityRestricted || twoFactorStatus === null}
                                     onPress={() => void beginTwoFactorSetup()}
                                     theme={theme}
                                 />
                             )}
                         </>
                     )}
+                    {twoFactorStatusLoading && twoFactorStatus !== null ? (
+                        <View style={styles.loadingRow}>
+                            <ActivityIndicator size="small" color={theme.primary} />
+                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                در حال تأیید زندهٔ وضعیت…
+                            </ThemedText>
+                        </View>
+                    ) : null}
+                    {twoFactorStatusLoadFailed && twoFactorStatus !== null ? (
+                        <ActionButton
+                            label="تلاش دوباره برای تأیید وضعیت"
+                            icon="refresh"
+                            disabled={!isOnline}
+                            onPress={() => void refreshTwoFactorStatus()}
+                            theme={theme}
+                        />
+                    ) : null}
                     {twoFactorRecoveryCodes.length > 0 ? (
                         <View style={[styles.recoveryCodes, { backgroundColor: theme.surfaceVariant }]}>
                             <ThemedText type="smallBold">کدهای بازیابی؛ هر کد فقط یک‌بار قابل استفاده است</ThemedText>
@@ -560,14 +684,14 @@ export default function PrivacySecurityScreen() {
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel={`لغو نشست ${device.device_name || 'دستگاه'}`}
-                                        disabled={busy || securityRestricted}
+                                        disabled={busy || !isOnline || devicesOffline || securityRestricted}
                                         onPress={() => setConfirmationAction({ type: 'revoke-device', device })}
                                         style={({ pressed }) => [
                                             styles.revokeDeviceButton,
                                             {
                                                 borderColor: theme.border,
                                                 backgroundColor: theme.primary,
-                                                opacity: pressed || busy ? 0.72 : 1,
+                                                opacity: pressed || busy || !isOnline || devicesOffline ? 0.55 : 1,
                                             },
                                         ]}
                                     >
@@ -626,7 +750,29 @@ export default function PrivacySecurityScreen() {
                             </View>
                         </View>
                     ))}
-                    {devices.length === 0 ? (
+                    {devicesLoading ? (
+                        <View style={styles.loadingRow}>
+                            <ActivityIndicator size="small" color={theme.primary} />
+                            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                در حال دریافت فهرست دستگاه‌ها…
+                            </ThemedText>
+                        </View>
+                    ) : devicesLoadFailed ? (
+                        <>
+                            {!isOnline && !devicesLoaded ? (
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    برای دریافت فهرست دستگاه‌ها اتصال به سرور لازم است.
+                                </ThemedText>
+                            ) : null}
+                            <ActionButton
+                                label="تلاش دوباره برای دریافت دستگاه‌ها"
+                                icon="refresh"
+                                disabled={!isOnline}
+                                onPress={() => void refreshDevices()}
+                                theme={theme}
+                            />
+                        </>
+                    ) : devices.length === 0 ? (
                         <ThemedText type="small" style={{ color: theme.textSecondary }}>دستگاه فعالی ثبت نشده است.</ThemedText>
                     ) : null}
                     <View style={[styles.divider, { backgroundColor: theme.border }]} />
@@ -638,10 +784,10 @@ export default function PrivacySecurityScreen() {
                         theme={theme}
                     />
                     <ActionButton
-                        label="خروج از همهٔ دستگاه‌ها"
+                        label="خروج از سایر دستگاه‌ها"
                         icon="logout-variant"
-                        disabled={busy}
-                        onPress={confirmSignOutAllDevices}
+                        disabled={!isOnline || busy || securityRestricted}
+                        onPress={confirmSignOutOtherDevices}
                         theme={theme}
                     />
                 </Section>
@@ -710,7 +856,7 @@ export default function PrivacySecurityScreen() {
                             { value: 18, label: '۱۸ ماه' },
                         ] as const).map((option, index) => {
                             const selected = user.inactivity_deletion_period_months === option.value;
-                            const optionDisabled = busy || profileRestricted || (
+                            const optionDisabled = !isOnline || busy || profileRestricted || (
                                 option.value !== null
                                 && !user.phone_verified_at
                                 && !selected
@@ -770,7 +916,7 @@ export default function PrivacySecurityScreen() {
                     ) : null}
                     {deleteCodeSent ? (
                         <OtpResendControl
-                            disabled={busy}
+                            disabled={busy || !isOnline}
                             label="ارسال دوبارهٔ کد حذف"
                             onPress={() => void requestDeleteCode()}
                             secondsRemaining={resendSeconds}
@@ -780,7 +926,7 @@ export default function PrivacySecurityScreen() {
                         label={deleteCodeSent ? 'حذف دائمی حساب' : 'درخواست کد تأیید حذف'}
                         icon="delete-outline"
                         busy={busyAction === 'delete-code'}
-                        disabled={busy}
+                        disabled={!isOnline || busy}
                         onPress={() => void (deleteCodeSent ? confirmDeleteAccount() : requestDeleteCode())}
                         theme={theme}
                     />
@@ -798,7 +944,7 @@ export default function PrivacySecurityScreen() {
                 onCancel={() => setConfirmationAction(null)}
                 onConfirm={performConfirmation}
             />
-            <Snackbar
+            <Snackbar variant="error"
                 visible={Boolean(snackbar)}
                 onDismiss={() => setSnackbar('')}
                 duration={4500}
@@ -885,7 +1031,7 @@ function ActionButton({
         >
             {busy ? <ActivityIndicator size="small" color={color} /> : <MaterialCommunityIcons name={icon} size={19} color={color} />}
             <ThemedText type="smallBold" style={{ color }}>{label}</ThemedText>
-            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.textMuted} style={styles.actionChevron} />
+            <MaterialCommunityIcons name="chevron-left" size={20} color={color} style={styles.actionChevron} />
         </Pressable>
     );
 }
@@ -924,20 +1070,31 @@ const styles = StyleSheet.create({
     pendingDeletion: { borderRadius: Radius.md, padding: Spacing.three, flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
     pendingDeletionText: { flex: 1 },
     section: { gap: Spacing.one },
+    loadingRow: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
     sectionHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginHorizontal: Spacing.one },
     sectionIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
     sectionBody: { borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two },
-    twoFactorSecret: { borderRadius: Radius.md, padding: Spacing.three, textAlign: 'center', letterSpacing: 2 },
+    twoFactorSecretCard: {
+        width: '100%',
+        alignSelf: 'stretch',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderRadius: Radius.md,
+        padding: Spacing.two,
+    },
+    twoFactorSecret: { width: '100%', textAlign: 'center', letterSpacing: 2, paddingVertical: Spacing.two },
+    twoFactorSecretDivider: { width: '100%', height: StyleSheet.hairlineWidth },
     copySecretButton: {
+        width: '100%',
         minHeight: 44,
-        alignSelf: 'flex-start',
+        alignSelf: 'stretch',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: Spacing.one,
         borderWidth: 1,
         borderRadius: Radius.md,
-        paddingHorizontal: Spacing.three,
+        paddingHorizontal: Spacing.two,
+        marginTop: Spacing.two,
     },
     recoveryCodes: { borderRadius: Radius.md, padding: Spacing.three, gap: Spacing.two },
     profileInput: { minHeight: 54, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: Spacing.three, fontSize: Typography.fontSize.bodyLarge },

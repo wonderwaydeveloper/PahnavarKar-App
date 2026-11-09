@@ -18,9 +18,11 @@ import { getLegalRouteHref } from '@/components/legal/legal-route-utils';
 import type { LegalSearchResult } from '@/database';
 import { searchLegalContent } from '@/database';
 import { useTheme } from '@/hooks/use-theme';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { usePlanAccess } from '@/hooks/use-plan-access';
 import { getUserFacingErrorMessage } from '@/services/user-facing-error';
 import { hasPlanFeature } from '@/utils/plan-access';
+import { normalizeSearchText } from '@/utils/search-text';
 
 type SearchAction = ToolDefinition & {
     searchText: string;
@@ -40,23 +42,7 @@ type SearchSection = {
     data: SearchRow[];
 };
 
-const persianDigits = '۰۱۲۳۴۵۶۷۸۹';
-const latinDigits = '0123456789';
 const SEARCH_DEBOUNCE_MS = 300;
-const ARABIC_DIACRITICS_PATTERN = /[\u064B-\u065F\u0670\u06D6-\u06ED]/g;
-const SEARCH_WHITESPACE_PATTERN = /[\u200C\s]+/g;
-
-function normalizeSearchText(value: string) {
-    return value
-        .normalize('NFKC')
-        .toLocaleLowerCase('fa-IR')
-        .replace(/[يى]/g, 'ی')
-        .replace(/ك/g, 'ک')
-        .replace(ARABIC_DIACRITICS_PATTERN, '')
-        .replace(/[۰-۹]/g, (digit) => latinDigits[persianDigits.indexOf(digit)])
-        .replace(SEARCH_WHITESPACE_PATTERN, ' ')
-        .trim();
-}
 
 const ACTION_DEFINITIONS: SearchAction[] = TOOL_DEFINITIONS.map((tool) => ({
     ...tool,
@@ -69,9 +55,23 @@ export default function SearchTabScreen() {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const { planAccess, isLoading: planAccessLoading, error: planAccessError, refresh: refreshPlanAccess } = usePlanAccess();
+    const {
+        planAccess,
+        isLoading: planAccessLoading,
+        error: planAccessError,
+        refresh: refreshPlanAccess,
+        isUsingOfflineData,
+    } = usePlanAccess();
     const hasResolvedAccess = !planAccessLoading && !planAccessError && planAccess !== null;
     const legalAccess = hasResolvedAccess && hasPlanFeature(planAccess, 'legal_library');
+    useOfflinePageNotice(isUsingOfflineData && planAccess !== null ? {
+        message: 'وضعیت دسترسی پلن ممکن است به‌روز نباشد.',
+        details: [
+            'نتایج بر اساس آخرین دسترسی تأییدشدهٔ ذخیره‌شده نمایش داده می‌شوند.',
+            'پس از اتصال، دسترسی دوباره از سرور بررسی می‌شود.',
+        ],
+        hasSavedData: true,
+    } : null);
     const [query, setQuery] = useState('');
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [scope, setScope] = useState<SearchScope>('all');

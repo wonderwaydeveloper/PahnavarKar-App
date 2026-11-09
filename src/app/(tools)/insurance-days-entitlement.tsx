@@ -3,7 +3,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Card, Snackbar } from 'react-native-paper';
+import { Card } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button } from '@/components/font-aware-paper';
@@ -746,7 +747,7 @@ export default function InsuranceDaysEntitlementScreen() {
                 maxMinutesAtMaxHour={20}
             />
 
-            <Snackbar
+            <Snackbar variant="error"
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}

@@ -2,7 +2,8 @@ import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Card, Snackbar } from 'react-native-paper';
+import { Card } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CalculationDescriptionBox, CalculationResultHeading } from '@/components/calculation-card-sections';
@@ -284,7 +285,7 @@ export default function UnemploymentInsuranceEntitlementScreen() {
                 </SafeAreaView>
             </ScrollView>
 
-            <Snackbar
+            <Snackbar variant="error"
                 visible={snackbarVisible}
                 onDismiss={() => setSnackbarVisible(false)}
                 duration={5000}

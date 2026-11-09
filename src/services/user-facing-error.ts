@@ -99,7 +99,7 @@ export function getUserFacingErrorMessage(error: unknown, fallback: string): str
         const localizedResponse = isPersianMessage(responseMessage) ? responseMessage : null;
         switch (getAppErrorCategory(error)) {
             case 'network':
-                return 'ارتباط با سرور برقرار نشد. اتصال اینترنت خود را بررسی کنید و دوباره تلاش کنید.';
+                return localizedResponse ?? 'ارتباط با سرور برقرار نشد. دوباره تلاش کنید.';
             case 'timeout':
                 return 'زمان انتظار برای پاسخ سرور به پایان رسید. دوباره تلاش کنید.';
             case 'unauthorized':
@@ -128,7 +128,7 @@ export function getUserFacingErrorMessage(error: unknown, fallback: string): str
         return 'زمان انتظار برای پاسخ به پایان رسید. دوباره تلاش کنید.';
     }
     if (error instanceof TypeError) {
-        return 'ارتباط برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.';
+        return 'ارتباط با سرور برقرار نشد. دوباره تلاش کنید.';
     }
     return message && isPersianMessage(message) ? message : fallback;
 }

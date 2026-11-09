@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CACHE_POLICY } from '@/services/cache-policy';
-import { fetchPlanCatalog, isTemporaryApiFailure, type PlanAccess } from '@/services/auth-api';
+import { AuthApiError, fetchPlanCatalog, isTemporaryApiFailure, type PlanAccess } from '@/services/auth-api';
 
 const GUEST_PLAN_ACCESS_CACHE_KEY = CACHE_POLICY.storage.guestPlanAccess.key;
 export const GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS = CACHE_POLICY.storage.guestPlanAccess.maxAgeMs;
@@ -13,6 +13,7 @@ interface CachedGuestPlanAccess {
 export interface GuestPlanAccessLease {
     plan: PlanAccess;
     validUntil: number;
+    isOffline: boolean;
 }
 
 function isPlanAccess(value: unknown): value is PlanAccess {
@@ -63,6 +64,7 @@ export async function getCachedGuestPlanAccess(): Promise<GuestPlanAccessLease |
     return {
         plan: value.plan,
         validUntil: value.cachedAt + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS,
+        isOffline: true,
     };
 }
 
@@ -79,6 +81,7 @@ async function storeGuestPlanAccess(plan: PlanAccess): Promise<GuestPlanAccessLe
     return {
         plan,
         validUntil: cachedAt + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS,
+        isOffline: false,
     };
 }
 
@@ -96,7 +99,7 @@ export async function loadGuestPlanAccess(): Promise<GuestPlanAccessLease> {
             return cachedPlan;
         }
 
-        throw new Error('دسترسی آفلاین معتبری در دستگاه ذخیره نشده است. برای دریافت دسترسی، به اینترنت وصل شوید و دوباره تلاش کنید.');
+        throw new AuthApiError('دسترسی آفلاین معتبری در دستگاه ذخیره نشده است. برای دریافت دسترسی، به سرور متصل شوید و دوباره تلاش کنید.', 0);
     }
 
     const freePlan = catalog.tiers.find((tier) => tier.key === 'free');
@@ -111,6 +114,7 @@ export async function loadGuestPlanAccess(): Promise<GuestPlanAccessLease> {
         return {
             plan: freePlan,
             validUntil: Date.now() + GUEST_PLAN_ACCESS_CACHE_MAX_AGE_MS,
+            isOffline: false,
         };
     }
 }

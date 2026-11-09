@@ -1,10 +1,16 @@
 import { describe, expect, it, jest } from '@jest/globals';
 
 import { FONT_SIZE_SCALE, getScaledTextStyle } from '@/constants/font-scale';
+import { getAppColorPalette } from '@/constants/theme';
 import { Typography } from '@/constants/typography';
 import { getAppFontStyle, getAppPaperTheme } from '@/services/font-service';
 
 jest.mock('@/global.css', () => ({}));
+
+function withAlpha(hex: string, alpha: number): string {
+    const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+    return `rgba(${channels.join(', ')}, ${alpha})`;
+}
 
 describe('app font size preference', () => {
     it('centralizes the approved existing font-size and line-height baselines unchanged', () => {
@@ -63,10 +69,39 @@ describe('app font size preference', () => {
     });
 
     it('applies the selected scale to React Native Paper typography', () => {
-        const standard = getAppPaperTheme('light', 'system', 'default', 'standard');
-        const enlarged = getAppPaperTheme('light', 'system', 'default', 'extraLarge');
+        const colors = getAppColorPalette('default', 'light');
+        const standard = getAppPaperTheme('light', 'system', colors, 'standard');
+        const enlarged = getAppPaperTheme('light', 'system', colors, 'extraLarge');
 
         expect(enlarged.fonts.bodyMedium.fontSize).toBe(standard.fonts.bodyMedium.fontSize * FONT_SIZE_SCALE.extraLarge);
         expect(enlarged.fonts.bodyMedium.lineHeight).toBe(standard.fonts.bodyMedium.lineHeight * FONT_SIZE_SCALE.extraLarge);
+    });
+
+    it('synchronizes Paper surface, elevation, and disabled roles with the selected palette', () => {
+        const colors = getAppColorPalette('yellow', 'light', 75);
+        const paperTheme = getAppPaperTheme('light', 'system', colors);
+
+        expect(paperTheme.colors.primary).toBe(colors.primary);
+        expect(paperTheme.colors.onPrimary).toBe(colors.onPrimary);
+        expect(paperTheme.colors.surfaceContainer).toBe(colors.surfaceContainer);
+        expect(paperTheme.colors.surfaceDisabled).toBe(withAlpha(colors.text, 0.12));
+        expect(paperTheme.colors.onSurfaceDisabled).toBe(withAlpha(colors.text, 0.38));
+        expect(paperTheme.colors.elevation.level1).toBe(colors.surfaceContainerLow);
+        expect(paperTheme.colors.elevation.level2).toBe(colors.surfaceContainer);
+        expect(paperTheme.colors.elevation.level3).toBe(colors.surfaceContainerHigh);
+        expect(paperTheme.colors.elevation.level4).toBe(colors.surfaceContainerHighest);
+        expect(paperTheme.colors.elevation.level5).toBe(colors.surfaceContainerHighest);
+    });
+
+    it('reuses the selected color roles for dark Paper surfaces and disabled states', () => {
+        const colors = getAppColorPalette('red', 'dark', 25);
+        const paperTheme = getAppPaperTheme('dark', 'system', colors);
+
+        expect(paperTheme.colors.surface).toBe(colors.surface);
+        expect(paperTheme.colors.onSurface).toBe(colors.text);
+        expect(paperTheme.colors.surfaceDisabled).toBe(withAlpha(colors.text, 0.12));
+        expect(paperTheme.colors.onSurfaceDisabled).toBe(withAlpha(colors.text, 0.38));
+        expect(paperTheme.colors.elevation.level1).toBe(colors.surfaceContainerLow);
+        expect(paperTheme.colors.elevation.level3).toBe(colors.surfaceContainerHigh);
     });
 });

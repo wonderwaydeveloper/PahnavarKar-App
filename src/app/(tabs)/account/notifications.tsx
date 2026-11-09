@@ -2,12 +2,12 @@ import { Typography } from '@/constants/typography';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants, { AppOwnership } from 'expo-constants';
 import * as Device from 'expo-device';
-import { useFocusEffect } from 'expo-router';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useIsFocused } from 'expo-router';
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, FlatList, LayoutChangeEvent, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { TabView, type NavigationState, type SceneRendererProps } from 'react-native-tab-view';
-import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import { Snackbar } from 'react-native-paper';
+import { onlineManager, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ConfirmationModal } from '@/components/confirmation-modal';
@@ -17,7 +17,8 @@ import { ThemedView } from '@/components/themed-view';
 import { Radius, Spacing } from '@/constants/theme';
 import { useAuth } from '@/hooks/use-auth';
 import { useAppFeedback } from '@/hooks/use-app-feedback';
-import { useOnlineRefetch } from '@/hooks/use-online-refetch';
+import { useOnlineStatus } from '@/hooks/use-online-status';
+import { useOfflinePageNotice } from '@/hooks/use-offline-page-notice';
 import { useTheme } from '@/hooks/use-theme';
 import { CACHE_KEYS, CACHE_POLICY } from '@/services/cache-policy';
 import {
@@ -38,7 +39,13 @@ import {
     type PaginatedResult,
 } from '@/services/auth-api';
 import { getUserFacingErrorMessage } from '@/services/user-facing-error';
-import { formatPersianDate } from '@/utils/persian-date';
+import {
+    fetchWithOfflineFallback,
+    isNotificationCountsCacheValue,
+    withOfflineCacheMetadata,
+    type OfflineAware,
+} from '@/services/account-offline-cache';
+import { clearOfflineCacheNamespace } from '@/services/offline-cache';
 
 const categories: { key: NotificationCategory; label: string; icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'] }[] = [
     { key: 'account_access', label: 'حساب و دسترسی', icon: 'account-lock-outline' },
@@ -48,9 +55,11 @@ const categories: { key: NotificationCategory; label: string; icon: React.Compon
     { key: 'service', label: 'خدمات سامانه', icon: 'application-cog-outline' },
     { key: 'announcement', label: 'اطلاعیه‌های رسمی', icon: 'bullhorn-outline' },
 ];
+const categoriesByKey = new Map(categories.map((category) => [category.key, category]));
 
 type NotificationFilter = 'all' | 'unread' | NotificationCategory;
-type NotificationInboxData = InfiniteData<PaginatedResult<InboxNotification>, number>;
+type NotificationInboxPage = OfflineAware<PaginatedResult<InboxNotification>>;
+type NotificationInboxData = InfiniteData<NotificationInboxPage, number>;
 type PendingNotificationUndo = {
     token: string;
     deletedCount: number;
@@ -60,8 +69,7 @@ type PendingNotificationUndo = {
 
 function formatUndoCountdown(milliseconds: number): string {
     const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
-    const format = new Intl.NumberFormat('fa-IR', { minimumIntegerDigits: 2, useGrouping: false });
-    return `${format.format(Math.floor(totalSeconds / 60))}:${format.format(totalSeconds % 60)}`;
+    return `${persianTwoDigitFormatter.format(Math.floor(totalSeconds / 60))}:${persianTwoDigitFormatter.format(totalSeconds % 60)}`;
 }
 
 const notificationQueryKeys = {
@@ -93,6 +101,61 @@ const priorityLabels = {
 const LONG_NOTIFICATION_BODY_LENGTH = 300;
 const NOTIFICATION_BODY_PREVIEW_LINES = 4;
 const isExpoGo = Constants.appOwnership === AppOwnership.Expo;
+const NOTIFICATION_OFFLINE_CACHE = CACHE_POLICY.offline.entries.notificationInbox;
+const persianNumberFormatter = new Intl.NumberFormat('fa-IR');
+const persianTwoDigitFormatter = new Intl.NumberFormat('fa-IR', {
+    minimumIntegerDigits: 2,
+    useGrouping: false,
+});
+const notificationDateFormatter = new Intl.DateTimeFormat('fa-IR', {
+    dateStyle: 'long',
+    calendar: 'persian',
+    numberingSystem: 'arabext',
+});
+const notificationTimeFormatter = new Intl.DateTimeFormat('fa-IR', {
+    timeStyle: 'short',
+    calendar: 'persian',
+    numberingSystem: 'arabext',
+});
+const EMPTY_NOTIFICATIONS: InboxNotification[] = [];
+const NotificationUnreadCountContext = createContext(0);
+
+function isInboxNotification(value: unknown): value is InboxNotification {
+    if (!value || typeof value !== 'object') return false;
+    const notification = value as Partial<InboxNotification>;
+    return Number.isSafeInteger(notification.id)
+        && categories.some((category) => category.key === notification.category)
+        && (notification.priority === 'normal'
+            || notification.priority === 'important'
+            || notification.priority === 'urgent')
+        && typeof notification.title === 'string'
+        && typeof notification.body === 'string'
+        && (notification.event === null || typeof notification.event === 'string')
+        && (notification.data === null
+            || (typeof notification.data === 'object' && !Array.isArray(notification.data)))
+        && (notification.read_at === null || typeof notification.read_at === 'string')
+        && typeof notification.created_at === 'string';
+}
+
+function isNotificationPage(value: unknown): value is PaginatedResult<InboxNotification> {
+    if (!value || typeof value !== 'object') return false;
+    const page = value as Partial<PaginatedResult<InboxNotification>>;
+    const meta = page.meta;
+    return Array.isArray(page.data)
+        && page.data.every(isInboxNotification)
+        && Boolean(meta && Number.isSafeInteger(meta.current_page) && meta.current_page > 0)
+        && Number.isSafeInteger(meta?.last_page) && (meta?.last_page ?? 0) > 0
+        && Number.isSafeInteger(meta?.per_page) && (meta?.per_page ?? 0) > 0
+        && Number.isSafeInteger(meta?.total) && (meta?.total ?? -1) >= 0;
+}
+
+function getNotificationPageCacheKey(filter: NotificationFilter, page: number): string {
+    return JSON.stringify([filter, page]);
+}
+
+function getNotificationOfflineMarkerKey(userId: number, filter: NotificationFilter | 'counts'): string {
+    return JSON.stringify([userId, filter]);
+}
 
 function updateCachedNotificationLists(
     queryClient: ReturnType<typeof useQueryClient>,
@@ -108,21 +171,26 @@ function updateCachedNotificationLists(
         const activeFilter = notificationFilters.find((item) => item.key === filter)?.key;
         if (!cachedList || !activeFilter) continue;
 
-        queryClient.setQueryData<NotificationInboxData>(queryKey, {
-            ...cachedList,
-            pages: cachedList.pages.map((page) => {
-                const data = page.data.flatMap((notification) => {
-                    const updated = update(notification, activeFilter);
-                    return updated ? [updated] : [];
-                });
-                const removedCount = page.data.length - data.length;
-                return {
-                    ...page,
-                    data,
-                    meta: { ...page.meta, total: Math.max(0, page.meta.total - removedCount) },
-                };
-            }),
+        let listChanged = false;
+        const pages = cachedList.pages.map((page) => {
+            let pageChanged = false;
+            const data = page.data.flatMap((notification) => {
+                const updated = update(notification, activeFilter);
+                if (updated === notification) return [notification];
+                pageChanged = true;
+                return updated ? [updated] : [];
+            });
+            if (!pageChanged) return page;
+
+            listChanged = true;
+            const removedCount = page.data.length - data.length;
+            return {
+                ...page,
+                data,
+                meta: { ...page.meta, total: Math.max(0, page.meta.total - removedCount) },
+            };
         });
+        if (listChanged) queryClient.setQueryData<NotificationInboxData>(queryKey, { ...cachedList, pages });
     }
 }
 
@@ -140,22 +208,22 @@ function notificationDayTitle(value: string): string {
     yesterday.setDate(yesterday.getDate() - 1);
     if (notificationDayKey(value) === notificationDayKey(today)) return 'امروز';
     if (notificationDayKey(value) === notificationDayKey(yesterday)) return 'دیروز';
-    return formatPersianDate(date, { dateStyle: 'long' }) ?? 'زمان نامشخص';
+    return notificationDateFormatter.format(date);
 }
 
 function notificationTime(value: string): string {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return 'زمان نامشخص';
-    return formatPersianDate(date, { timeStyle: 'short' }) ?? 'زمان نامشخص';
+    return notificationTimeFormatter.format(date);
 }
 
 type NotificationFilterTabProps = {
     filter: NotificationRoute;
     isActive: boolean;
-    unreadCount: number;
+    unreadCount?: number;
     theme: ReturnType<typeof useTheme>;
-    onPress: () => void;
-    onLayout: (event: LayoutChangeEvent) => void;
+    onSelect: (key: string) => void;
+    onTabLayout: (key: string, event: LayoutChangeEvent) => void;
 };
 
 const NotificationFilterTab = memo(function NotificationFilterTab({
@@ -163,10 +231,15 @@ const NotificationFilterTab = memo(function NotificationFilterTab({
     isActive,
     unreadCount,
     theme,
-    onPress,
-    onLayout,
+    onSelect,
+    onTabLayout,
 }: NotificationFilterTabProps) {
     const [indicatorProgress] = useState(() => new Animated.Value(isActive ? 1 : 0));
+    const handlePress = useCallback(() => onSelect(filter.key), [filter.key, onSelect]);
+    const handleLayout = useCallback(
+        (event: LayoutChangeEvent) => onTabLayout(filter.key, event),
+        [filter.key, onTabLayout],
+    );
 
     useEffect(() => {
         Animated.spring(indicatorProgress, {
@@ -183,8 +256,8 @@ const NotificationFilterTab = memo(function NotificationFilterTab({
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
             accessibilityLabel={filter.label}
-            onPress={onPress}
-            onLayout={onLayout}
+            onPress={handlePress}
+            onLayout={handleLayout}
             style={({ pressed }) => [
                 styles.filterTab,
                 { backgroundColor: pressed ? theme.surfaceVariant : theme.surface },
@@ -205,7 +278,7 @@ const NotificationFilterTab = memo(function NotificationFilterTab({
             {filter.showUnreadCount ? (
                 <View style={[styles.filterCount, { backgroundColor: isActive ? theme.primary : theme.backgroundElement }]}>
                     <ThemedText type="smallBold" style={{ color: isActive ? theme.onPrimary : theme.text }}>
-                        {new Intl.NumberFormat('fa-IR').format(unreadCount)}
+                        {persianNumberFormatter.format(unreadCount ?? 0)}
                     </ThemedText>
                 </View>
             ) : null}
@@ -233,6 +306,10 @@ function NotificationFilterTabBar({ navigationState, jumpTo, theme, unreadCount 
     const scrollViewRef = useRef<ScrollViewInstance>(null);
     const tabLayouts = useRef<Record<string, { x: number; width: number }>>({});
     const [viewportWidth, setViewportWidth] = useState(0);
+    const handleTabLayout = useCallback((key: string, event: LayoutChangeEvent) => {
+        const { x, width } = event.nativeEvent.layout;
+        tabLayouts.current[key] = { x, width };
+    }, []);
 
     useEffect(() => {
         const activeRoute = navigationState.routes[navigationState.index];
@@ -260,13 +337,10 @@ function NotificationFilterTabBar({ navigationState, jumpTo, theme, unreadCount 
                         key={route.key}
                         filter={route}
                         isActive={navigationState.index === index}
-                        unreadCount={unreadCount}
+                        unreadCount={route.showUnreadCount ? unreadCount : undefined}
                         theme={theme}
-                        onPress={() => jumpTo(route.key)}
-                        onLayout={(event) => {
-                            const { x, width } = event.nativeEvent.layout;
-                            tabLayouts.current[route.key] = { x, width };
-                        }}
+                        onSelect={jumpTo}
+                        onTabLayout={handleTabLayout}
                     />
                 ))}
             </ScrollView>
@@ -276,10 +350,16 @@ function NotificationFilterTabBar({ navigationState, jumpTo, theme, unreadCount 
 
 type NotificationFilterSceneProps = {
     filter: NotificationFilter;
+    isActive: boolean;
+    isScreenFocused: boolean;
+    isOnline: boolean;
+    offlineInboxMarked: boolean;
+    offlineCountsMarked: boolean;
     userId: number | null;
     theme: ReturnType<typeof useTheme>;
     bottomInset: number;
-    unreadCount: number;
+    countsOfflineCacheSavedAt?: number;
+    countsHasData: boolean;
     settingsVisible: boolean;
     visibleErrorMessage: string | null;
     undoBarVisible: boolean;
@@ -287,20 +367,64 @@ type NotificationFilterSceneProps = {
     deletingNotificationId: number | null;
     deletingReadNotifications: boolean;
     onRefreshCounts: () => Promise<unknown>;
+    onLiveInboxRefresh: (filter: NotificationFilter) => void;
     onRetry: () => void;
     onOpenSettings: () => void;
-    expandedNotificationIds: Set<number>;
-    onToggleExpanded: (notificationId: number) => void;
     onOpenNotification: (item: InboxNotification) => void;
     onRequestDelete: (item: InboxNotification) => void;
 };
 
+type NotificationInboxHeadingProps = {
+    settingsVisible: boolean;
+    theme: ReturnType<typeof useTheme>;
+    onOpenSettings: () => void;
+};
+
+const NotificationInboxHeading = memo(function NotificationInboxHeading({
+    settingsVisible,
+    theme,
+    onOpenSettings,
+}: NotificationInboxHeadingProps) {
+    const unreadCount = useContext(NotificationUnreadCountContext);
+
+    return (
+        <View style={styles.timelineHeading}>
+            <ThemedText type="bodyBold" style={{ color: theme.text }}>صندوق اعلان‌ها</ThemedText>
+            <View style={styles.headerActions}>
+                <View style={[styles.unreadCount, { backgroundColor: theme.primary }]}>
+                    <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
+                        {persianNumberFormatter.format(unreadCount)} خوانده‌نشده
+                    </ThemedText>
+                </View>
+                <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="تنظیمات اعلان‌ها"
+                    accessibilityState={{ expanded: settingsVisible }}
+                    onPress={onOpenSettings}
+                    style={({ pressed }) => [
+                        styles.settingsButton,
+                        { backgroundColor: pressed ? theme.surfaceVariant : theme.surface, borderColor: theme.border },
+                    ]}
+                >
+                    <MaterialCommunityIcons name="cog-outline" size={20} color={theme.textSecondary} />
+                </Pressable>
+            </View>
+        </View>
+    );
+});
+
 const NotificationFilterScene = memo(function NotificationFilterScene({
     filter,
+    isActive,
+    isScreenFocused,
+    isOnline,
+    offlineInboxMarked,
+    offlineCountsMarked,
     userId,
     theme,
     bottomInset,
-    unreadCount,
+    countsOfflineCacheSavedAt,
+    countsHasData,
     settingsVisible,
     visibleErrorMessage,
     undoBarVisible,
@@ -308,66 +432,104 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
     deletingNotificationId,
     deletingReadNotifications,
     onRefreshCounts,
+    onLiveInboxRefresh,
     onRetry,
     onOpenSettings,
-    expandedNotificationIds,
-    onToggleExpanded,
     onOpenNotification,
     onRequestDelete,
 }: NotificationFilterSceneProps) {
+    const [expandedNotificationIds, setExpandedNotificationIds] = useState<Set<number>>(() => new Set());
+    const isFetchingNextPageRef = useRef(false);
     const category = categories.find((item) => item.key === filter)?.key ?? null;
     const unreadOnly = filter === 'unread';
     const query = useInfiniteQuery({
         queryKey: notificationQueryKeys.inbox(userId ?? 0, filter),
-        enabled: userId !== null,
+        enabled: userId !== null && isActive && isScreenFocused,
         initialPageParam: 1,
         queryFn: async ({ pageParam }) => {
             const token = await getStoredAuthToken();
             if (!token) throw new Error('برای مشاهدهٔ اعلان‌ها وارد حساب شوید.');
-            return fetchNotificationInbox(token, {
-                page: pageParam,
-                category: category ?? undefined,
-                unreadOnly,
-            });
+            if (userId === null) throw new Error('برای مشاهدهٔ اعلان‌ها وارد حساب شوید.');
+            const result = await fetchWithOfflineFallback(
+                userId,
+                {
+                    ...NOTIFICATION_OFFLINE_CACHE,
+                    key: getNotificationPageCacheKey(filter, pageParam),
+                },
+                () => fetchNotificationInbox(token, {
+                    page: pageParam,
+                    category: category ?? undefined,
+                    unreadOnly,
+                }),
+                isNotificationPage,
+                { isOnline: onlineManager.isOnline() },
+            );
+            return withOfflineCacheMetadata(result);
         },
         getNextPageParam: (lastPage) => lastPage.meta.current_page < lastPage.meta.last_page
             ? lastPage.meta.current_page + 1
             : undefined,
         staleTime: CACHE_POLICY.query.resources.notificationInbox.staleTimeMs,
         retry: false,
+        networkMode: 'always',
     });
-    const items = query.data?.pages.flatMap((page) => page.data) ?? [];
+    const items = useMemo(
+        () => query.data?.pages.flatMap((page) => page.data) ?? EMPTY_NOTIFICATIONS,
+        [query.data?.pages],
+    );
+    const notificationDayKeys = useMemo(
+        () => items.map((item) => notificationDayKey(item.created_at)),
+        [items],
+    );
     const loading = userId !== null && query.isPending;
+    const hasOfflineInboxData = query.data?.pages.some((page) => page.offlineCacheSavedAt !== undefined) ?? false;
+    const hasOfflineNotificationData = hasOfflineInboxData
+        || offlineInboxMarked
+        || offlineCountsMarked
+        || countsOfflineCacheSavedAt !== undefined
+        || (!isOnline && (query.data !== undefined || countsHasData));
+    const refetchInbox = query.refetch;
+    useEffect(() => {
+        if (!isOnline || !isActive || !isScreenFocused) return;
+        if (!hasOfflineInboxData && !offlineInboxMarked) return;
+        void refetchInbox().then((result) => {
+            if (result.isSuccess && result.data.pages.every((page) => page.offlineCacheSavedAt === undefined)) {
+                onLiveInboxRefresh(filter);
+            }
+        });
+    }, [filter, hasOfflineInboxData, isActive, isOnline, isScreenFocused, offlineInboxMarked, onLiveInboxRefresh, refetchInbox]);
+    useOfflinePageNotice(isScreenFocused && isActive && hasOfflineNotificationData ? {
+        hasSavedData: true,
+        message: 'اعلان‌های ذخیره‌شده ممکن است به‌روز نباشند.',
+        details: [
+            'اعلان‌های جدید پس از اتصال دوباره همگام می‌شوند.',
+            'وضعیت خوانده‌شدن اعلان‌ها ممکن است تازه نباشد.',
+        ],
+    } : null, isScreenFocused && isActive);
     const queryError = query.error
         ? getUserFacingErrorMessage(query.error, 'دریافت اعلان‌ها ناموفق بود.')
         : null;
-    const activeCategory = categories.find((item) => item.key === category);
+    const activeCategory = category ? categoriesByKey.get(category) : undefined;
+    const toggleExpandedNotification = useCallback((notificationId: number) => {
+        setExpandedNotificationIds((current) => {
+            const next = new Set(current);
+            if (next.has(notificationId)) {
+                next.delete(notificationId);
+            } else {
+                next.add(notificationId);
+            }
+            return next;
+        });
+    }, []);
 
     return (
         <View style={styles.scene}>
             <View style={styles.headerContent}>
-                <View style={styles.timelineHeading}>
-                    <ThemedText type="bodyBold" style={{ color: theme.text }}>صندوق اعلان‌ها</ThemedText>
-                    <View style={styles.headerActions}>
-                        <View style={[styles.unreadCount, { backgroundColor: theme.primary }]}>
-                            <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
-                                {new Intl.NumberFormat('fa-IR').format(unreadCount)} خوانده‌نشده
-                            </ThemedText>
-                        </View>
-                        <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel="تنظیمات اعلان‌ها"
-                            accessibilityState={{ expanded: settingsVisible }}
-                            onPress={onOpenSettings}
-                            style={({ pressed }) => [
-                                styles.settingsButton,
-                                { backgroundColor: pressed ? theme.surfaceVariant : theme.surface, borderColor: theme.border },
-                            ]}
-                        >
-                            <MaterialCommunityIcons name="cog-outline" size={20} color={theme.textSecondary} />
-                        </Pressable>
-                    </View>
-                </View>
+                <NotificationInboxHeading
+                    settingsVisible={settingsVisible}
+                    theme={theme}
+                    onOpenSettings={onOpenSettings}
+                />
                 {visibleErrorMessage ? (
                     <ErrorNoticeCard message={visibleErrorMessage} onRetry={onRetry} />
                 ) : null}
@@ -378,16 +540,30 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
             <FlatList
                 data={items}
                 keyExtractor={(item) => String(item.id)}
+                initialNumToRender={8}
+                maxToRenderPerBatch={8}
+                windowSize={7}
+                removeClippedSubviews={Platform.OS === 'android'}
                 contentContainerStyle={[
                     styles.listContent,
                     { paddingBottom: bottomInset + Spacing.four + (undoBarVisible ? 88 : 0) },
                 ]}
                 onRefresh={() => {
-                    void Promise.all([query.refetch(), onRefreshCounts()]);
+                    void query.refetch().then((result) => {
+                        if (result.isSuccess && result.data.pages.every((page) => page.offlineCacheSavedAt === undefined)) {
+                            onLiveInboxRefresh(filter);
+                        }
+                    });
+                    void onRefreshCounts();
                 }}
                 refreshing={query.isRefetching}
                 onEndReached={() => {
-                    if (query.hasNextPage && !query.isFetchingNextPage) void query.fetchNextPage();
+                    if (!query.hasNextPage || query.isFetchingNextPage || isFetchingNextPageRef.current) return;
+                    isFetchingNextPageRef.current = true;
+                    void query.fetchNextPage().then(
+                        () => { isFetchingNextPageRef.current = false; },
+                        () => { isFetchingNextPageRef.current = false; },
+                    );
                 }}
                 onEndReachedThreshold={0.4}
                 ListEmptyComponent={loading ? (
@@ -420,11 +596,11 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                     ? <ActivityIndicator color={theme.primary} style={styles.footerLoader} />
                     : undefined}
                 renderItem={({ item, index }) => {
-                    const selectedCategory = categories.find((entry) => entry.key === item.category);
-                    const previousItem = items[index - 1];
+                    const selectedCategory = categoriesByKey.get(item.category);
                     const nextItem = items[index + 1];
-                    const startsDay = index === 0 || notificationDayKey(previousItem?.created_at ?? '') !== notificationDayKey(item.created_at);
-                    const endsDay = !nextItem || notificationDayKey(nextItem.created_at) !== notificationDayKey(item.created_at);
+                    const itemDayKey = notificationDayKeys[index];
+                    const startsDay = index === 0 || notificationDayKeys[index - 1] !== itemDayKey;
+                    const endsDay = !nextItem || notificationDayKeys[index + 1] !== itemDayKey;
                     const hasLongBody = item.body.length > LONG_NOTIFICATION_BODY_LENGTH;
                     const isBodyExpanded = expandedNotificationIds.has(item.id);
 
@@ -460,7 +636,7 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                                         accessibilityRole="button"
                                         accessibilityLabel={`${item.title}، ${item.read_at ? 'خوانده‌شده' : 'خوانده‌نشده'}${item.priority !== 'normal' ? `، ${priorityLabels[item.priority]}` : ''}`}
                                         accessibilityHint={item.read_at ? undefined : 'برای ثبت به‌عنوان خوانده‌شده لمس کنید.'}
-                                        disabled={Boolean(item.read_at)}
+                                        disabled={Boolean(item.read_at) || !isOnline}
                                         onPress={() => onOpenNotification(item)}
                                         style={({ pressed }) => [
                                             styles.notificationContent,
@@ -490,7 +666,13 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                                                     </ThemedText>
                                                 </View>
                                             ) : null}
-                                            {!item.read_at ? <View style={[styles.unreadMarker, { backgroundColor: theme.primary }]} /> : null}
+                                            {!item.read_at ? (
+                                                <View style={[styles.unreadStatus, { backgroundColor: theme.primaryContainer }]}>
+                                                    <ThemedText type="smallBold" style={{ color: theme.primaryText }}>
+                                                        خوانده‌نشده
+                                                    </ThemedText>
+                                                </View>
+                                            ) : null}
                                         </View>
                                         <ThemedText type="smallBold" style={{ color: theme.text }}>{item.title}</ThemedText>
                                         <ThemedText
@@ -508,7 +690,7 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                                                     accessibilityRole="button"
                                                     accessibilityLabel={`${isBodyExpanded ? 'جمع‌کردن متن' : 'نمایش متن کامل'} اعلان ${item.title}`}
                                                     accessibilityState={{ expanded: isBodyExpanded }}
-                                                    onPress={() => onToggleExpanded(item.id)}
+                                                    onPress={() => toggleExpandedNotification(item.id)}
                                                     style={({ pressed }) => [
                                                         styles.detailsLink,
                                                         { opacity: pressed ? 0.65 : 1 },
@@ -523,13 +705,13 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
                                         <Pressable
                                             accessibilityRole="button"
                                             accessibilityLabel={`حذف اعلان ${item.title}`}
-                                            disabled={deletingNotificationId !== null || deletingReadNotifications || undoBusy}
-                                            accessibilityState={{ disabled: deletingNotificationId !== null || deletingReadNotifications || undoBusy }}
+                                            disabled={!isOnline || deletingNotificationId !== null || deletingReadNotifications || undoBusy}
+                                            accessibilityState={{ disabled: !isOnline || deletingNotificationId !== null || deletingReadNotifications || undoBusy }}
                                             onPress={() => onRequestDelete(item)}
                                             style={({ pressed }) => [
                                                 styles.deleteButton,
                                                 { backgroundColor: pressed ? theme.errorFill : theme.surfaceVariant },
-                                                { opacity: deletingNotificationId !== null || deletingReadNotifications || undoBusy ? 0.55 : 1 },
+                                                { opacity: !isOnline || deletingNotificationId !== null || deletingReadNotifications || undoBusy ? 0.55 : 1 },
                                             ]}
                                         >
                                             {deletingNotificationId === item.id
@@ -550,10 +732,87 @@ const NotificationFilterScene = memo(function NotificationFilterScene({
     );
 });
 
+type NotificationUndoBarProps = {
+    pendingCount: number;
+    expiresAt: number;
+    busy: boolean;
+    isOnline: boolean;
+    isScreenFocused: boolean;
+    theme: ReturnType<typeof useTheme>;
+    onUndo: () => void;
+};
+
+const NotificationUndoBar = memo(function NotificationUndoBar({
+    pendingCount,
+    expiresAt,
+    busy,
+    isOnline,
+    isScreenFocused,
+    theme,
+    onUndo,
+}: NotificationUndoBarProps) {
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        if (!isScreenFocused) return;
+
+        const interval = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(interval);
+    }, [isScreenFocused]);
+
+    const countdown = formatUndoCountdown(expiresAt - now);
+
+    return (
+        <View
+            accessibilityLabel={`حذف ${pendingCount} اعلان. فرصت بازگردانی ${countdown}`}
+            style={[
+                styles.undoBar,
+                {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                    bottom: Spacing.two,
+                },
+            ]}
+        >
+            <View style={[styles.undoIcon, { backgroundColor: theme.surfaceVariant }]}>
+                <MaterialCommunityIcons name="delete-restore" size={20} color={theme.primaryText} />
+            </View>
+            <View style={styles.undoCopy}>
+                <ThemedText type="smallBold" style={{ color: theme.text }}>
+                    {pendingCount === 1 ? 'اعلان حذف شد' : `${persianNumberFormatter.format(pendingCount)} اعلان حذف شد`}
+                </ThemedText>
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                    فرصت بازگردانی: {countdown}
+                </ThemedText>
+            </View>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`بازگردانی ${pendingCount} اعلان`}
+                accessibilityState={{ disabled: busy || !isOnline }}
+                disabled={busy || !isOnline}
+                onPress={onUndo}
+                style={({ pressed }) => [
+                    styles.undoButton,
+                    {
+                        backgroundColor: theme.primary,
+                        opacity: busy || !isOnline ? 0.65 : pressed ? 0.8 : 1,
+                    },
+                ]}
+            >
+                {busy
+                    ? <ActivityIndicator size="small" color={theme.onPrimary} />
+                    : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>بازگردانی</ThemedText>}
+            </Pressable>
+        </View>
+    );
+});
+
 export default function NotificationsScreen() {
     const theme = useTheme();
     const insets = useSafeAreaInsets();
     const { width } = useWindowDimensions();
+    const isScreenFocused = useIsFocused();
+    const isOnline = useOnlineStatus();
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const { showError } = useAppFeedback();
@@ -567,87 +826,129 @@ export default function NotificationsScreen() {
     const [pushEnabled, setPushEnabled] = useState(false);
     const [pushBusy, setPushBusy] = useState(false);
     const [pushStatusLoading, setPushStatusLoading] = useState(true);
+    const [pushStatusUnavailable, setPushStatusUnavailable] = useState(false);
     const [pushMessage, setPushMessage] = useState<string | null>(null);
     const [pushMessageKind, setPushMessageKind] = useState<'success' | 'error'>('success');
     const [undoOperations, setUndoOperations] = useState<PendingNotificationUndo[]>([]);
-    const [undoCountdownNow, setUndoCountdownNow] = useState(0);
     const [deletingNotificationId, setDeletingNotificationId] = useState<number | null>(null);
     const [deletingReadNotifications, setDeletingReadNotifications] = useState(false);
     const [undoBusy, setUndoBusy] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const [expandedNotificationIds, setExpandedNotificationIds] = useState<Set<number>>(() => new Set());
+    const [offlineNotificationDataKeys, setOfflineNotificationDataKeys] = useState<Set<string>>(() => new Set());
     const hasInitializedNotificationFocus = useRef(false);
     const undoBusyRef = useRef(false);
 
     const countsQuery = useQuery({
         queryKey: notificationQueryKeys.counts(userId ?? 0),
-        enabled: userId !== null,
+        enabled: userId !== null && isScreenFocused,
         queryFn: async () => {
             const token = await getStoredAuthToken();
             if (!token) throw new Error('برای مشاهدهٔ اعلان‌ها وارد حساب شوید.');
-            return fetchNotificationCounts(token);
+            if (userId === null) throw new Error('برای مشاهدهٔ اعلان‌ها وارد حساب شوید.');
+            const result = await fetchWithOfflineFallback(
+                userId,
+                {
+                    ...NOTIFICATION_OFFLINE_CACHE,
+                    key: 'counts',
+                },
+                () => fetchNotificationCounts(token),
+                isNotificationCountsCacheValue,
+                { isOnline: onlineManager.isOnline() },
+            );
+            return withOfflineCacheMetadata(result);
         },
         staleTime: CACHE_POLICY.query.resources.notificationCounts.staleTimeMs,
         retry: false,
+        networkMode: 'always',
     });
 
     const unreadCount = countsQuery.data?.unread_count ?? 0;
     const readCount = countsQuery.data?.read_count ?? 0;
+    const countsMarkedOffline = userId !== null && offlineNotificationDataKeys.has(
+        getNotificationOfflineMarkerKey(userId, 'counts'),
+    );
+    const refetchCounts = countsQuery.refetch;
+    const clearOfflineNotificationMarker = useCallback((filter: NotificationFilter | 'counts') => {
+        if (userId === null) return;
+        const markerKey = getNotificationOfflineMarkerKey(userId, filter);
+        setOfflineNotificationDataKeys((current) => {
+            if (!current.has(markerKey)) return current;
+            const next = new Set(current);
+            next.delete(markerKey);
+            return next;
+        });
+    }, [userId]);
+    const refreshCounts = useCallback(async () => {
+        const result = await refetchCounts();
+        if (result.isSuccess && result.data.offlineCacheSavedAt === undefined) {
+            clearOfflineNotificationMarker('counts');
+        }
+        return result;
+    }, [clearOfflineNotificationMarker, refetchCounts]);
     const notificationQueryError = countsQuery.error
         ? getUserFacingErrorMessage(countsQuery.error, 'دریافت شمارندهٔ اعلان‌ها ناموفق بود.')
         : null;
     const visibleErrorMessage = errorMessage ?? notificationQueryError;
-    const loadNotifications = () => {
+    const loadNotifications = useCallback(() => {
         if (userId === null) return;
         void Promise.all([
             queryClient.invalidateQueries({
-                queryKey: notificationQueryKeys.inbox(userId, activeFilter),
-            }),
-            queryClient.invalidateQueries({
-                queryKey: notificationQueryKeys.counts(userId),
-            }),
-        ]);
-    };
-    useOnlineRefetch(() => {
-        if (userId === null) return;
-        void Promise.all([
-            queryClient.refetchQueries({
                 queryKey: notificationQueryKeys.inboxPrefix(userId),
-                type: 'active',
             }),
-            queryClient.refetchQueries({
+            queryClient.invalidateQueries({
                 queryKey: notificationQueryKeys.counts(userId),
-                type: 'active',
             }),
         ]);
-    }, userId !== null);
-    const invalidateNotificationQueries = () => {
-        if (userId === null) return;
-        void Promise.all([
-            queryClient.invalidateQueries({ queryKey: notificationQueryKeys.inboxPrefix(userId) }),
-            queryClient.invalidateQueries({ queryKey: notificationQueryKeys.counts(userId) }),
-        ]);
-    };
-
+    }, [queryClient, userId]);
     useEffect(() => {
-        if (undoOperations.length === 0) return;
+        if (userId === null) return;
 
-        const updateCountdown = () => {
-            const now = Date.now();
-            setUndoCountdownNow(now);
-            setUndoOperations((current) => current.filter((operation) => operation.expiresAt > now));
+        const markCachedNotificationDataOffline = () => {
+            if (onlineManager.isOnline()) return;
+            const markers = new Set<string>();
+            for (const [queryKey, data] of queryClient.getQueriesData<NotificationInboxData>({
+                queryKey: notificationQueryKeys.inboxPrefix(userId),
+            })) {
+                const filter = queryKey[2];
+                const matchedFilter = notificationFilters.find((item) => item.key === filter)?.key;
+                if (!data?.pages.length || !matchedFilter) continue;
+                markers.add(getNotificationOfflineMarkerKey(userId, matchedFilter));
+            }
+
+            if (queryClient.getQueryData(notificationQueryKeys.counts(userId)) !== undefined) {
+                markers.add(getNotificationOfflineMarkerKey(userId, 'counts'));
+            }
+            if (markers.size === 0) return;
+            setOfflineNotificationDataKeys((current) => {
+                if ([...markers].every((marker) => current.has(marker))) return current;
+                return new Set([...current, ...markers]);
+            });
         };
-        const interval = setInterval(updateCountdown, 1000);
-        return () => clearInterval(interval);
-    }, [undoOperations.length]);
+        markCachedNotificationDataOffline();
+        const unsubscribeOnline = onlineManager.subscribe(markCachedNotificationDataOffline);
+        return () => {
+            unsubscribeOnline();
+        };
+    }, [queryClient, userId]);
+    const invalidateNotificationQueries = useCallback(() => {
+        if (userId === null) return;
+        void clearOfflineCacheNamespace(userId, NOTIFICATION_OFFLINE_CACHE.namespace)
+            .catch((error: unknown) => {
+                console.error('پاک‌کردن کش آفلاین اعلان‌ها ناموفق بود.', error);
+            })
+            .finally(() => Promise.all([
+                queryClient.invalidateQueries({ queryKey: notificationQueryKeys.inboxPrefix(userId) }),
+                queryClient.invalidateQueries({ queryKey: notificationQueryKeys.counts(userId) }),
+            ]));
+    }, [queryClient, userId]);
 
-    const updateCachedCounts = (update: (counts: NotificationCounts) => NotificationCounts) => {
+    const updateCachedCounts = useCallback((update: (counts: NotificationCounts) => NotificationCounts) => {
         if (userId === null) return;
         queryClient.setQueryData<NotificationCounts>(
             notificationQueryKeys.counts(userId),
             (current) => current ? update(current) : current,
         );
-    };
+    }, [queryClient, userId]);
 
     useFocusEffect(useCallback(() => {
         if (userId === null) return;
@@ -655,25 +956,43 @@ export default function NotificationsScreen() {
             hasInitializedNotificationFocus.current = true;
             return;
         }
+        if (!isOnline) return;
 
         void queryClient.refetchQueries({
             queryKey: notificationQueryKeys.inboxPrefix(userId),
             stale: true,
             type: 'active',
         });
-        void queryClient.refetchQueries({
-            queryKey: notificationQueryKeys.counts(userId),
-            stale: true,
-            type: 'active',
-        });
-    }, [queryClient, userId]));
+        const counts = queryClient.getQueryData<OfflineAware<NotificationCounts>>(
+            notificationQueryKeys.counts(userId),
+        );
+        if (
+            counts?.offlineCacheSavedAt !== undefined
+            || countsMarkedOffline
+        ) {
+            void refreshCounts();
+        } else {
+            void queryClient.refetchQueries({
+                queryKey: notificationQueryKeys.counts(userId),
+                stale: true,
+                type: 'active',
+            });
+        }
+    }, [countsMarkedOffline, isOnline, queryClient, refreshCounts, userId]));
 
     useFocusEffect(useCallback(() => {
+        if (!settingsVisible) return;
+
         let isMounted = true;
 
         const loadPushStatus = async () => {
             if (!user) {
                 setPushEnabled(false);
+                setPushStatusLoading(false);
+                return;
+            }
+            if (!isOnline) {
+                setPushStatusUnavailable(true);
                 setPushStatusLoading(false);
                 return;
             }
@@ -683,6 +1002,7 @@ export default function NotificationsScreen() {
                 const token = await getStoredAuthToken();
                 if (!token) throw new Error('نشست کاربری برای بررسی وضعیت اعلان‌ها در دسترس نیست.');
                 const enabled = await fetchPushSubscriptionStatus(token);
+                if (isMounted) setPushStatusUnavailable(false);
                 if (isExpoGo) {
                     if (isMounted) setPushEnabled(enabled);
                     return;
@@ -693,6 +1013,7 @@ export default function NotificationsScreen() {
                 if (isMounted) setPushEnabled(enabled && permission.status === 'granted');
             } catch (error) {
                 if (isMounted) {
+                    setPushStatusUnavailable(true);
                     showError(error, 'وضعیت اعلان‌ها دریافت نشد.');
                 }
             } finally {
@@ -704,10 +1025,10 @@ export default function NotificationsScreen() {
         return () => {
             isMounted = false;
         };
-    }, [showError, user]));
+    }, [isOnline, settingsVisible, showError, user]));
 
     const togglePushNotifications = async () => {
-        if (pushBusy) return;
+        if (pushBusy || !isOnline) return;
         setPushBusy(true);
         try {
             const token = await getStoredAuthToken();
@@ -763,7 +1084,7 @@ export default function NotificationsScreen() {
     };
 
     const deleteOne = async (item: InboxNotification) => {
-        if (!user || deletingNotificationId !== null || undoBusy) return;
+        if (!isOnline || !user || deletingNotificationId !== null || undoBusy) return;
         setDeletingNotificationId(item.id);
         try {
             const token = await getStoredAuthToken();
@@ -784,7 +1105,6 @@ export default function NotificationsScreen() {
                         ...current.filter((operation) => operation.token !== undoToken),
                         { token: undoToken, deletedCount: result.deleted_count, expiresAt, userId: user.id },
                     ]);
-                    setUndoCountdownNow(Date.now());
                     setPushMessage(null);
                 } else {
                     setPushMessage('اعلان حذف شد، اما زمان بازگردانی از سرور معتبر نبود.');
@@ -802,13 +1122,13 @@ export default function NotificationsScreen() {
     };
 
     const deleteAllRead = async () => {
-        if (!user || deletingReadNotifications || readCount === 0) return;
+        if (!isOnline || !user || deletingReadNotifications || readCount === 0) return;
         setSettingsVisible(false);
         setDeleteReadConfirmationVisible(true);
     };
 
     const performDeleteAllRead = async () => {
-        if (!user || deletingReadNotifications || readCount === 0 || undoBusy) return;
+        if (!isOnline || !user || deletingReadNotifications || readCount === 0 || undoBusy) return;
         setDeletingReadNotifications(true);
         try {
             const token = await getStoredAuthToken();
@@ -830,7 +1150,6 @@ export default function NotificationsScreen() {
                         ...current.filter((operation) => operation.token !== undoToken),
                         { token: undoToken, deletedCount: result.deleted_count, expiresAt, userId: user.id },
                     ]);
-                    setUndoCountdownNow(Date.now());
                     setPushMessage(null);
                 } else {
                     setPushMessage('اعلان‌ها حذف شدند، اما زمان بازگردانی از سرور معتبر نبود.');
@@ -850,9 +1169,9 @@ export default function NotificationsScreen() {
         }
     };
 
-    const undoDelete = async () => {
+    const undoDelete = useCallback(async () => {
         const activeOperations = undoOperations.filter((operation) => operation.userId === user?.id);
-        if (!user || activeOperations.length === 0 || undoBusyRef.current) return;
+        if (!isOnline || !user || activeOperations.length === 0 || undoBusyRef.current) return;
         undoBusyRef.current = true;
         setUndoBusy(true);
         const pending = activeOperations;
@@ -875,14 +1194,11 @@ export default function NotificationsScreen() {
                 ...current.filter((operation) => operation.userId !== user.id),
                 ...remaining,
             ]);
-            if (restoredCount > 0) await Promise.all([
-                queryClient.invalidateQueries({ queryKey: notificationQueryKeys.inboxPrefix(user.id) }),
-                queryClient.invalidateQueries({ queryKey: notificationQueryKeys.counts(user.id) }),
-            ]);
+            if (restoredCount > 0) invalidateNotificationQueries();
             if (remaining.length > 0 && restoreError) {
                 showError(restoreError, 'بازگردانی بخشی از اعلان‌ها ناموفق بود. دوباره تلاش کنید.');
             } else if (restoredCount > 0) {
-                setPushMessage(`${new Intl.NumberFormat('fa-IR').format(restoredCount)} اعلان بازگردانی شد.`);
+                setPushMessage(`${persianNumberFormatter.format(restoredCount)} اعلان بازگردانی شد.`);
                 setPushMessageKind('success');
             } else {
                 setPushMessage('مهلت بازگردانی به پایان رسیده است.');
@@ -894,10 +1210,10 @@ export default function NotificationsScreen() {
             undoBusyRef.current = false;
             setUndoBusy(false);
         }
-    };
+    }, [invalidateNotificationQueries, isOnline, showError, undoOperations, user]);
 
     const markAllRead = async () => {
-        if (!user || markingAll || unreadCount === 0) return;
+        if (!isOnline || !user || markingAll || unreadCount === 0) return;
         setMarkingAll(true);
         try {
             const token = await getStoredAuthToken();
@@ -906,7 +1222,7 @@ export default function NotificationsScreen() {
             const readAt = new Date().toISOString();
             updateCachedNotificationLists(queryClient, user.id, (item, filter) => {
                 if (filter === 'unread') return null;
-                return { ...item, read_at: item.read_at ?? readAt };
+                return item.read_at ? item : { ...item, read_at: readAt };
             });
             updateCachedCounts((current) => ({
                 unread_count: 0,
@@ -921,8 +1237,8 @@ export default function NotificationsScreen() {
         }
     };
 
-    const openNotification = async (item: InboxNotification) => {
-        if (!user) return;
+    const openNotification = useCallback(async (item: InboxNotification) => {
+        if (!isOnline || !user) return;
         if (!item.read_at) {
             try {
                 const token = await getStoredAuthToken();
@@ -944,19 +1260,13 @@ export default function NotificationsScreen() {
             }
         }
 
-    };
+    }, [invalidateNotificationQueries, isOnline, queryClient, updateCachedCounts, user]);
 
-    const toggleExpandedNotification = (notificationId: number) => {
-        setExpandedNotificationIds((current) => {
-            const next = new Set(current);
-            if (next.has(notificationId)) {
-                next.delete(notificationId);
-            } else {
-                next.add(notificationId);
-            }
-            return next;
-        });
-    };
+    const openSettings = useCallback(() => setSettingsVisible(true), []);
+    const handleOpenNotification = useCallback(
+        (item: InboxNotification) => void openNotification(item),
+        [openNotification],
+    );
 
     const activeUndoOperations = undoOperations.filter((operation) => operation.userId === userId);
     const pendingUndoCount = activeUndoOperations.reduce((count, operation) => count + operation.deletedCount, 0);
@@ -964,95 +1274,83 @@ export default function NotificationsScreen() {
         (earliest, operation) => Math.min(earliest, operation.expiresAt),
         Number.POSITIVE_INFINITY,
     );
-    const undoCountdown = formatUndoCountdown(nextUndoExpiry - undoCountdownNow);
+    useEffect(() => {
+        if (!Number.isFinite(nextUndoExpiry)) return;
+
+        const timeout = setTimeout(() => {
+            const now = Date.now();
+            setUndoOperations((current) => current.filter((operation) => operation.expiresAt > now));
+        }, Math.max(0, nextUndoExpiry - Date.now()));
+
+        return () => clearTimeout(timeout);
+    }, [nextUndoExpiry]);
 
     return (
         <ThemedView style={styles.container}>
-            <TabView
-                navigationState={{
-                    index: Math.max(0, notificationFilters.findIndex((filter) => filter.key === activeFilter)),
-                    routes: NOTIFICATION_ROUTES,
-                }}
-                onIndexChange={(index) => {
-                    const filter = notificationFilters[index];
-                    if (filter) setActiveFilter(filter.key);
-                }}
-                renderScene={({ route }) => (
-                    <NotificationFilterScene
-                        filter={route.key}
-                        userId={user?.id ?? null}
-                        theme={theme}
-                        bottomInset={insets.bottom}
-                        unreadCount={unreadCount}
-                        settingsVisible={settingsVisible}
-                        visibleErrorMessage={visibleErrorMessage}
-                        undoBarVisible={activeUndoOperations.length > 0}
-                        undoBusy={undoBusy}
-                        deletingNotificationId={deletingNotificationId}
-                        deletingReadNotifications={deletingReadNotifications}
-                        expandedNotificationIds={expandedNotificationIds}
-                        onToggleExpanded={toggleExpandedNotification}
-                        onRefreshCounts={() => countsQuery.refetch()}
-                        onRetry={loadNotifications}
-                        onOpenSettings={() => setSettingsVisible(true)}
-                        onOpenNotification={(item) => void openNotification(item)}
-                        onRequestDelete={setNotificationToDelete}
-                    />
-                )}
-                renderTabBar={(props) => (
-                    <NotificationFilterTabBar {...props} theme={theme} unreadCount={unreadCount} />
-                )}
-                lazy
-                lazyPreloadDistance={1}
-                direction="rtl"
-                swipeEnabled
-                animationEnabled={false}
-                initialLayout={{ width }}
-                style={styles.tabView}
-            />
+            <NotificationUnreadCountContext.Provider value={unreadCount}>
+                <TabView
+                    navigationState={{
+                        index: Math.max(0, notificationFilters.findIndex((filter) => filter.key === activeFilter)),
+                        routes: NOTIFICATION_ROUTES,
+                    }}
+                    onIndexChange={(index) => {
+                        const filter = notificationFilters[index];
+                        if (filter) setActiveFilter(filter.key);
+                    }}
+                    renderScene={({ route }) => (
+                        <NotificationFilterScene
+                            filter={route.key}
+                            isActive={route.key === activeFilter}
+                            isScreenFocused={isScreenFocused}
+                            isOnline={isOnline}
+                            offlineInboxMarked={userId !== null && offlineNotificationDataKeys.has(
+                                getNotificationOfflineMarkerKey(userId, route.key),
+                            )}
+                            offlineCountsMarked={userId !== null && offlineNotificationDataKeys.has(
+                                getNotificationOfflineMarkerKey(userId, 'counts'),
+                            )}
+                            userId={user?.id ?? null}
+                            theme={theme}
+                            bottomInset={insets.bottom}
+                            countsOfflineCacheSavedAt={countsQuery.data?.offlineCacheSavedAt}
+                            countsHasData={countsQuery.data !== undefined}
+                            settingsVisible={settingsVisible}
+                            visibleErrorMessage={visibleErrorMessage}
+                            undoBarVisible={activeUndoOperations.length > 0}
+                            undoBusy={undoBusy}
+                            deletingNotificationId={deletingNotificationId}
+                            deletingReadNotifications={deletingReadNotifications}
+                            onRefreshCounts={refreshCounts}
+                            onLiveInboxRefresh={clearOfflineNotificationMarker}
+                            onRetry={loadNotifications}
+                            onOpenSettings={openSettings}
+                            onOpenNotification={handleOpenNotification}
+                            onRequestDelete={setNotificationToDelete}
+                        />
+                    )}
+                    renderTabBar={(props) => (
+                        <NotificationFilterTabBar {...props} theme={theme} unreadCount={unreadCount} />
+                    )}
+                    lazy
+                    lazyPreloadDistance={1}
+                    direction="rtl"
+                    swipeEnabled
+                    animationEnabled={false}
+                    initialLayout={{ width }}
+                    style={styles.tabView}
+                />
+            </NotificationUnreadCountContext.Provider>
 
             {activeUndoOperations.length > 0 ? (
-                <View
-                    accessibilityLabel={`حذف ${pendingUndoCount} اعلان. فرصت بازگردانی ${undoCountdown}`}
-                    style={[
-                        styles.undoBar,
-                        {
-                            backgroundColor: theme.surface,
-                            borderColor: theme.border,
-                            bottom: Spacing.two,
-                        },
-                    ]}
-                >
-                    <View style={[styles.undoIcon, { backgroundColor: theme.surfaceVariant }]}>
-                        <MaterialCommunityIcons name="delete-restore" size={20} color={theme.primaryText} />
-                    </View>
-                    <View style={styles.undoCopy}>
-                        <ThemedText type="smallBold" style={{ color: theme.text }}>
-                            {pendingUndoCount === 1 ? 'اعلان حذف شد' : `${new Intl.NumberFormat('fa-IR').format(pendingUndoCount)} اعلان حذف شد`}
-                        </ThemedText>
-                        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                            فرصت بازگردانی: {undoCountdown}
-                        </ThemedText>
-                    </View>
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`بازگردانی ${pendingUndoCount} اعلان`}
-                        accessibilityState={{ disabled: undoBusy }}
-                        disabled={undoBusy}
-                        onPress={() => void undoDelete()}
-                        style={({ pressed }) => [
-                            styles.undoButton,
-                            {
-                                backgroundColor: theme.primary,
-                                opacity: undoBusy ? 0.65 : pressed ? 0.8 : 1,
-                            },
-                        ]}
-                    >
-                        {undoBusy
-                            ? <ActivityIndicator size="small" color={theme.onPrimary} />
-                            : <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>بازگردانی</ThemedText>}
-                    </Pressable>
-                </View>
+                <NotificationUndoBar
+                    pendingCount={pendingUndoCount}
+                    expiresAt={nextUndoExpiry}
+                    busy={undoBusy}
+                    isOnline={isOnline}
+                    isScreenFocused={isScreenFocused}
+                    theme={theme}
+                    onUndo={undoDelete}
+                />
             ) : null}
 
             <Modal
@@ -1092,6 +1390,11 @@ export default function NotificationsScreen() {
                             contentContainerStyle={styles.settingsOptionList}
                             showsVerticalScrollIndicator={false}
                         >
+                            {!isOnline ? (
+                                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                                    برای تغییر وضعیت، حذف یا مدیریت اعلان‌ها به اتصال سرور نیاز است.
+                                </ThemedText>
+                            ) : null}
                             <View style={[styles.pushCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                                 <View style={[styles.pushIcon, { backgroundColor: pushEnabled ? theme.successFill : theme.surfaceVariant }]}>
                                     <MaterialCommunityIcons
@@ -1105,24 +1408,24 @@ export default function NotificationsScreen() {
                                     <ThemedText type="small" style={{ color: theme.textSecondary }}>
                                         {pushStatusLoading
                                             ? 'در حال بررسی وضعیت…'
-                                            : pushEnabled ? 'روشن' : 'خاموش'}
+                                            : pushStatusUnavailable ? 'وضعیت نامشخص' : pushEnabled ? 'روشن' : 'خاموش'}
                                     </ThemedText>
                                 </View>
                                 <Pressable
                                     accessibilityRole="switch"
                                     accessibilityLabel="اعلان‌های این دستگاه"
                                     accessibilityState={{
-                                        disabled: pushBusy || pushStatusLoading || (securityRestricted && !pushEnabled) || (isExpoGo && !pushEnabled),
+                                        disabled: !isOnline || pushBusy || pushStatusLoading || pushStatusUnavailable || (securityRestricted && !pushEnabled) || (isExpoGo && !pushEnabled),
                                         checked: pushEnabled,
                                     }}
-                                    disabled={pushBusy || pushStatusLoading || (securityRestricted && !pushEnabled) || (isExpoGo && !pushEnabled)}
+                                    disabled={!isOnline || pushBusy || pushStatusLoading || pushStatusUnavailable || (securityRestricted && !pushEnabled) || (isExpoGo && !pushEnabled)}
                                     onPress={() => void togglePushNotifications()}
                                     style={({ pressed }) => [
                                         styles.pushToggle,
                                         {
                                             backgroundColor: pushEnabled ? theme.surfaceVariant : theme.primary,
                                             borderColor: pushEnabled ? theme.border : theme.primary,
-                                            opacity: pressed || pushBusy || pushStatusLoading ? 0.7 : 1,
+                                            opacity: pressed || !isOnline || pushBusy || pushStatusLoading || pushStatusUnavailable ? 0.7 : 1,
                                         },
                                     ]}
                                 >
@@ -1149,11 +1452,12 @@ export default function NotificationsScreen() {
                             {unreadCount > 0 ? (
                                 <Pressable
                                     accessibilityRole="button"
-                                    disabled={markingAll}
+                                    accessibilityLabel="علامت‌گذاری همه به‌عنوان خوانده‌شده"
+                                    disabled={!isOnline || markingAll}
                                     onPress={() => void markAllRead()}
                                     style={({ pressed }) => [
                                         styles.settingsAction,
-                                        { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed || markingAll ? 0.65 : 1 },
+                                        { backgroundColor: theme.surface, borderColor: theme.border, opacity: pressed || !isOnline || markingAll ? 0.65 : 1 },
                                     ]}
                                 >
                                     {markingAll
@@ -1162,7 +1466,7 @@ export default function NotificationsScreen() {
                                     <View style={styles.settingsActionCopy}>
                                         <ThemedText type="smallBold" style={{ color: theme.text }}>علامت‌گذاری همه به‌عنوان خوانده‌شده</ThemedText>
                                         <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                            {new Intl.NumberFormat('fa-IR').format(unreadCount)} اعلان خوانده‌نشده
+                                            {persianNumberFormatter.format(unreadCount)} اعلان خوانده‌نشده
                                         </ThemedText>
                                     </View>
                                 </Pressable>
@@ -1171,14 +1475,14 @@ export default function NotificationsScreen() {
                                 <Pressable
                                     accessibilityRole="button"
                                     accessibilityLabel={`پاک‌کردن همهٔ اعلان‌های خوانده‌شده، ${readCount} اعلان`}
-                                    disabled={deletingReadNotifications || deletingNotificationId !== null || undoBusy}
+                                    disabled={!isOnline || deletingReadNotifications || deletingNotificationId !== null || undoBusy}
                                     onPress={() => void deleteAllRead()}
                                     style={({ pressed }) => [
                                         styles.settingsAction,
                                         {
                                             backgroundColor: theme.surface,
                                             borderColor: theme.border,
-                                            opacity: pressed || deletingReadNotifications || deletingNotificationId !== null || undoBusy ? 0.65 : 1,
+                                            opacity: pressed || !isOnline || deletingReadNotifications || deletingNotificationId !== null || undoBusy ? 0.65 : 1,
                                         },
                                     ]}
                                 >
@@ -1188,7 +1492,7 @@ export default function NotificationsScreen() {
                                     <View style={styles.settingsActionCopy}>
                                         <ThemedText type="smallBold" style={{ color: theme.error }}>پاک‌کردن اعلان‌های خوانده‌شده</ThemedText>
                                         <ThemedText type="small" style={{ color: theme.textSecondary }}>
-                                            {new Intl.NumberFormat('fa-IR').format(readCount)} اعلان · امکان بازگردانی تا ۳۰ ثانیه
+                                            {persianNumberFormatter.format(readCount)} اعلان · امکان بازگردانی تا ۳۰ ثانیه
                                         </ThemedText>
                                     </View>
                                 </Pressable>
@@ -1219,7 +1523,7 @@ export default function NotificationsScreen() {
             <ConfirmationModal
                 visible={deleteReadConfirmationVisible}
                 title="پاک‌کردن اعلان‌های خوانده‌شده"
-                message={`تعداد ${new Intl.NumberFormat('fa-IR').format(readCount)} اعلان خوانده‌شده پاک شود؟ تا ۳۰ ثانیه امکان بازگردانی دارید.`}
+                message={`تعداد ${persianNumberFormatter.format(readCount)} اعلان خوانده‌شده پاک شود؟ تا ۳۰ ثانیه امکان بازگردانی دارید.`}
                 confirmLabel="پاک‌کردن"
                 icon="delete-sweep-outline"
                 busy={deletingReadNotifications}
@@ -1229,7 +1533,7 @@ export default function NotificationsScreen() {
                     await performDeleteAllRead();
                 }}
             />
-            <Snackbar
+            <Snackbar variant="error"
                 visible={pushMessage !== null}
                 onDismiss={() => {
                     setPushMessage(null);
@@ -1369,11 +1673,11 @@ const styles = StyleSheet.create({
     timelineConnector: { width: 2, flex: 1, minHeight: Spacing.two, marginTop: Spacing.one, borderRadius: 1 },
     timelineBody: { flex: 1, gap: Spacing.two },
     notificationContent: { gap: Spacing.one },
-    cardHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+    cardHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.one },
     categoryIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
     categoryPill: { maxWidth: '65%', borderRadius: 999, paddingHorizontal: Spacing.one, paddingVertical: 3 },
     metaDot: { width: 3, height: 3, borderRadius: 2 },
-    unreadMarker: { width: 8, height: 8, borderRadius: 4, marginStart: 'auto' },
+    unreadStatus: { borderRadius: 999, paddingHorizontal: Spacing.one, paddingVertical: 2, marginStart: 'auto' },
     bodyText: { lineHeight: Typography.lineHeight.label },
     cardFooter: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
     cardFooterActions: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.one },

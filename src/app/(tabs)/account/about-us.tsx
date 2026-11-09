@@ -48,12 +48,14 @@ export default function AboutUsScreen() {
             <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={[styles.introCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                     <View style={styles.brandRow}>
-                        <Image
-                            source={require('@/assets/images/logo-white.png')}
-                            contentFit="contain"
-                            allowDownscaling={false}
-                            style={[styles.logo, { backgroundColor: theme.primary }]}
-                        />
+                        <View style={[styles.logoFrame, { backgroundColor: theme.primary }]}>
+                            <Image
+                                source={require('@/assets/images/logo-white.png')}
+                                contentFit="contain"
+                                allowDownscaling={false}
+                                style={styles.logo}
+                            />
+                        </View>
                         <View style={styles.brandCopy}>
                             <ThemedText type="smallBold" style={{ color: theme.text }}>پهناور کار</ThemedText>
                             <ThemedText type="small" style={{ color: theme.textSecondary }}>دربارهٔ ما</ThemedText>
@@ -116,11 +118,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: Spacing.two,
     },
-    logo: {
-        width: 48,
-        height: 48,
-        borderRadius: 16,
+    logoFrame: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        padding: 5,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
+    logo: { width: '100%', height: '100%', borderRadius: 17 },
     brandCopy: { flex: 1, gap: 2 },
     introTitle: { marginTop: Spacing.one },
     introDescription: { lineHeight: Typography.lineHeight.spacious },

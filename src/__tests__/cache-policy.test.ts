@@ -37,6 +37,7 @@ describe('central cache policy', () => {
         expect(CACHE_POLICY.offline.entries.walletPendingTopUp.maxAgeMs).toBe(30 * 24 * 60 * 60 * 1000);
         expect(CACHE_POLICY.offline.entries.currentPlan.maxAgeMs).toBe(30 * 24 * 60 * 60 * 1000);
         expect(CACHE_POLICY.offline.entries.pendingSubscriptionOrder.maxAgeMs).toBe(30 * 24 * 60 * 60 * 1000);
+        expect(CACHE_POLICY.offline.entries.notificationInbox.maxAgeMs).toBe(30 * 24 * 60 * 60 * 1000);
         expect(CACHE_POLICY.access.gracePeriodMs).toBe(30 * 24 * 60 * 60 * 1000);
     });
 });

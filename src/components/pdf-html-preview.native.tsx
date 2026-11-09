@@ -1,4 +1,5 @@
 import { Typography } from '@/constants/typography';
+import { getAppHeaderColors, PRODUCT_COLOR_TOKENS, Spacing } from '@/constants/theme';
 import { ActivityIndicator, Modal, Pressable, StatusBar, StyleSheet, View } from 'react-native';
 import { Appbar } from 'react-native-paper';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,7 +7,6 @@ import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { FontAwareAppbarContent } from '@/components/font-aware-paper';
-import { PRODUCT_COLOR_TOKENS, Spacing } from '@/constants/theme';
 import { useAppContext } from '@/hooks/use-app-context';
 import { ThemedText } from '@/components/themed-text';
 
@@ -107,9 +107,9 @@ function PdfHtmlPreviewContent({
 }: Omit<PdfHtmlPreviewProps, 'visible'>) {
     const { colors, theme } = useAppContext();
     const insets = useSafeAreaInsets();
-    const isLightTheme = theme === 'light';
-    const headerBackgroundColor = isLightTheme ? colors.primary : colors.surface;
-    const headerTextColor = isLightTheme ? colors.surface : colors.text;
+    const headerColors = getAppHeaderColors(colors, theme);
+    const headerBackgroundColor = headerColors.background;
+    const headerTextColor = headerColors.foreground;
     const previewHtml = html?.replace(
         '</head>',
         '<style>body { padding: 12px; }</style></head>',
@@ -119,7 +119,7 @@ function PdfHtmlPreviewContent({
         <>
             <StatusBar
                 hidden={false}
-                barStyle="light-content"
+                barStyle={headerColors.statusBarStyle}
             />
             <View style={[styles.container, { backgroundColor: colors.background }]}>
                 <View style={{ height: insets.top, backgroundColor: headerBackgroundColor }} />
@@ -130,7 +130,7 @@ function PdfHtmlPreviewContent({
                         {
                             backgroundColor: headerBackgroundColor,
                             shadowColor: colors.text,
-                            shadowOpacity: isLightTheme ? 0.16 : 0.08,
+                            shadowOpacity: theme === 'light' ? 0.16 : 0.08,
                         },
                     ]}
                 >

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps } from 'react';
@@ -10,12 +10,16 @@ import {
     createWithdrawalRequest,
     fetchPendingWalletTopUp,
     fetchWalletOverview,
+    fetchWalletPayment,
     getStoredAuthToken,
     startWalletTopUp,
     type WalletOverview,
 } from '@/services/auth-api';
+import { ACCOUNT_OFFLINE_CACHE, saveOfflineCacheValue } from '@/services/account-offline-cache';
+import { getOfflinePageNotices } from '@/services/offline-page-status';
 
 jest.mock('expo-router', () => ({
+    usePathname: () => '/account/wallet',
     useFocusEffect: jest.fn(),
     useRouter: () => ({ push: jest.fn() }),
 }));
@@ -46,9 +50,19 @@ jest.mock('@/services/account-offline-cache', () => ({
         wallet: { namespace: 'account-wallet-v1', key: 'overview', maxAgeMs: 2592000000 },
         pendingTopUp: { namespace: 'account-wallet-v1', key: 'pending-top-up', maxAgeMs: 2592000000 },
     },
-    fetchWithOfflineFallback: jest.fn(async (_userId: number, _cache: unknown, fetcher: () => Promise<unknown>) => ({
-        value: await fetcher(),
-    })),
+    fetchWithOfflineFallback: jest.fn(async (
+        _userId: number,
+        _cache: unknown,
+        fetcher: () => Promise<unknown>,
+        _isValid: (value: unknown) => boolean,
+        options: { isOnline?: boolean } = {},
+    ) => {
+        const value = await fetcher();
+        return options.isOnline === false
+            ? { value, offlineCacheSavedAt: Date.now() }
+            : { value };
+    }),
+    saveOfflineCacheValue: jest.fn(async () => {}),
     withOfflineCacheMetadata: jest.fn((result: { value: object; offlineCacheSavedAt?: number }) => (
         result.offlineCacheSavedAt === undefined
             ? result.value
@@ -115,7 +129,6 @@ jest.mock('@/components/themed-view', () => {
 });
 jest.mock('@/hooks/use-auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/hooks/use-app-feedback', () => ({ useAppFeedback: jest.fn() }));
-jest.mock('@/hooks/use-online-refetch', () => ({ useOnlineRefetch: jest.fn() }));
 jest.mock('@/hooks/use-theme', () => ({
     useTheme: () => ({
         text: '#102A39',
@@ -210,6 +223,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+    cleanup();
     await act(async () => {
         onlineManager.setOnline(true);
     });
@@ -229,9 +243,12 @@ describe('wallet screen', () => {
         await waitFor(() => {
             expect(view.getByText('Network unavailable')).toBeTruthy();
         });
-        expect(view.getByText('اتصال زنده به سرور در دسترس نیست')).toBeTruthy();
-        expect(view.getByText('وضعیت کیف پول تا دریافت پاسخ زندهٔ سرور قابل تأیید نیست.')).toBeTruthy();
-        expect(view.getByText('اطلاعات ذخیره‌شدهٔ قابل‌نمایشی برای کیف پول در دسترس نیست.')).toBeTruthy();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/wallet'
+                && notice.message === 'سرور در دسترس نیست؛ عملیات مالی غیرفعال است.'
+            ))).toBe(true);
+        });
         expect(fetchWalletOverview).toHaveBeenCalledTimes(1);
         expect(fetchPendingWalletTopUp).toHaveBeenCalledTimes(1);
 
@@ -252,14 +269,96 @@ describe('wallet screen', () => {
 
         const view = await renderWallet();
 
-        expect(view.getByText('اطلاعات ذخیره‌شده نمایش داده می‌شود')).toBeTruthy();
-        expect(view.getByText(new RegExp(`آخرین ذخیره‌سازی: ${new Date(savedAt).toLocaleString('fa-IR')}`))).toBeTruthy();
-        expect(view.getByText(/وضعیت شارژ در انتظار · آخرین ذخیره‌سازی:/)).toBeTruthy();
-        expect(view.getByText(/شارژ، برداشت، ذخیرهٔ شبا و استعلام پرداخت فقط با اتصال/)).toBeTruthy();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/wallet'
+                && notice.message === 'موجودی ذخیره‌شدهٔ کیف پول ممکن است به‌روز نباشد.'
+            ))).toBe(true);
+        });
         const topUpButton = view.getByRole('button', { name: 'ادامه به درگاه پرداخت' });
         expect(topUpButton.props.accessibilityState?.disabled).toBe(true);
         fireEvent.press(topUpButton);
         expect(startWalletTopUp).not.toHaveBeenCalled();
+    });
+
+    it('replaces offline wallet data with live data after the server reconnects', async () => {
+        await act(async () => {
+            onlineManager.setOnline(false);
+        });
+
+        const view = await renderWallet();
+
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/wallet'
+                && notice.hasSavedData
+            ))).toBe(true);
+            expect(view.getByRole('button', { name: 'ادامه به درگاه پرداخت' })
+                .props.accessibilityState?.disabled).toBe(true);
+        });
+
+        let resolveWallet: ((value: WalletOverview) => void) | undefined;
+        let resolvePendingTopUp: ((value: { payment: null }) => void) | undefined;
+        jest.mocked(fetchWalletOverview).mockImplementationOnce(() => new Promise((resolve) => {
+            resolveWallet = resolve;
+        }));
+        jest.mocked(fetchPendingWalletTopUp).mockImplementationOnce(() => new Promise((resolve) => {
+            resolvePendingTopUp = resolve;
+        }));
+
+        await act(async () => {
+            onlineManager.setOnline(true);
+        });
+
+        await waitFor(() => {
+            expect(fetchWalletOverview).toHaveBeenCalledTimes(2);
+            expect(fetchPendingWalletTopUp).toHaveBeenCalledTimes(2);
+        });
+        expect(view.getByRole('button', { name: 'ادامه به درگاه پرداخت' })
+            .props.accessibilityState?.disabled).toBe(true);
+        expect(getOfflinePageNotices().some((notice) => (
+            notice.pathname === '/account/wallet'
+        ))).toBe(true);
+
+        await act(async () => {
+            resolveWallet?.(wallet);
+            resolvePendingTopUp?.({ payment: null });
+        });
+
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/wallet')).toBe(false);
+            expect(view.getByRole('button', { name: 'ادامه به درگاه پرداخت' })
+                .props.accessibilityState?.disabled).toBe(false);
+        });
+    });
+
+    it('keeps financial actions disabled when reconnect refresh fails', async () => {
+        await act(async () => {
+            onlineManager.setOnline(false);
+        });
+
+        const view = await renderWallet();
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/wallet'
+                && notice.hasSavedData
+            ))).toBe(true);
+        });
+
+        jest.mocked(fetchWalletOverview).mockRejectedValueOnce(new TypeError('Network unavailable'));
+        await act(async () => {
+            onlineManager.setOnline(true);
+        });
+
+        await waitFor(() => {
+            expect(fetchWalletOverview).toHaveBeenCalledTimes(2);
+            expect(view.getByRole('button', { name: 'ادامه به درگاه پرداخت' })
+                .props.accessibilityState?.disabled).toBe(true);
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/wallet'
+                && notice.hasSavedData
+            ))).toBe(true);
+        });
     });
 
     it('shows pending top-up failures separately while keeping wallet details available', async () => {
@@ -282,6 +381,55 @@ describe('wallet screen', () => {
             expect(view.getByLabelText('مبلغ شارژ به تومان').props.editable).toBe(true);
         });
     });
+
+    it.each(['succeeded', 'failed'] as const)(
+        'persists a cleared pending top-up snapshot after a %s terminal outcome',
+        async (status) => {
+            jest.mocked(startWalletTopUp).mockResolvedValue({
+                payment: {
+                    id: 17,
+                    status: 'pending',
+                    amount: 10000,
+                    currency: 'IRR',
+                    redirect_url: null,
+                    expires_at: null,
+                    can_cancel_without_gateway: false,
+                },
+            });
+            jest.mocked(fetchWalletPayment).mockResolvedValue({
+                payment: {
+                    id: 17,
+                    status,
+                    amount: 10000,
+                    currency: 'IRR',
+                    redirect_url: null,
+                    expires_at: null,
+                    can_cancel_without_gateway: false,
+                },
+            });
+
+            const view = await renderWallet();
+            await waitFor(() => expect(view.getByText('۵۰٬۰۰۰ تومان')).toBeTruthy());
+            await waitFor(() => expect(view.getByLabelText('مبلغ شارژ به تومان').props.editable).toBe(true));
+            await fireEvent.changeText(view.getByLabelText('مبلغ شارژ به تومان'), '10000');
+            await fireEvent.press(view.getByRole('button', { name: 'ادامه به درگاه پرداخت' }));
+            await waitFor(() => expect(startWalletTopUp).toHaveBeenCalledTimes(1));
+
+            await waitFor(() => {
+                expect(fetchWalletPayment).toHaveBeenCalledWith('test-token', 17);
+                expect(saveOfflineCacheValue).toHaveBeenCalledWith(
+                    user.id,
+                    ACCOUNT_OFFLINE_CACHE.pendingTopUp,
+                    null,
+                );
+                expect(queryClient.getQueryData(['wallet-pending-top-up', user.id])).toMatchObject({ payment: null });
+            });
+            if (status === 'succeeded') {
+                await waitFor(() => expect(fetchWalletOverview).toHaveBeenCalledTimes(2));
+            }
+            view.unmount();
+        },
+    );
 
     it('retries an uncertain withdrawal with the same idempotency key and payload', async () => {
         jest.mocked(fetchWalletOverview).mockResolvedValue({

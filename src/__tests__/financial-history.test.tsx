@@ -1,6 +1,6 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ComponentProps, ReactNode } from 'react';
 
 import FinancialHistoryScreen from '@/app/(tabs)/account/financial-history';
@@ -12,8 +12,12 @@ import {
     fetchWithdrawalHistory,
     getStoredAuthToken,
 } from '@/services/auth-api';
+import { getOfflinePageNotices } from '@/services/offline-page-status';
 
-jest.mock('expo-router', () => ({ useFocusEffect: jest.fn() }));
+jest.mock('expo-router', () => ({
+    usePathname: () => '/account/financial-history',
+    useFocusEffect: jest.fn(),
+}));
 jest.mock('react-native-safe-area-context', () => ({
     useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
@@ -84,7 +88,6 @@ jest.mock('@/components/date-input-field', () => ({ DateInputField: () => null }
 jest.mock('@/components/persian-date-picker-modal', () => ({ PersianDatePickerModal: () => null }));
 jest.mock('@/hooks/use-auth', () => ({ useAuth: jest.fn() }));
 jest.mock('@/hooks/use-app-feedback', () => ({ useAppFeedback: jest.fn() }));
-jest.mock('@/hooks/use-online-refetch', () => ({ useOnlineRefetch: jest.fn() }));
 jest.mock('@/hooks/use-theme', () => ({
     useTheme: () => ({
         text: '#102A39',
@@ -141,6 +144,7 @@ const queryClient = new QueryClient({
 beforeEach(() => {
     jest.clearAllMocks();
     queryClient.clear();
+    onlineManager.setOnline(true);
     jest.mocked(useAuth).mockReturnValue({ user, isLoading: false } as ReturnType<typeof useAuth>);
     jest.mocked(useAppFeedback).mockReturnValue({
         showFeedback: jest.fn(),
@@ -155,6 +159,7 @@ beforeEach(() => {
 
 afterEach(() => {
     queryClient.clear();
+    onlineManager.setOnline(true);
 });
 
 describe('financial history tabs', () => {
@@ -172,16 +177,75 @@ describe('financial history tabs', () => {
             },
         );
 
+        await render(
+            <QueryClientProvider client={queryClient}>
+                <FinancialHistoryScreen />
+            </QueryClientProvider>,
+        );
+
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/financial-history'
+                && notice.message === 'تاریخچهٔ ذخیره‌شده ممکن است به‌روز نباشد.'
+            ))).toBe(true);
+        });
+    });
+
+    it('shows offline status without a manual refresh and keeps it until live history arrives', async () => {
+        queryClient.setQueryData(
+            ['financial-history', user.id, 'transactions', null, null],
+            {
+                pages: [{
+                    data: [],
+                    meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 },
+                }],
+                pageParams: [1],
+            },
+            { updatedAt: Date.now() },
+        );
         const view = await render(
             <QueryClientProvider client={queryClient}>
                 <FinancialHistoryScreen />
             </QueryClientProvider>,
         );
 
-        expect(await view.findByText('نسخهٔ ذخیره‌شدهٔ تاریخچه نمایش داده می‌شود')).toBeTruthy();
-        expect(view.getByText(new RegExp(
-            `این زبانه · آخرین ذخیره‌سازی: ${new Date(savedAt).toLocaleString('fa-IR')}`,
-        ))).toBeTruthy();
+        await act(async () => {
+            onlineManager.setOnline(false);
+        });
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/financial-history'
+                && notice.hasSavedData
+            ))).toBe(true);
+        });
+        expect(fetchWalletTransactionHistory).not.toHaveBeenCalled();
+
+        let resolveLiveHistory: ((page: {
+            data: never[];
+            meta: { current_page: number; last_page: number; per_page: number; total: number };
+        }) => void) | undefined;
+        jest.mocked(fetchWalletTransactionHistory).mockImplementation(() => new Promise((resolve) => {
+            resolveLiveHistory = resolve;
+        }));
+        await act(async () => {
+            onlineManager.setOnline(true);
+        });
+
+        await waitFor(() => expect(fetchWalletTransactionHistory).toHaveBeenCalledTimes(1));
+        expect(getOfflinePageNotices().some((notice) => notice.pathname === '/account/financial-history')).toBe(true);
+
+        await act(async () => {
+            resolveLiveHistory?.({
+                data: [],
+                meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 },
+            });
+        });
+        await waitFor(() => {
+            expect(getOfflinePageNotices().some((notice) => (
+                notice.pathname === '/account/financial-history'
+            ))).toBe(false);
+        });
+        expect(view.getByTestId('test-scene-transactions')).toBeTruthy();
     });
 
     it('renders the corresponding error card in each tab', async () => {

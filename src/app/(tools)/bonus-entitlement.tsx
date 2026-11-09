@@ -3,12 +3,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { jalaaliMonthLength, toJalaali } from 'jalaali-js';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { Card, Menu, Snackbar } from 'react-native-paper';
+import { Card, Menu } from 'react-native-paper';
+import { AppSnackbar as Snackbar } from '@/components/app-snackbar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FontAwareButton as Button, FontAwareMenuItem } from '@/components/font-aware-paper';
 import { CurrencyAmountInput } from '@/components/currency-amount-input';
-import { HiddenCalculationGuide } from '@/components/hidden-calculation-guide';
 import { DailyWorkTimeField, getDailyWorkMinutes } from '@/components/daily-work-time-field';
 import { DateInputField } from '@/components/date-input-field';
 import { NumericInputField } from '@/components/numeric-input-field';
@@ -309,6 +309,8 @@ export default function BonusEntitlementScreen() {
             workshopType,
             selectedGroup ?? undefined,
             settledThrough1391,
+            'persian-year-end',
+            'last-covered-day-of-year',
         );
         if (calculation.breakdown.length === 0) {
             setResult(null);
@@ -336,9 +338,22 @@ export default function BonusEntitlementScreen() {
                                     <ThemedText type="small" style={[styles.pageDescription, { color: theme.textSecondary }]}>محاسبه عیدی پاداش ماهیانه بر اساس ماده واحده قانون تعیین عیدی پاداش، مصوب مجلس در سال ۱۳۷۰</ThemedText>
                                 </CalculationDescriptionBox>
                             </View>
-                            <HiddenCalculationGuide>
-                                مبلغ محاسبه‌شدهٔ هر بازه = ماه‌های پوشش‌یافته × ۵ × (حداقل مزد روزانه + پایه سنوات روزانه). سقف هر بازه = ماه‌های پوشش‌یافته × ۷٫۵ × حداقل مزد روزانه؛ مبلغ استحقاقی از این سقف بیشتر نمی‌شود. نسبت ساعات کارکرد روزانه یا نسبت مجموع ساعات کارکرد بازه به ساعات موظفی نیز اعمال می‌شود.
-                            </HiddenCalculationGuide>
+                            <View style={[styles.formulaBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
+                                <ThemedText type="smallBold" style={[styles.formulaLabel, { color: theme.textSecondary }]}>
+                                    فرمول محاسبه
+                                </ThemedText>
+                                <ThemedText type="small" style={[styles.formulaText, { color: theme.text }]}>
+                                    مبلغ محاسبه‌شدهٔ هر بازه = ماه‌های پوشش‌یافته × ۵ × (حداقل مزد روزانه + پایه سنوات استحقاقی روزانه)
+                                    {'\n'}
+                                    حداقل عیدی = ماه‌های پوشش‌یافته × ۵ × حداقل مزد روزانه؛ حداکثر عیدی = ماه‌های پوشش‌یافته × ۷٫۵ × حداقل مزد روزانه.
+                                    {'\n'}
+                                    مبلغ نهایی هر بازه از حداکثر قانونی بیشتر نمی‌شود و متناسب با نسبت ساعات کارکرد اعمال می‌شود.
+                                    {'\n'}
+                                    پایهٔ سنواتِ آخرین روزِ کارکرد در هر سال شمسی، برای تمام کارکرد همان سال در نظر گرفته می‌شود؛ در سال پایانی، این روز از تاریخ پایان بازه جلوتر نمی‌رود.
+                                    {'\n'}
+                                    در سال‌های چنددوره‌ای، حداقل مزدِ دورهٔ شامل آخرین روزِ انتخاب‌شده در آن سال، مبنای کل کارکرد همان سال است.
+                                </ThemedText>
+                            </View>
                             <View style={styles.metricsRow}>
                                 <DateInputField label="از تاریخ" value={startDate} onPress={() => setPickerTarget('start')} formatValue={formatDate} />
                                 <DateInputField label="تا تاریخ" value={endDate} onPress={() => setPickerTarget('end')} formatValue={formatDate} />
@@ -565,7 +580,11 @@ export default function BonusEntitlementScreen() {
                                                     </View>
                                                     <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                                         <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>نوع بازه</ThemedText>
-                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>{item.phase === 'before-anniversary' ? 'پیش از سالگرد استخدام' : 'بعد از سالگرد استخدام'}</ThemedText>
+                                                        <ThemedText type="smallBold" style={[styles.detailValue, { color: theme.text }]}>
+                                                            {item.phase === 'calendar-year-end'
+                                                                ? 'پایهٔ سنوات در پایان کارکرد این سال'
+                                                                : item.phase === 'before-anniversary' ? 'پیش از سالگرد استخدام' : 'بعد از سالگرد استخدام'}
+                                                        </ThemedText>
                                                     </View>
                                                     <View style={[styles.breakdownDetailBox, { backgroundColor: theme.surfaceVariant, borderColor: theme.border }]}>
                                                         <ThemedText type="small" style={[styles.detailLabel, { color: theme.textSecondary }]}>ماه‌های کارکرد دوره</ThemedText>
@@ -602,7 +621,7 @@ export default function BonusEntitlementScreen() {
                 </SafeAreaView>
             </ScrollView>
             <PersianDatePickerModal visible={pickerTarget !== null} value={pickerTarget === 'start' ? startDate : pickerTarget === 'end' ? endDate : employmentDate} title={pickerTarget === 'start' ? 'انتخاب تاریخ شروع' : pickerTarget === 'end' ? 'انتخاب تاریخ پایان' : 'انتخاب تاریخ استخدام'} onClose={() => setPickerTarget(null)} onSelect={handleDateSelect} availableYears={availableYears} />
-            <Snackbar visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
+            <Snackbar variant="error" visible={snackbarVisible} onDismiss={() => setSnackbarVisible(false)} duration={5000} style={{ backgroundColor: theme.errorFill, borderRadius: Radius.md }} action={{ label: 'بستن', onPress: () => setSnackbarVisible(false), labelStyle: { color: theme.onStatus } }}><ThemedText type="small" style={{ color: theme.onStatus }}>{snackbarMessage}</ThemedText></Snackbar>
         </ThemedView>
     );
 }

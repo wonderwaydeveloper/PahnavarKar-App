@@ -1,21 +1,39 @@
 import { Typography } from '@/constants/typography';
-import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router';
-import { Colors } from '@/constants/theme';
+import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
+import { Colors, getAppHeaderColors } from '@/constants/theme';
 import type { NotificationResponse } from 'expo-notifications';
-import * as Network from 'expo-network';
 import * as SplashScreen from 'expo-splash-screen';
 import { onlineManager, QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
-import { AppState, I18nManager, Platform, Pressable, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  AppState,
+  BackHandler,
+  I18nManager,
+  Platform,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  ToastAndroid,
+  View,
+  useColorScheme,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AccountAccessBanner, AccountSuspensionOverlay } from '@/components/account-access-feedback';
+import { StartupLogoAnimation } from '@/components/startup-logo-animation';
 import { AppFeedbackProvider, AppProvider, AuthProvider, PlanAccessProvider } from '@/context';
 import { useAppContext } from '@/hooks/use-app-context';
 import { useAuth } from '@/hooks/use-auth';
 import { registerPlanAccessBackgroundTask } from '@/services/plan-access-background';
 import { DEFAULT_QUERY_CACHE_OPTIONS } from '@/services/cache-policy';
 import { AuthApiError, isTemporaryApiFailure } from '@/services/auth-api';
+import {
+  getServerConnectivityStatus,
+  subscribeToServerConnectivity,
+  setServerConnectivityAppActive,
+  stopServerConnectivityMonitoring,
+} from '@/services/server-connectivity';
 import { NavigationBar } from 'expo-navigation-bar';
 import * as SystemUI from 'expo-system-ui';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -82,11 +100,38 @@ function NotificationResponseHandler() {
 }
 
 function FontLoadedApp() {
+  const router = useRouter();
+  const pathname = usePathname();
   const { theme, colors } = useAppContext();
   const insets = useSafeAreaInsets();
-  const isLightTheme = theme === 'light';
-  const headerBackgroundColor = isLightTheme ? colors.primary : colors.surface;
+  const headerColors = getAppHeaderColors(colors, theme);
+  const headerBackgroundColor = headerColors.background;
   const splashHiddenRef = useRef(false);
+  const [splashScreenHidden, setSplashScreenHidden] = useState(false);
+  const [startupAnimationComplete, setStartupAnimationComplete] = useState(false);
+  const lastExitPromptAt = useRef(0);
+  const finishStartupAnimation = useCallback(() => setStartupAnimationComplete(true), []);
+
+  useEffect(() => {
+    lastExitPromptAt.current = 0;
+  }, [pathname]);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !startupAnimationComplete) return;
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (router.canGoBack()) return false;
+
+      const now = Date.now();
+      if (now - lastExitPromptAt.current < 2000) return false;
+
+      lastExitPromptAt.current = now;
+      ToastAndroid.show('برای خروج از برنامه دوباره کلیک کنید', ToastAndroid.SHORT);
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [router, startupAnimationComplete]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +148,7 @@ function FontLoadedApp() {
           });
           await SplashScreen.hideAsync();
           splashHiddenRef.current = true;
+          setSplashScreenHidden(true);
         }
       } catch (error) {
         console.error('به‌روزرسانی رابط سیستم ناموفق بود.', error);
@@ -110,6 +156,7 @@ function FontLoadedApp() {
           try {
             await SplashScreen.hideAsync();
             splashHiddenRef.current = true;
+            setSplashScreenHidden(true);
           } catch (hideError) {
             console.error('بستن صفحهٔ آغاز ناموفق بود.', hideError);
           }
@@ -126,7 +173,9 @@ function FontLoadedApp() {
 
   return (
     <>
-      <StatusBar barStyle="light-content" />
+      <StatusBar
+        barStyle={headerColors.statusBarStyle}
+      />
       <View
         pointerEvents="none"
         style={[styles.statusBarBackground, { height: insets.top, backgroundColor: headerBackgroundColor }]}
@@ -143,6 +192,12 @@ function FontLoadedApp() {
         </Stack>
         <AccountSuspensionOverlay />
       </View>
+      {!startupAnimationComplete ? (
+        <StartupLogoAnimation
+          startAnimation={splashScreenHidden}
+          onComplete={finishStartupAnimation}
+        />
+      ) : null}
     </>
   );
 }
@@ -166,35 +221,34 @@ export default function RootLayout() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (status) => {
       focusManager.setFocused(status === 'active');
+      setServerConnectivityAppActive(status === 'active');
     });
+    setServerConnectivityAppActive(
+      AppState.currentState !== 'background' && AppState.currentState !== 'inactive',
+    );
 
-    return () => subscription.remove();
+    return () => {
+      subscription.remove();
+      setServerConnectivityAppActive(false);
+    };
   }, []);
 
   useEffect(() => {
     onlineManager.setEventListener((setOnline) => {
-      let receivedNetworkEvent = false;
-      let isActive = true;
-      const subscription = Network.addNetworkStateListener((state) => {
-        receivedNetworkEvent = true;
-        setOnline(state.isConnected !== false && state.isInternetReachable !== false);
-      });
-
-      void Network.getNetworkStateAsync()
-        .then((state) => {
-          if (isActive && !receivedNetworkEvent) {
-            setOnline(state.isConnected !== false && state.isInternetReachable !== false);
-          }
-        })
-        .catch((error: unknown) => {
-          console.error('دریافت وضعیت اولیهٔ اتصال شبکه ناموفق بود.', error);
-        });
-
+      const updateOnlineStatus = () => {
+        setOnline(getServerConnectivityStatus() === 'connected');
+      };
+      updateOnlineStatus();
+      const unsubscribe = subscribeToServerConnectivity(updateOnlineStatus);
       return () => {
-        isActive = false;
-        subscription.remove();
+        unsubscribe();
       };
     });
+
+    return () => {
+      onlineManager.setEventListener(() => () => {});
+      stopServerConnectivityMonitoring();
+    };
   }, []);
 
   useEffect(() => {

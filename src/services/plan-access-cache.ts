@@ -74,7 +74,7 @@ export async function getCachedPlanAccess(userId: number, token: string): Promis
     }
 
     const now = Date.now();
-    let value = cached as CachedPlanAccess;
+    const value = cached as CachedPlanAccess;
     if (
         value.userId !== userId
         || !isPlanAccess(value.plan)
@@ -87,10 +87,8 @@ export async function getCachedPlanAccess(userId: number, token: string): Promis
         return null;
     }
 
-    if (value.tokenHash === undefined) {
-        value = { ...value, tokenHash };
-        await SecureStore.setItemAsync(PLAN_ACCESS_CACHE_KEY, JSON.stringify(value));
-    } else if (typeof value.tokenHash !== 'string' || value.tokenHash !== tokenHash) {
+    if (typeof value.tokenHash !== 'string' || value.tokenHash !== tokenHash) {
+        await SecureStore.deleteItemAsync(PLAN_ACCESS_CACHE_KEY);
         return null;
     }
 

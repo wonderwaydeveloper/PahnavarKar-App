@@ -1,21 +1,17 @@
 {
   "materialSeeds": {
-    "default": "#00FFFF",
-    "skyBlue": "#0061A4",
-    "emerald": "#006B54",
-    "amber": "#8A5A00",
-    "ruby": "#B3261E",
-    "softPurple": "#7D5260",
-    "purple": "#6750A4",
-    "indigo": "#3F51B5",
-    "deepTeal": "#006A60",
-    "burntOrange": "#B54708",
-    "dustyRose": "#AD1457",
-    "brown": "#795548",
-    "slateBlue": "#456179",
-    "lightPurple": "#7E57C2",
-    "olive": "#687F00",
-    "tealBlue": "#006874"
+    "default": "#006A7A",
+    "red": "#B3261E",
+    "redOrange": "#C64F1B",
+    "orange": "#B85C00",
+    "yellowOrange": "#9C7400",
+    "yellow": "#827A00",
+    "yellowGreen": "#7CB342",
+    "green": "#006B54",
+    "blue": "#355C7D",
+    "blueViolet": "#3F51B5",
+    "violet": "#6750A4",
+    "redViolet": "#AD1F8A"
   },
   "semanticSeeds": {
     "success": "#2E7D32",
